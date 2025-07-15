@@ -27,7 +27,7 @@ from busylib import BusyBar
 
 try:
     # Default IP is 10.0.4.20, but you can specify your own
-    bb = BusyBar("192.168.1.100")
+    bb = BusyBar("10.0.4.20")
 except ValueError as e:
     print(f"Error: {e}")
 
@@ -53,10 +53,10 @@ with open("path/to/your/image.png", "rb") as f:
     )
 
 # Or upload directly from a file-like object
-with open("path/to/your/sound.mp3", "rb") as f:
+with open("path/to/your/sound.wav", "rb") as f:
     bb.upload_asset(
         app_id="my-app",
-        file_name="notification.mp3",
+        file_name="notification.wav",
         file=f
     )
 ```
@@ -68,17 +68,21 @@ Draw text or images on the device's screen. The `draw_display` method accepts a 
 ```python
 elements = [
     {
+        "id": "0",
         "type": "text",
-        "value": "Hello, World!",
-        "x": 10,
-        "y": 20,
-        "color": "#FFFFFF" # Optional
+        "text": "Hello, World!",
+        "x": 0,
+        "y": 2,
+        "display": "front",
     },
     {
+        "id": "1",
         "type": "image",
         "path": "logo.png", # Must be uploaded first
         "x": 50,
-        "y": 40
+        "y": 40,
+        "display": "back",
+
     }
 ]
 
@@ -98,7 +102,7 @@ bb.clear_display()
 Play an audio file that you have already uploaded.
 
 ```python
-bb.play_sound(app_id="my-app", path="notification.mp3")
+bb.play_sound(app_id="my-app", path="notification.wav")
 ```
 
 ### Stopping a Sound
