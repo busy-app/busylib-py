@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "busylib"
+version = "0.0.1a0"
+description = "Python library for Busy Bar API"
+readme = "README.md"
+authors = [
+  {name = "Valerii Lisai", email = "v.lisai@flipperdevices.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "requests==2.32.4"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.1",
+    "requests-mock==1.12.1",
+    "ruff"
+]
+
+[project.urls]
+Homepage = "https://github.com/busy-app/busylib"
+Repository = "https://github.com/busy-app/busylib"
+Documentation = "https://busylib.readthedocs.io"
+
+
+[tool.ruff]
+exclude = [
+    ".git",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "build",
+    "dist",
+    "venv"
+]
+
+line-length = 88
+indent-width = 4
+target-version = "py310"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
