@@ -96,10 +96,7 @@ class ApiClient:
         """
         default_values = {"timeout": 5, "x": 0, "y": 0, "display": "front"}
 
-        def with_defaults(element: dict[str, object]) -> dict[str, object]:
-            return {**default_values, **element}
-
-        normalized_elements = [with_defaults(e) for e in elements]
+        normalized_elements = [default_values | e for e in elements]
         return self.post(
             "v0/display/draw", json={"app_id": app_id, "elements": normalized_elements}
         )
