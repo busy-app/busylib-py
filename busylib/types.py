@@ -1,10 +1,9 @@
-from dataclasses import dataclass
-from typing import Optional
+import dataclasses
 
 
-@dataclass
+@dataclasses.dataclass(frozen=True)
 class ApiResponse:
-    """A generic response from the BusyBar API."""
+    """A generic response from the BusyBar API"""
 
     success: bool
-    message: Optional[str] = None
+    message: str | None = None

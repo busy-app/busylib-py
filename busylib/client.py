@@ -1,6 +1,6 @@
 import requests
-from typing import Optional, Any, Dict, Union, IO, List
-from .types import ApiResponse
+from typing import IO
+from busylib.types import ApiResponse
 
 
 class ApiClient:
@@ -14,11 +14,11 @@ class ApiClient:
         self,
         method: str,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        json: Optional[Any] = None,
-        data: Optional[Any] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Any:
+        params: dict[str, object] | None = None,
+        json: object | None = None,
+        data: object | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> ApiResponse:
         url = f"{self.base_url}{endpoint}"
         try:
             response = self.session.request(
@@ -39,64 +39,64 @@ class ApiClient:
     def post(
         self,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        json: Optional[Any] = None,
-        data: Optional[Any] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Optional[ApiResponse]:
+        params: dict[str, object] = None,
+        json: object | None = None,
+        data: object | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> ApiResponse | None:
         return self._request(
             "POST", endpoint, params=params, json=json, data=data, headers=headers
         )
 
     def get(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Optional[ApiResponse]:
+        self, endpoint: str, params: dict[str, object] | None = None
+    ) -> ApiResponse | None:
         return self._request("GET", endpoint, params=params)
 
     def delete(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Optional[ApiResponse]:
+        self, endpoint: str, params: dict[str, object] | None = None
+    ) -> ApiResponse | None:
         return self._request("DELETE", endpoint, params=params)
 
     def upload_asset(
-        self, app_id: str, file_name: str, file: Union[bytes, IO[bytes]]
-    ) -> Optional[ApiResponse]:
+        self, app_id: str, file_name: str, file: bytes | IO[bytes]
+    ) -> ApiResponse | None:
         """
         Uploads an asset to the device.
         """
-        params = {"app_id": app_id, "file": file_name}
+        payload = {"app_id": app_id, "file": file_name}
         headers = {"Content-Type": "application/octet-stream"}
-        return self.post("v0/assets/upload", params=params, data=file, headers=headers)
+        return self.post("v0/assets/upload", params=payload, data=file, headers=headers)
 
-    def delete_assets(self, app_id: str) -> Optional[ApiResponse]:
+    def delete_assets(self, app_id: str) -> ApiResponse | None:
         """
         Deletes all assets for a specific application from the device.
         """
         params = {"app_id": app_id}
         return self.delete("v0/assets/upload", params=params)
 
-    def play_audio(self, app_id: str, path: str) -> Optional[ApiResponse]:
+    def play_audio(self, app_id: str, path: str) -> ApiResponse | None:
         """
         Plays an audio file from the assets directory.
         """
         params = {"app_id": app_id, "path": path}
         return self.post("v0/audio/play", params=params)
 
-    def stop_audio(self) -> Optional[ApiResponse]:
+    def stop_audio(self) -> ApiResponse | None:
         """
         Stops any currently playing audio on the device.
         """
         return self.delete("v0/audio/play")
 
     def draw_display(
-        self, app_id: str, elements: List[Dict[str, Any]]
-    ) -> Optional[ApiResponse]:
+        self, app_id: str, elements: list[dict[str, object]]
+    ) -> ApiResponse | None:
         """
         Draws elements on the device display.
         """
         default_values = {"timeout": 5, "x": 0, "y": 0, "display": "front"}
 
-        def with_defaults(element: Dict[str, Any]) -> Dict[str, Any]:
+        def with_defaults(element: dict[str, object]) -> dict[str, object]:
             return {**default_values, **element}
 
         normalized_elements = [with_defaults(e) for e in elements]
@@ -104,7 +104,7 @@ class ApiClient:
             "v0/display/draw", json={"app_id": app_id, "elements": normalized_elements}
         )
 
-    def clear_display(self) -> Optional[ApiResponse]:
+    def clear_display(self) -> ApiResponse | None:
         """
         Clears the device display.
         """
