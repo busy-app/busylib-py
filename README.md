@@ -31,7 +31,16 @@ try:
 except ValueError as e:
     print(f"Error: {e}")
 
+
 # Now you can use the bb object to interact with your device.
+bb.get_version()
+```
+
+```python
+from busylib import BusyBar
+
+with BusyBar("10.0.4.20") as bb:
+    bb.get_version()
 ```
 
 ## API Examples

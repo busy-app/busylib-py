@@ -9,13 +9,13 @@ from busylib import types
 
 
 @pytest.fixture
-def base_url():
-    return "http://test-device.local"
+def addr():
+    return "test-device.local"
 
 
 @pytest.fixture
-def client(base_url):
-    return BusyBar(base_url)
+def client(addr):
+    return BusyBar(addr)
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ def sample_wifi_config():
 
 
 def test_get_version_success(requests_mock, sample_version_info, client):
-    url = "http://test-device.local/api/v0/version"
+    url = "/api/v0/version"
     requests_mock.get(url, json={
         "branch": sample_version_info.branch,
         "version": sample_version_info.version,
@@ -103,7 +103,7 @@ def test_get_version_success(requests_mock, sample_version_info, client):
 
 
 def test_get_version_error(requests_mock, client):
-    url = "http://test-device.local/api/v0/version"
+    url = "/api/v0/version"
     requests_mock.get(url, json={"error": "Internal server error", "code": 500}, status_code=500)
 
     with pytest.raises(exceptions.BusyBarAPIError) as exc_info:
@@ -114,7 +114,7 @@ def test_get_version_error(requests_mock, client):
 
 
 def test_update_firmware_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/update"
+    url = "/api/v0/update"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.update_firmware(b"fake-firmware-data", name="firmware")
@@ -123,7 +123,7 @@ def test_update_firmware_success(requests_mock, client):
     assert resp.result == "OK"
 
 def test_get_status_success(requests_mock, sample_status, client):
-    url = "http://test-device.local/api/v0/status"
+    url = "/api/v0/status"
     requests_mock.get(url, json={
         "system": {
             "version": sample_status.system.version,
@@ -146,7 +146,7 @@ def test_get_status_success(requests_mock, sample_status, client):
 
 
 def test_write_storage_file_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/storage/write"
+    url = "/api/v0/storage/write"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.write_storage_file("/file.txt", b"test")
@@ -155,7 +155,7 @@ def test_write_storage_file_success(requests_mock, client):
     assert resp.result == "OK"
 
 def test_read_storage_file_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/storage/read"
+    url = "/api/v0/storage/read"
     content = b"some-binary-contents"
     requests_mock.get(url, content=content)
 
@@ -164,7 +164,7 @@ def test_read_storage_file_success(requests_mock, client):
     assert resp == content
 
 def test_list_storage_files_success(requests_mock, sample_storage_list, client):
-    url = "http://test-device.local/api/v0/storage/list"
+    url = "/api/v0/storage/list"
     requests_mock.get(url, json=dataclasses.asdict(sample_storage_list))
 
     resp = client.list_storage_files("/ext")
@@ -174,7 +174,7 @@ def test_list_storage_files_success(requests_mock, sample_storage_list, client):
 
 
 def test_remove_storage_file_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/storage/remove"
+    url = "/api/v0/storage/remove"
     requests_mock.delete(url, json={"result": "OK"})
 
     resp = client.remove_storage_file("/file.txt")
@@ -183,7 +183,7 @@ def test_remove_storage_file_success(requests_mock, client):
 
 
 def test_create_storage_directory_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/storage/mkdir"
+    url = "/api/v0/storage/mkdir"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.create_storage_directory("/new_dir")
@@ -192,7 +192,7 @@ def test_create_storage_directory_success(requests_mock, client):
 
 
 def test_draw_on_display_success(requests_mock, sample_display_elements, client):
-    url = "http://test-device.local/api/v0/display/draw"
+    url = "/api/v0/display/draw"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.draw_on_display(sample_display_elements)
@@ -200,7 +200,7 @@ def test_draw_on_display_success(requests_mock, sample_display_elements, client)
     assert isinstance(resp, types.SuccessResponse)
 
 def test_clear_display_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/display/draw"
+    url = "/api/v0/display/draw"
     requests_mock.delete(url, json={"result": "OK"})
 
     resp = client.clear_display()
@@ -208,7 +208,7 @@ def test_clear_display_success(requests_mock, client):
     assert isinstance(resp, types.SuccessResponse)
 
 def test_get_display_brightness_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/display/brightness"
+    url = "/api/v0/display/brightness"
     requests_mock.get(url, json={"front": "auto", "back": "50"})
 
     resp = client.get_display_brightness()
@@ -218,7 +218,7 @@ def test_get_display_brightness_success(requests_mock, client):
     assert resp.back == "50"
 
 def test_set_display_brightness_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/display/brightness"
+    url = "/api/v0/display/brightness"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.set_display_brightness(front="100", back="auto")
@@ -227,21 +227,21 @@ def test_set_display_brightness_success(requests_mock, client):
 
 
 def test_play_audio_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/audio/play"
+    url = "/api/v0/audio/play"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.play_audio("test_app", "notify.snd")
     assert isinstance(resp, types.SuccessResponse)
 
 def test_stop_audio_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/audio/play"
+    url = "/api/v0/audio/play"
     requests_mock.delete(url, json={"result": "OK"})
 
     resp = client.stop_audio()
     assert isinstance(resp, types.SuccessResponse)
 
 def test_get_audio_volume_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/audio/volume"
+    url = "/api/v0/audio/volume"
     requests_mock.get(url, json={"volume": 73.3})
 
     resp = client.get_audio_volume()
@@ -250,7 +250,7 @@ def test_get_audio_volume_success(requests_mock, client):
     assert resp.volume == 73.3
 
 def test_set_audio_volume_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/audio/volume"
+    url = "/api/v0/audio/volume"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.set_audio_volume(12.0)
@@ -259,7 +259,7 @@ def test_set_audio_volume_success(requests_mock, client):
 
 
 def test_enable_wifi_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/wifi/enable"
+    url = "/api/v0/wifi/enable"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.enable_wifi()
@@ -267,7 +267,7 @@ def test_enable_wifi_success(requests_mock, client):
     assert isinstance(resp, types.SuccessResponse)
 
 def test_disable_wifi_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/wifi/disable"
+    url = "/api/v0/wifi/disable"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.disable_wifi()
@@ -275,7 +275,7 @@ def test_disable_wifi_success(requests_mock, client):
     assert isinstance(resp, types.SuccessResponse)
 
 def test_get_wifi_status_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/wifi/status"
+    url = "/api/v0/wifi/status"
     requests_mock.get(url, json={
         "state": "connected",
         "ssid": "TestNetwork",
@@ -290,11 +290,11 @@ def test_get_wifi_status_success(requests_mock, client):
     resp = client.get_wifi_status()
 
     assert isinstance(resp, types.StatusResponse)
-    assert resp.state == "connected"
+    assert resp.state.value == "connected"
     assert resp.ssid == "TestNetwork"
 
 def test_connect_wifi_success(requests_mock, sample_wifi_config, client):
-    url = "http://test-device.local/api/v0/wifi/connect"
+    url = "/api/v0/wifi/connect"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.connect_wifi(sample_wifi_config)
@@ -302,7 +302,7 @@ def test_connect_wifi_success(requests_mock, sample_wifi_config, client):
     assert isinstance(resp, types.SuccessResponse)
 
 def test_disconnect_wifi_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/wifi/disconnect"
+    url = "/api/v0/wifi/disconnect"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.disconnect_wifi()
@@ -310,7 +310,7 @@ def test_disconnect_wifi_success(requests_mock, client):
     assert isinstance(resp, types.SuccessResponse)
 
 def test_scan_wifi_networks_success(requests_mock, client):
-    url = "http://test-device.local/api/v0/wifi/networks"
+    url = "/api/v0/wifi/networks"
     requests_mock.get(url, json={
         "count": 2,
         "networks": [
@@ -328,7 +328,7 @@ def test_scan_wifi_networks_success(requests_mock, client):
 
 @pytest.mark.parametrize("key", [types.InputKey.UP, types.InputKey.DOWN, types.InputKey.OK, types.InputKey.BACK])
 def test_send_input_key_success(requests_mock, key, client):
-    url = "http://test-device.local/api/v0/input"
+    url = "/api/v0/input"
     requests_mock.post(url, json={"result": "OK"})
 
     resp = client.send_input_key(key)
@@ -337,7 +337,7 @@ def test_send_input_key_success(requests_mock, key, client):
 
 
 def test_http_404_error(requests_mock, client):
-    url = "http://test-device.local/api/v0/version"
+    url = "/api/v0/version"
     requests_mock.get(url, json={"error": "Not found", "code": 404}, status_code=404)
 
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
@@ -346,7 +346,7 @@ def test_http_404_error(requests_mock, client):
     assert exc.value.code == 404
 
 def test_http_500_error_without_json(requests_mock, client):
-    url = "http://test-device.local/api/v0/version"
+    url = "/api/v0/version"
     requests_mock.get(url, text="Internal Server Error", status_code=500)
 
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
@@ -368,7 +368,6 @@ def test_requests_connection_error(monkeypatch, client):
 
 def test_integration_workflow(requests_mock, client):
     base = "http://test-device.local"
-    # Моки
     requests_mock.get(f"{base}/api/v0/version", json={
         "branch": "main",
         "version": "1.0.0",
