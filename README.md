@@ -60,11 +60,11 @@ with open("path/to/your/image.png", "rb") as f:
     print(f"Upload result: {response.result}")
 
 
-with open("path/to/your/sound.mp3", "rb") as f:
+with open("path/to/your/sound.wav", "rb") as f:
     file_bytes = f.read()
     response = bb.upload_asset(
         app_id="my-app",
-        filename="notification.mp3",
+        filename="notification.wav",
         data=file_bytes
     )
 ```
@@ -118,7 +118,7 @@ print(f"Clear result: {response.result}")
 Play an audio file that you have already uploaded.
 
 ```python
-response = bb.play_audio(app_id="my-app", path="notification.mp3")
+response = bb.play_audio(app_id="my-app", path="notification.wav")
 print(f"Play result: {response.result}")
 ```
 
