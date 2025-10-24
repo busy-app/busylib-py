@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "busylib"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python library for Busy Bar API"
 readme = "README.md"
 authors = [
@@ -32,8 +32,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/busy-app/busylib"
-Repository = "https://github.com/busy-app/busylib"
+Homepage = "https://github.com/busy-app/busylib-py"
+Repository = "https://github.com/busy-app/busylib-py"
 Documentation = "https://busylib.readthedocs.io"
 
 [tool.setuptools]
