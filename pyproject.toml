@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "Python library for Busy Bar API"
 readme = "README.md"
 authors = [
-  {name = "Valerii Lisai", email = "v.lisai@flipperdevices.com"}
+  {name = "flipperdevices", email = "pypi@flipperdevices.com"}
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
