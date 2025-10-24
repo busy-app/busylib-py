@@ -29,9 +29,24 @@ class BusyBar:
     Main library class for interacting with the Busy Bar API.
     """
 
-    def __init__(self, addr: str):
-        self.base_url = f"http://{addr}"
+    def __init__(
+        self,
+        addr: str | None = None,
+        *,
+        token: str | None = None,
+    ) -> None:
+        if addr is None and token is None:
+            self.base_url = "http://10.0.4.20"
+        elif addr is None:
+            self.base_url = "https://proxy.dev.busy.app"
+        elif addr is not None:
+            if "://" not in addr:
+                addr = f"http://{addr}"
+            self.base_url = addr
+
         self.client = requests.Session()
+        if token is not None:
+            self.client.headers["Authorization"] = f"Bearer {token}"
 
     def __enter__(self):
         return self

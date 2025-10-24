@@ -437,3 +437,15 @@ def test_integration_workflow(requests_mock, client):
 
     resp_audio = client.play_audio("test_app", "sound.snd")
     assert resp_audio.result == "OK"
+
+
+def test_client_with_token(requests_mock):
+    requests_mock.get(
+        "https://proxy.dev.busy.app/api/version",
+        request_headers={"Authorization": "Bearer test-token"},
+        json={"api_semver": "1.0.0"},
+    )
+    bb = BusyBar(token="test-token")
+
+    version = bb.get_version()
+    assert version.api_semver == "1.0.0"
