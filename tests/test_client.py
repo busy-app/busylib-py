@@ -18,12 +18,7 @@ def client(addr):
 
 @pytest.fixture
 def sample_version_info():
-    return types.VersionInfo(
-        branch="main",
-        version="1.2.0",
-        build_date="2024-01-15",
-        commit_hash="abc123def456",
-    )
+    return types.VersionInfo(api_semver="1.2.0")
 
 
 @pytest.fixture
@@ -88,21 +83,12 @@ def sample_wifi_config():
 
 def test_get_version_success(requests_mock, sample_version_info, client):
     url = "/api/version"
-    requests_mock.get(
-        url,
-        json={
-            "branch": sample_version_info.branch,
-            "version": sample_version_info.version,
-            "build_date": sample_version_info.build_date,
-            "commit_hash": sample_version_info.commit_hash,
-        },
-    )
+    requests_mock.get(url, json={"api_semver": sample_version_info.api_semver})
 
     result = client.get_version()
 
     assert isinstance(result, types.VersionInfo)
-    assert result.version == "1.2.0"
-    assert result.branch == "main"
+    assert result.api_semver == "1.2.0"
 
 
 def test_get_version_error(requests_mock, client):
@@ -400,21 +386,13 @@ def test_requests_connection_error(monkeypatch, client):
 
 def test_integration_workflow(requests_mock, client):
     base = "http://test-device.local"
-    requests_mock.get(
-        f"{base}/api/version",
-        json={
-            "branch": "main",
-            "version": "1.0.0",
-            "build_date": "2024-01-01",
-            "commit_hash": "abc123",
-        },
-    )
+    requests_mock.get(f"{base}/api/version", json={"api_semver": "1.0.0"})
     requests_mock.post(f"{base}/api/assets/upload", json={"result": "OK"})
     requests_mock.post(f"{base}/api/display/draw", json={"result": "OK"})
     requests_mock.post(f"{base}/api/audio/play", json={"result": "OK"})
 
     version = client.get_version()
-    assert version.version == "1.0.0"
+    assert version.api_semver == "1.0.0"
 
     resp_asset = client.upload_asset("test_app", "logo.png", b"img")
     assert resp_asset.result == "OK"

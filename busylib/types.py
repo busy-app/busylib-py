@@ -80,10 +80,7 @@ class Error:
 
 @dataclasses.dataclass(frozen=True)
 class VersionInfo:
-    branch: str
-    version: str
-    build_date: str
-    commit_hash: str
+    api_semver: str
 
 
 @dataclasses.dataclass(frozen=True)
