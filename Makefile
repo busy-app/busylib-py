@@ -20,7 +20,7 @@ install:
 
 # Install in development mode
 install-dev:
-	pip install .[dev]
+	pip install --editable .[dev]
 
 # Run tests
 test:
