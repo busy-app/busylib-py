@@ -368,3 +368,17 @@ class BusyBar:
             params={"display": display},
         )
         return self._handle_response(response, as_bytes=True)
+    
+    def ble_enable(self) -> types.SuccessResponse:
+        response = self.client.post(
+            urllib.parse.urljoin(self.base_url, "/api/ble/enable")
+        )
+        data = self._handle_response(response)
+        return types.SuccessResponse(**data)
+    
+    def ble_disable(self) -> types.SuccessResponse:
+        response = self.client.post(
+            urllib.parse.urljoin(self.base_url, "/api/ble/disable")
+        )
+        data = self._handle_response(response)
+        return types.SuccessResponse(**data)
