@@ -287,20 +287,6 @@ class BusyBar:
         data = self._handle_response(response)
         return types.SuccessResponse(**data)
 
-    def enable_wifi(self) -> types.SuccessResponse:
-        response = self.client.post(
-            urllib.parse.urljoin(self.base_url, "/api/wifi/enable")
-        )
-        data = self._handle_response(response)
-        return types.SuccessResponse(**data)
-
-    def disable_wifi(self) -> types.SuccessResponse:
-        response = self.client.post(
-            urllib.parse.urljoin(self.base_url, "/api/wifi/disable")
-        )
-        data = self._handle_response(response)
-        return types.SuccessResponse(**data)
-
     def get_wifi_status(self) -> types.StatusResponse:
         response = self.client.get(
             urllib.parse.urljoin(self.base_url, "/api/wifi/status")

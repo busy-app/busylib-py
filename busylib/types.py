@@ -2,19 +2,18 @@ import dataclasses
 import enum
 import typing as tp
 
+class WifiState(enum.Enum):
+    DISCONNECTED = "disconnected"
+    CONNECTED = "connected"
 
 class WifiSecurityMethod(enum.Enum):
     OPEN = "Open"
     WPA = "WPA"
     WPA2 = "WPA2"
     WEP = "WEP"
-    WPA_ENTERPRISE = "WPA (Enterprise)"
-    WPA2_ENTERPRISE = "WPA2 (Enterprise)"
     WPA_WPA2 = "WPA/WPA2"
     WPA3 = "WPA3"
     WPA2_WPA3 = "WPA2/WPA3"
-    WPA3_ENTERPRISE = "WPA3 (Enterprise)"
-    WPA2_WPA3_ENTERPRISE = "WPA2/WPA3 (Enterprise)"
 
 
 class WifiIpMethod(enum.Enum):
@@ -31,12 +30,6 @@ class PowerState(enum.Enum):
     DISCHARGING = "discharging"
     CHARGING = "charging"
     CHARGED = "charged"
-
-
-class WifiState(enum.Enum):
-    DISABLED = "disabled"
-    ENABLED = "enabled"
-    CONNECTED = "connected"
 
 
 class ElementType(enum.Enum):
@@ -187,6 +180,9 @@ class Network:
 class StatusResponse:
     state: WifiState | None = None
     ssid: str | None = None
+    bssid: str | None = None
+    channel: int | None = None
+    rssi: int | None = None
     security: WifiSecurityMethod | None = None
     ip_config: WifiIpConfig | None = None
 
