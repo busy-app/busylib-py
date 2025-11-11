@@ -354,6 +354,7 @@ class BusyBar:
             params={"display": display},
         )
         return self._handle_response(response, as_bytes=True)
+    
     def ble_enable(self) -> types.SuccessResponse:
         response = self.client.post(
             urllib.parse.urljoin(self.base_url, "/api/ble/enable")
@@ -364,6 +365,20 @@ class BusyBar:
     def ble_disable(self) -> types.SuccessResponse:
         response = self.client.post(
             urllib.parse.urljoin(self.base_url, "/api/ble/disable")
+        )
+        data = self._handle_response(response)
+        return types.SuccessResponse(**data)
+
+    def ble_status(self) -> types.BleStatus:
+        response = self.client.get(
+            urllib.parse.urljoin(self.base_url, "/api/ble/status")
+        )
+        data = self._handle_response(response)
+        return types.BleStatus(**data)
+    
+    def ble_forget_pairing(self) -> types.SuccessResponse:
+        response = self.client.delete(
+            urllib.parse.urljoin(self.base_url, "/api/ble/pairing")
         )
         data = self._handle_response(response)
         return types.SuccessResponse(**data)

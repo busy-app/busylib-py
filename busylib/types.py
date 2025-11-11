@@ -59,7 +59,6 @@ class InputKey(enum.Enum):
     APPS = "apps"
     SETTINGS = "settings"
 
-
 @dataclasses.dataclass(frozen=True)
 class SuccessResponse:
     result: str
@@ -204,3 +203,7 @@ class NetworkResponse:
 @dataclasses.dataclass(frozen=True)
 class ScreenResponse:
     data: str  # base64 encoded image data
+
+@dataclasses.dataclass(frozen=True)
+class BleStatus:
+    state: str
