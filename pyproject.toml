@@ -21,13 +21,21 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "requests==2.32.4"
+    "httpx>=0.28.1",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.12.0",
+    "pydantic-extra-types>=2.9.0",
+    "websockets>=12.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=0.24.0",
+    "pillow>=12.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest==8.4.1",
-    "requests-mock==1.12.1",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov",
     "ruff"
 ]
 
@@ -37,7 +45,10 @@ Repository = "https://github.com/busy-app/busylib-py"
 Documentation = "https://busylib.readthedocs.io"
 
 [tool.setuptools]
-packages = ["busylib"]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
 exclude = [
@@ -63,3 +74,12 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = false
 docstring-code-line-length = "dynamic"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]

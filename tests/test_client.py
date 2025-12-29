@@ -1,429 +1,289 @@
-import dataclasses
+import json
+from typing import Callable
 
+import httpx
 import pytest
-import requests
 
 from busylib import BusyBar, exceptions, types
 
 
-@pytest.fixture
-def addr():
-    return "test-device.local"
+Responder = Callable[[httpx.Request], httpx.Response]
 
 
-@pytest.fixture
-def client(addr):
-    return BusyBar(addr)
+def make_client(responder: Responder, **kwargs) -> BusyBar:
+    transport = httpx.MockTransport(responder)
+    return BusyBar(addr="http://device.local", transport=transport, **kwargs)
 
 
-@pytest.fixture
-def sample_version_info():
-    return types.VersionInfo(api_semver="1.2.0")
+def test_init_defaults_local():
+    client = BusyBar()
+    assert client.base_url == "http://10.0.4.20"
+    assert client.client.base_url == httpx.URL("http://10.0.4.20")
 
 
-@pytest.fixture
-def sample_status():
-    return types.Status(
-        system=types.StatusSystem(version="1.2.0", uptime="1d 6h 30m 15s"),
-        power=types.StatusPower(
-            state=types.PowerState.DISCHARGING,
-            battery_charge=85,
-            battery_voltage=4150,
-            battery_current=-150,
-            usb_voltage=5000,
-        ),
-    )
+def test_init_token_sets_cloud_base_and_header():
+    client = BusyBar(token="secret")
+    assert client.base_url == "https://proxy.dev.busy.app"
+    assert client.client.headers["authorization"] == "Bearer secret"
 
 
-@pytest.fixture
-def sample_storage_list():
-    return types.StorageList(
-        list=[
-            types.StorageFileElement(type="file", name="test.png", size=1024),
-            types.StorageDirElement(type="dir", name="assets"),
-            types.StorageFileElement(type="file", name="config.json", size=512),
-        ]
-    )
+def test_get_version_success():
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/version"
+        return httpx.Response(
+            200,
+            json={
+                "api_semver": "1.2.0",
+                "version": "1.2.0+build",
+                "branch": "main",
+            },
+        )
 
-
-@pytest.fixture
-def sample_display_elements():
-    return types.DisplayElements(
-        app_id="test_app",
-        elements=[
-            types.TextElement(
-                id="text1",
-                type="text",
-                x=10,
-                y=20,
-                text="Hello World",
-                display=types.DisplayName.FRONT,
-            ),
-            types.ImageElement(
-                id="img1",
-                type="image",
-                x=0,
-                y=40,
-                path="logo.png",
-                display=types.DisplayName.BACK,
-            ),
-        ],
-    )
-
-
-@pytest.fixture
-def sample_wifi_config():
-    return types.ConnectRequestConfig(
-        ssid="TestNetwork",
-        password="testpass123",
-        security=types.WifiSecurityMethod.WPA2,
-        ip_config=None,
-    )
-
-
-def test_get_version_success(requests_mock, sample_version_info, client):
-    url = "/api/version"
-    requests_mock.get(url, json={"api_semver": sample_version_info.api_semver})
-
+    client = make_client(responder, api_version="1.2.0")
     result = client.get_version()
-
     assert isinstance(result, types.VersionInfo)
     assert result.api_semver == "1.2.0"
+    assert result.branch == "main"
 
 
-def test_get_version_error(requests_mock, client):
-    url = "/api/version"
-    requests_mock.get(
-        url, json={"error": "Internal server error", "code": 500}, status_code=500
-    )
+def test_error_response_raises_api_error():
+    def responder(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "fail", "code": 500})
 
-    with pytest.raises(exceptions.BusyBarAPIError) as exc_info:
+    client = make_client(responder)
+    with pytest.raises(exceptions.BusyBarAPIError) as exc:
         client.get_version()
-
-    assert exc_info.value.code == 500
-    assert "Internal server error" in str(exc_info.value)
-
-
-def test_update_firmware_success(requests_mock, client):
-    url = "/api/update"
-    requests_mock.post(url, json={"result": "OK"})
-
-    resp = client.update_firmware(b"fake-firmware-data", name="firmware")
-
-    assert isinstance(resp, types.SuccessResponse)
-    assert resp.result == "OK"
+    assert exc.value.code == 500
+    assert "fail" in str(exc.value)
 
 
-def test_get_status_success(requests_mock, sample_status, client):
-    url = "/api/status"
-    requests_mock.get(
-        url,
-        json={
-            "system": {
-                "version": sample_status.system.version,
-                "uptime": sample_status.system.uptime,
-            },
-            "power": {
-                "state": sample_status.power.state.value,
-                "battery_charge": sample_status.power.battery_charge,
-                "battery_voltage": sample_status.power.battery_voltage,
-                "battery_current": sample_status.power.battery_current,
-                "usb_voltage": sample_status.power.usb_voltage,
-            },
-        },
-    )
+def test_plain_text_error_response():
+    def responder(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="not found")
 
-    resp = client.get_status()
-
-    assert isinstance(resp, types.Status)
-    assert resp.power.battery_charge == 85
-    assert resp.system.version == "1.2.0"
+    client = make_client(responder)
+    with pytest.raises(exceptions.BusyBarAPIError) as exc:
+        client.get_version()
+    assert exc.value.code == 404
+    assert "HTTP 404" in str(exc.value)
 
 
-def test_write_storage_file_success(requests_mock, client):
-    url = "/api/storage/write"
-    requests_mock.post(url, json={"result": "OK"})
+def test_get_version_incompatible_requires_device_update():
+    def responder(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"api_semver": "0.9.0"})
 
-    resp = client.write_storage_file("/file.txt", b"test")
-
-    assert isinstance(resp, types.SuccessResponse)
-    assert resp.result == "OK"
-
-
-def test_read_storage_file_success(requests_mock, client):
-    url = "/api/storage/read"
-    content = b"some-binary-contents"
-    requests_mock.get(url, content=content)
-
-    resp = client.read_storage_file("/file.txt")
-
-    assert resp == content
+    client = make_client(responder, api_version="1.0.0")
+    with pytest.raises(exceptions.BusyBarAPIVersionError) as exc:
+        client.get_version()
+    assert "update firmware" in str(exc.value)
 
 
-def test_list_storage_files_success(requests_mock, sample_storage_list, client):
-    url = "/api/storage/list"
-    requests_mock.get(url, json=dataclasses.asdict(sample_storage_list))
+def test_request_carries_api_version_header():
+    seen = {}
 
-    resp = client.list_storage_files("/ext")
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["header"] = request.headers.get("x-busy-api-version")
+        return httpx.Response(200, json={"result": "OK"})
 
-    assert isinstance(resp, types.StorageList)
-    assert len(resp.list) == 3
-
-
-def test_remove_storage_file_success(requests_mock, client):
-    url = "/api/storage/remove"
-    requests_mock.delete(url, json={"result": "OK"})
-
-    resp = client.remove_storage_file("/file.txt")
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_create_storage_directory_success(requests_mock, client):
-    url = "/api/storage/mkdir"
-    requests_mock.post(url, json={"result": "OK"})
-
-    resp = client.create_storage_directory("/new_dir")
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_draw_on_display_success(requests_mock, sample_display_elements, client):
-    url = "/api/display/draw"
-    requests_mock.post(url, json={"result": "OK"})
-
-    resp = client.draw_on_display(sample_display_elements)
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_clear_display_success(requests_mock, client):
-    url = "/api/display/draw"
-    requests_mock.delete(url, json={"result": "OK"})
-
-    resp = client.clear_display()
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_get_display_brightness_success(requests_mock, client):
-    url = "/api/display/brightness"
-    requests_mock.get(url, json={"front": "auto", "back": "50"})
-
-    resp = client.get_display_brightness()
-
-    assert isinstance(resp, types.DisplayBrightnessInfo)
-    assert resp.front == "auto"
-    assert resp.back == "50"
-
-
-def test_set_display_brightness_success(requests_mock, client):
-    url = "/api/display/brightness"
-    requests_mock.post(url, json={"result": "OK"})
-
-    resp = client.set_display_brightness(front="100", back="auto")
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_play_audio_success(requests_mock, client):
-    url = "/api/audio/play"
-    requests_mock.post(url, json={"result": "OK"})
-
-    resp = client.play_audio("test_app", "notify.snd")
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_stop_audio_success(requests_mock, client):
-    url = "/api/audio/play"
-    requests_mock.delete(url, json={"result": "OK"})
-
-    resp = client.stop_audio()
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_get_audio_volume_success(requests_mock, client):
-    url = "/api/audio/volume"
-    requests_mock.get(url, json={"volume": 73.3})
-
-    resp = client.get_audio_volume()
-
-    assert isinstance(resp, types.AudioVolumeInfo)
-    assert resp.volume == 73.3
-
-
-def test_set_audio_volume_success(requests_mock, client):
-    url = "/api/audio/volume"
-    requests_mock.post(url, json={"result": "OK"})
-
-    resp = client.set_audio_volume(12.0)
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_enable_wifi_success(requests_mock, client):
-    url = "/api/wifi/enable"
-    requests_mock.post(url, json={"result": "OK"})
-
+    client = make_client(responder, api_version="1.1.0")
     resp = client.enable_wifi()
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_disable_wifi_success(requests_mock, client):
-    url = "/api/wifi/disable"
-    requests_mock.post(url, json={"result": "OK"})
-
-    resp = client.disable_wifi()
-
-    assert isinstance(resp, types.SuccessResponse)
+    assert resp.result == "OK"
+    assert seen["header"] == "1.1.0"
 
 
-def test_get_wifi_status_success(requests_mock, client):
-    url = "/api/wifi/status"
-    requests_mock.get(
-        url,
-        json={
-            "state": "connected",
-            "ssid": "TestNetwork",
-            "security": "WPA2",
-            "ip_config": {
-                "ip_method": "dhcp",
-                "ip_type": "ipv4",
-                "address": "192.168.1.100",
-            },
-        },
-    )
+def test_retry_on_transport_error():
+    calls = {"count": 0}
 
-    resp = client.get_wifi_status()
+    def responder(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ConnectError("boom", request=request)
+        return httpx.Response(200, json={"result": "OK"})
 
-    assert isinstance(resp, types.StatusResponse)
-    assert resp.state.value == "connected"
-    assert resp.ssid == "TestNetwork"
+    client = make_client(responder, max_retries=1, backoff=0.0)
+    resp = client.enable_wifi()
+    assert resp.result == "OK"
+    assert calls["count"] == 2
 
 
-def test_connect_wifi_success(requests_mock, sample_wifi_config, client):
-    url = "/api/wifi/connect"
-    requests_mock.post(url, json={"result": "OK"})
+def test_draw_on_display_sends_utf8_body():
+    payload = {
+        "app_id": "demo",
+        "elements": [
+            {
+                "id": "1",
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "text": "Съешь ещё этих мягких булок",
+                "display": "front",
+            }
+        ],
+    }
 
-    resp = client.connect_wifi(sample_wifi_config)
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.headers["content-type"].startswith("application/json")
+        body = request.content.decode("utf-8")
+        assert "Съешь" in body  # ensure ensure_ascii=False
+        # ensure no \u0421 escaping
+        assert "\\u0421" not in body
+        return httpx.Response(200, json={"result": "OK"})
 
-    assert isinstance(resp, types.SuccessResponse)
+    client = make_client(responder)
+    resp = client.draw_on_display(payload)
+    assert resp.result == "OK"
 
 
-def test_disconnect_wifi_success(requests_mock, client):
-    url = "/api/wifi/disconnect"
-    requests_mock.post(url, json={"result": "OK"})
+def test_get_screen_frame_returns_bytes():
+    expected = b"\x00\x01\x02"
 
-    resp = client.disconnect_wifi()
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/screen"
+        assert request.url.params["display"] == "1"
+        return httpx.Response(200, content=expected)
 
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_scan_wifi_networks_success(requests_mock, client):
-    url = "/api/wifi/networks"
-    requests_mock.get(
-        url,
-        json={
-            "count": 2,
-            "networks": [
-                {"ssid": "Network1", "security": "WPA2", "rssi": -45},
-                {"ssid": "Network2", "security": "Open", "rssi": -60},
-            ],
-        },
-    )
-
-    resp = client.scan_wifi_networks()
-
-    assert isinstance(resp, types.NetworkResponse)
-    assert resp.count == 2
-    assert len(resp.networks) == 2
+    client = make_client(responder)
+    data = client.get_screen_frame(1)
+    assert data == expected
 
 
 @pytest.mark.parametrize(
-    "key",
-    [types.InputKey.UP, types.InputKey.DOWN, types.InputKey.OK, types.InputKey.BACK],
+    "method,path",
+    [
+        ("play_audio", "/api/audio/play"),
+        ("stop_audio", "/api/audio/play"),
+        ("clear_display", "/api/display/draw"),
+        ("remove_storage_file", "/api/storage/remove"),
+        ("create_storage_directory", "/api/storage/mkdir"),
+        ("delete_app_assets", "/api/assets/upload"),
+        ("enable_wifi", "/api/wifi/enable"),
+        ("disable_wifi", "/api/wifi/disable"),
+        ("disconnect_wifi", "/api/wifi/disconnect"),
+        ("ble_enable", "/api/ble/enable"),
+        ("ble_disable", "/api/ble/disable"),
+        ("ble_forget_pairing", "/api/ble/pairing"),
+    ],
 )
-def test_send_input_key_success(requests_mock, key, client):
-    url = "/api/input"
-    requests_mock.post(url, json={"result": "OK"})
+def test_simple_success_methods(method: str, path: str):
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == path
+        return httpx.Response(200, json={"result": "OK"})
 
-    resp = client.send_input_key(key)
-
-    assert isinstance(resp, types.SuccessResponse)
-
-
-def test_http_404_error(requests_mock, client):
-    url = "/api/version"
-    requests_mock.get(url, json={"error": "Not found", "code": 404}, status_code=404)
-
-    with pytest.raises(exceptions.BusyBarAPIError) as exc:
-        client.get_version()
-
-    assert exc.value.code == 404
-
-
-def test_http_500_error_without_json(requests_mock, client):
-    url = "/api/version"
-    requests_mock.get(url, text="Internal Server Error", status_code=500)
-
-    with pytest.raises(exceptions.BusyBarAPIError) as exc:
-        client.get_version()
-
-    assert "HTTP 500" in exc.value.error
-    assert exc.value.code == 500
+    client = make_client(responder)
+    func = getattr(client, method)
+    # supply required args when needed
+    if method == "play_audio":
+        resp = func("app", "file")
+    elif method in {"remove_storage_file", "create_storage_directory"}:
+        resp = func("/tmp")
+    elif method == "delete_app_assets":
+        resp = func("app")
+    elif method == "disconnect_wifi":
+        resp = func()
+    else:
+        resp = func()
+    assert resp.result == "OK"
 
 
-def test_requests_connection_error(monkeypatch, client):
-    def fake_get(*a, **kw):
-        raise requests.ConnectionError("fail")
+def test_connect_wifi_serialization():
+    seen = {}
 
-    monkeypatch.setattr(requests.Session, "get", fake_get)
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "OK"})
 
-    with pytest.raises(requests.ConnectionError):
-        client.get_version()
+    cfg = {"ssid": "TestNetwork", "password": "secret", "security": "WPA2"}
+    client = make_client(responder)
+    resp = client.connect_wifi(cfg)
+    assert resp.result == "OK"
+    assert seen["body"]["ssid"] == "TestNetwork"
+    assert seen["body"]["security"] == "WPA2"
 
 
-def test_integration_workflow(requests_mock, client):
-    base = "http://test-device.local"
-    requests_mock.get(f"{base}/api/version", json={"api_semver": "1.0.0"})
-    requests_mock.post(f"{base}/api/assets/upload", json={"result": "OK"})
-    requests_mock.post(f"{base}/api/display/draw", json={"result": "OK"})
-    requests_mock.post(f"{base}/api/audio/play", json={"result": "OK"})
+def test_display_brightness_validation_and_payload():
+    seen = {}
 
-    version = client.get_version()
-    assert version.api_semver == "1.0.0"
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        seen["content"] = request.content
+        return httpx.Response(200, json={"result": "OK"})
 
-    resp_asset = client.upload_asset("test_app", "logo.png", b"img")
-    assert resp_asset.result == "OK"
+    client = make_client(responder)
+    resp = client.set_display_brightness(front="auto", back=50)
+    assert resp.result == "OK"
+    assert seen["params"] == {"front": "auto", "back": "50"}
+    assert seen["content"] == b""
 
-    display_elements = types.DisplayElements(
-        app_id="test_app",
+    with pytest.raises(ValueError):
+        client.set_display_brightness(front="invalid")  # type: ignore[arg-type]
+
+
+def test_set_audio_volume_params():
+    seen = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        seen["content"] = request.content
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    resp = client.set_audio_volume(42.5)
+    assert resp.result == "OK"
+    assert seen["params"] == {"volume": "42.5"}
+    assert seen["content"] == b""
+
+
+def test_draw_on_display_color_serialization():
+    seen = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    display = types.DisplayElements(
+        app_id="app",
         elements=[
             types.TextElement(
-                id="1",
+                id="t1",
                 type="text",
                 x=0,
                 y=0,
-                text="Test",
+                text="hi",
+                color="rgba(255, 0, 0, 0.5)",
                 display=types.DisplayName.FRONT,
             )
         ],
     )
-    resp_disp = client.draw_on_display(display_elements)
-    assert resp_disp.result == "OK"
+    resp = client.draw_on_display(display)
+    assert resp.result == "OK"
+    color = seen["body"]["elements"][0]["color"]
+    assert color == "#FF000080"
 
-    resp_audio = client.play_audio("test_app", "sound.snd")
-    assert resp_audio.result == "OK"
 
+def test_draw_on_display_color_tuple_alpha():
+    seen = {}
 
-def test_client_with_token(requests_mock):
-    requests_mock.get(
-        "https://proxy.dev.busy.app/api/version",
-        request_headers={"Authorization": "Bearer test-token"},
-        json={"api_semver": "1.0.0"},
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    display = types.DisplayElements(
+        app_id="app",
+        elements=[
+            types.TextElement(
+                id="t2",
+                type="text",
+                x=0,
+                y=0,
+                text="hi",
+                color=(255, 255, 255, 100),
+                display=types.DisplayName.FRONT,
+            )
+        ],
     )
-    bb = BusyBar(token="test-token")
-
-    version = bb.get_version()
-    assert version.api_semver == "1.0.0"
+    resp = client.draw_on_display(display)
+    assert resp.result == "OK"
+    color = seen["body"]["elements"][0]["color"]
+    assert color == "#FFFFFF64"
