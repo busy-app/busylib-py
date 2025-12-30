@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any
 
 from .base import AsyncClientBase, SyncClientBase
+from ..converter import convert_for_storage
 from .. import types
 
 logger = logging.getLogger(__name__)
@@ -15,12 +16,13 @@ class StorageMixin(SyncClientBase):
     """
 
     def write_storage_file(self, path: str, data: bytes) -> types.SuccessResponse:
-        logger.info("write_storage_file path=%s size=%s", path, len(data))
+        new_path, payload = convert_for_storage(path, data)
+        logger.info("write_storage_file path=%s size=%s", new_path, len(payload))
         payload = self._request(
             "POST",
             "/api/storage/write",
-            params={"path": path},
-            data=data,
+            params={"path": new_path},
+            data=payload,
         )
         return types.SuccessResponse.model_validate(payload)
 
@@ -67,12 +69,13 @@ class AsyncStorageMixin(AsyncClientBase):
     """
 
     async def write_storage_file(self, path: str, data: bytes) -> types.SuccessResponse:
-        logger.info("async write_storage_file path=%s size=%s", path, len(data))
+        new_path, payload = await asyncio.to_thread(convert_for_storage, path, data)
+        logger.info("async write_storage_file path=%s size=%s", new_path, len(payload))
         payload = await self._request(
             "POST",
             "/api/storage/write",
-            params={"path": path},
-            data=data,
+            params={"path": new_path},
+            data=payload,
         )
         return types.SuccessResponse.model_validate(payload)
 

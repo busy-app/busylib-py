@@ -11,9 +11,9 @@ import ipaddress
 from urllib.parse import urlparse
 import re
 
-from . import display
-from .client import AsyncBusyBar
-from .keymap import KeyMap, load_keymap, StdinReader, KeyDecoder
+from busylib import display
+from busylib.client import AsyncBusyBar
+from busylib.keymap import KeyMap, load_keymap, StdinReader, KeyDecoder
 
 PIXEL_CHAR = "⬤"
 logger = logging.getLogger(__name__)
