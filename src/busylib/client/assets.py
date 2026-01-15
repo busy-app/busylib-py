@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from .base import AsyncClientBase, SyncClientBase
 from .. import types
+from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +13,12 @@ class AssetsMixin(SyncClientBase):
     Asset upload and deletion helpers.
     """
 
-    def upload_asset(self, app_id: str, filename: str, data: bytes) -> types.SuccessResponse:
-        logger.info("upload_asset app_id=%s filename=%s size=%s", app_id, filename, len(data))
+    def upload_asset(
+        self, app_id: str, filename: str, data: bytes
+    ) -> types.SuccessResponse:
+        logger.info(
+            "upload_asset app_id=%s filename=%s size=%s", app_id, filename, len(data)
+        )
         payload = self._request(
             "POST",
             "/api/assets/upload",
@@ -38,8 +42,15 @@ class AsyncAssetsMixin(AsyncClientBase):
     Async asset upload and deletion helpers.
     """
 
-    async def upload_asset(self, app_id: str, filename: str, data: bytes) -> types.SuccessResponse:
-        logger.info("async upload_asset app_id=%s filename=%s size=%s", app_id, filename, len(data))
+    async def upload_asset(
+        self, app_id: str, filename: str, data: bytes
+    ) -> types.SuccessResponse:
+        logger.info(
+            "async upload_asset app_id=%s filename=%s size=%s",
+            app_id,
+            filename,
+            len(data),
+        )
         payload = await self._request(
             "POST",
             "/api/assets/upload",

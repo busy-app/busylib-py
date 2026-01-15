@@ -1,5 +1,3 @@
-import json
-
 import httpx
 import pytest
 
@@ -7,13 +5,23 @@ from busylib import AsyncBusyBar, exceptions, types
 
 
 def make_client(async_responder, **kwargs) -> AsyncBusyBar:
-    # MockTransport supports async responders without extra kwargs.
+    """
+    Build an async BusyBar client backed by HTTPX MockTransport.
+
+    Uses async responders without extra transport configuration.
+    """
     transport = httpx.MockTransport(async_responder)
     return AsyncBusyBar(addr="http://device.local", transport=transport, **kwargs)
 
 
 @pytest.mark.asyncio
 async def test_get_version_success_async():
+    """
+    Parse version information from the async client.
+
+    Ensures the response is mapped to VersionInfo.
+    """
+
     async def responder(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/version"
         return httpx.Response(200, json={"api_semver": "2.0.0", "branch": "dev"})
@@ -26,7 +34,35 @@ async def test_get_version_success_async():
 
 
 @pytest.mark.asyncio
+async def test_get_device_name_and_time_async():
+    """
+    Fetch name and time via async client calls.
+
+    Confirms both endpoints return parsed models.
+    """
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/name":
+            return httpx.Response(200, json={"name": "BusyBar"})
+        if request.url.path == "/api/time":
+            return httpx.Response(200, json={"timestamp": "2024-01-01T10:00:00"})
+        return httpx.Response(404, json={"error": "missing", "code": 404})
+
+    client = make_client(responder)
+    name = await client.get_device_name()
+    assert name.name == "BusyBar"
+    time_info = await client.get_device_time()
+    assert time_info.timestamp == "2024-01-01T10:00:00"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_async_retry_on_transport_error():
+    """
+    Retry transport failures for async requests.
+
+    Validates that a second attempt succeeds.
+    """
     calls = {"count": 0}
 
     async def responder(request: httpx.Request) -> httpx.Response:
@@ -44,6 +80,11 @@ async def test_async_retry_on_transport_error():
 
 @pytest.mark.asyncio
 async def test_draw_on_display_utf8_async():
+    """
+    Ensure async display payloads preserve UTF-8 content.
+
+    Verifies non-ASCII text is not escaped.
+    """
     payload = {
         "app_id": "demo",
         "elements": [
@@ -72,6 +113,12 @@ async def test_draw_on_display_utf8_async():
 
 @pytest.mark.asyncio
 async def test_error_response_raises_api_error_async():
+    """
+    Raise BusyBarAPIError for async error responses.
+
+    Confirms JSON error payloads are surfaced.
+    """
+
     async def responder(request: httpx.Request) -> httpx.Response:
         return httpx.Response(400, json={"error": "bad request", "code": 400})
 
@@ -83,6 +130,11 @@ async def test_error_response_raises_api_error_async():
 
 @pytest.mark.asyncio
 async def test_async_set_display_brightness_params():
+    """
+    Validate async display brightness params and empty body.
+
+    Ensures parameters are passed through query string.
+    """
     seen = {}
 
     async def responder(request: httpx.Request) -> httpx.Response:

@@ -9,7 +9,11 @@ from pydantic_extra_types.color import Color
 
 
 class StrEnum(str, Enum):
-    """Enum that serializes to its value."""
+    """
+    Enum that serializes to its value.
+
+    This keeps JSON payloads aligned with API strings.
+    """
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.value
@@ -117,6 +121,20 @@ class Status(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class DeviceNameResponse(BaseModel):
+    name: str | None = None
+    device: str | None = None
+    value: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class DeviceTimeResponse(BaseModel):
+    timestamp: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class StorageFileElement(BaseModel):
     type: Literal["file"] = "file"
     name: str
@@ -141,6 +159,14 @@ class StorageList(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class StorageStatus(BaseModel):
+    total: int | None = Field(default=None, alias="total_bytes")
+    used: int | None = Field(default=None, alias="used_bytes")
+    free: int | None = Field(default=None, alias="free_bytes")
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+
 class DisplayElementBase(BaseModel):
     id: str
     timeout: int | None = Field(default=None, gt=0)
@@ -154,7 +180,7 @@ class TextElement(DisplayElementBase):
     x: int
     y: int
     text: str
-    font: str = "default"
+    font: Literal["small", "medium", "medium_condensed", "big"] | None = None
     align: (
         Literal[
             "top_left",
@@ -169,7 +195,7 @@ class TextElement(DisplayElementBase):
         ]
         | None
     ) = None
-    color: str | None = None
+    color: str | Sequence[int | float] | None = None
     width: int | None = Field(default=None, gt=0)
     scroll_rate: int | None = Field(default=None, gt=0)
 
@@ -181,7 +207,9 @@ class TextElement(DisplayElementBase):
 
         if isinstance(value, (list, tuple)):
             if len(value) not in (3, 4):
-                raise ValueError("Color tuple/list must have 3 (RGB) or 4 (RGBA) elements")
+                raise ValueError(
+                    "Color tuple/list must have 3 (RGB) or 4 (RGBA) elements"
+                )
 
             def to_channel(component: int | float) -> int:
                 # Accept 0-1 floats or 0-255 ints
@@ -195,17 +223,18 @@ class TextElement(DisplayElementBase):
             alpha = max(0, min(255, to_channel(alpha_component)))
             return f"#{r:02X}{g:02X}{b:02X}{alpha:02X}"
 
+        if not isinstance(value, str):
+            raise ValueError("Color must be a string or RGB/RGBA tuple")
+
         col = Color(value)
-        try:
-            hex_value = col.as_hex(include_alpha=True).upper()
-        except TypeError:
-            hex_value = col.as_hex().upper()
+        hex_value = col.as_hex().upper()
         if len(hex_value) == 9:  # #RRGGBBAA
             return hex_value
         if len(hex_value) == 7:  # #RRGGBB, append opaque alpha
             return f"{hex_value}FF"
 
-        r, g, b = col.as_rgb_tuple()
+        rgb = col.as_rgb_tuple()
+        r, g, b = rgb[0], rgb[1], rgb[2]
         return f"#{r:02X}{g:02X}{b:02X}FF"
 
 
@@ -244,7 +273,9 @@ class DisplayBrightnessUpdate(BaseModel):
 
     @field_validator("front", "back")
     @classmethod
-    def _normalize_brightness(cls, value: BrightnessValue | None) -> BrightnessValue | None:
+    def _normalize_brightness(
+        cls, value: BrightnessValue | None
+    ) -> BrightnessValue | None:
         if isinstance(value, str) and value != "auto":
             raise ValueError("Brightness string value must be 'auto'")
         return value

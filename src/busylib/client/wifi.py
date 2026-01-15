@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .base import AsyncClientBase, SyncClientBase
 from .. import types
+from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +29,14 @@ class WifiMixin(SyncClientBase):
         data = self._request("GET", "/api/wifi/status")
         return types.StatusResponse.model_validate(data)
 
-    def connect_wifi(self, config: types.ConnectRequestConfig | dict[str, Any]) -> types.SuccessResponse:
-        ssid = config.ssid if isinstance(config, types.ConnectRequestConfig) else config.get("ssid")
+    def connect_wifi(
+        self, config: types.ConnectRequestConfig | dict[str, Any]
+    ) -> types.SuccessResponse:
+        ssid = (
+            config.ssid
+            if isinstance(config, types.ConnectRequestConfig)
+            else config.get("ssid")
+        )
         logger.info("connect_wifi ssid=%s", ssid)
         model = (
             config
@@ -80,7 +86,11 @@ class AsyncWifiMixin(AsyncClientBase):
         self,
         config: types.ConnectRequestConfig | dict[str, Any],
     ) -> types.SuccessResponse:
-        ssid = config.ssid if isinstance(config, types.ConnectRequestConfig) else config.get("ssid")
+        ssid = (
+            config.ssid
+            if isinstance(config, types.ConnectRequestConfig)
+            else config.get("ssid")
+        )
         logger.info("async connect_wifi ssid=%s", ssid)
         model = (
             config

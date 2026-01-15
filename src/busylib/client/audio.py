@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from .base import AsyncClientBase, SyncClientBase
 from .. import types
+from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,14 @@ class AudioMixin(SyncClientBase):
         logger.info("stop_audio")
         data = self._request("DELETE", "/api/audio/play")
         return types.SuccessResponse.model_validate(data)
+
+    def stop_sound(self) -> types.SuccessResponse:
+        """
+        Alias for stop_audio.
+
+        Provided for callers that prefer "sound" naming.
+        """
+        return self.stop_audio()
 
     def get_audio_volume(self) -> types.AudioVolumeInfo:
         logger.info("get_audio_volume")
@@ -62,6 +70,14 @@ class AsyncAudioMixin(AsyncClientBase):
         logger.info("async stop_audio")
         data = await self._request("DELETE", "/api/audio/play")
         return types.SuccessResponse.model_validate(data)
+
+    async def stop_sound(self) -> types.SuccessResponse:
+        """
+        Alias for stop_audio.
+
+        Provided for callers that prefer "sound" naming.
+        """
+        return await self.stop_audio()
 
     async def get_audio_volume(self) -> types.AudioVolumeInfo:
         logger.info("async get_audio_volume")

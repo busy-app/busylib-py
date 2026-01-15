@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .base import AsyncClientBase, SyncClientBase
 from .. import types, versioning
+from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,22 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
+    def get_device_name(self) -> types.DeviceNameResponse:
+        """
+        Fetch device name via GET /api/name.
+        """
+        logger.info("get_device_name")
+        data = self._request("GET", "/api/name")
+        return types.DeviceNameResponse.model_validate(data)
+
+    def get_device_time(self) -> types.DeviceTimeResponse:
+        """
+        Fetch device time via GET /api/time.
+        """
+        logger.info("get_device_time")
+        data = self._request("GET", "/api/time")
+        return types.DeviceTimeResponse.model_validate(data)
+
 
 class AsyncFirmwareMixin(AsyncClientBase):
     """
@@ -109,3 +125,19 @@ class AsyncFirmwareMixin(AsyncClientBase):
         logger.info("async get_power_status")
         data = await self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
+
+    async def get_device_name(self) -> types.DeviceNameResponse:
+        """
+        Fetch device name via GET /api/name.
+        """
+        logger.info("async get_device_name")
+        data = await self._request("GET", "/api/name")
+        return types.DeviceNameResponse.model_validate(data)
+
+    async def get_device_time(self) -> types.DeviceTimeResponse:
+        """
+        Fetch device time via GET /api/time.
+        """
+        logger.info("async get_device_time")
+        data = await self._request("GET", "/api/time")
+        return types.DeviceTimeResponse.model_validate(data)

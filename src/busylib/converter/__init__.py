@@ -12,6 +12,11 @@ ConverterFn = Callable[[str, bytes], tuple[str, bytes] | None]
 
 
 def _registry() -> dict[str, ConverterFn]:
+    """
+    Build the extension-to-converter mapping.
+
+    Centralizes format support for storage conversion.
+    """
     return {
         ".mp3": audio.convert,
         ".ogg": audio.convert,
@@ -26,7 +31,7 @@ def _registry() -> dict[str, ConverterFn]:
         ".tif": image.convert,
         ".tiff": image.convert,
         ".gif": video.convert,
-        ".webp": video.convert,
+        ".webp": image.convert,
         ".mov": video.convert,
         ".mp4": video.convert,
         ".mkv": video.convert,
@@ -36,6 +41,11 @@ def _registry() -> dict[str, ConverterFn]:
 
 
 def convert_for_storage(path: str, data: bytes) -> tuple[str, bytes]:
+    """
+    Convert a file payload to a device-ready format when supported.
+
+    Falls back to the original data when conversion is not available.
+    """
     suffix = Path(path).suffix.lower()
     converter = _registry().get(suffix)
     if not converter:
@@ -45,6 +55,8 @@ def convert_for_storage(path: str, data: bytes) -> tuple[str, bytes]:
         if result is None:
             return path, data
         return result
+    except NotImplementedError:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("Conversion failed for %s: %s", path, exc)
         return path, data

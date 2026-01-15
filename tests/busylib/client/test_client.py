@@ -6,28 +6,48 @@ import pytest
 
 from busylib import BusyBar, exceptions, types
 
-
 Responder = Callable[[httpx.Request], httpx.Response]
 
 
 def make_client(responder: Responder, **kwargs) -> BusyBar:
+    """
+    Build a BusyBar client backed by an HTTPX mock transport.
+
+    Keeps transport setup consistent across tests.
+    """
     transport = httpx.MockTransport(responder)
     return BusyBar(addr="http://device.local", transport=transport, **kwargs)
 
 
 def test_init_defaults_local():
+    """
+    Verify the default base URL points to the device LAN address.
+
+    Ensures base_url and HTTPX client base_url match.
+    """
     client = BusyBar()
     assert client.base_url == "http://10.0.4.20"
     assert client.client.base_url == httpx.URL("http://10.0.4.20")
 
 
 def test_init_token_sets_cloud_base_and_header():
+    """
+    Ensure token auth switches to the cloud proxy base URL.
+
+    Also validates the Authorization header value.
+    """
     client = BusyBar(token="secret")
     assert client.base_url == "https://proxy.dev.busy.app"
     assert client.client.headers["authorization"] == "Bearer secret"
 
 
 def test_get_version_success():
+    """
+    Validate successful parsing of version information.
+
+    Confirms the version and branch fields are mapped.
+    """
+
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/version"
         return httpx.Response(
@@ -46,7 +66,34 @@ def test_get_version_success():
     assert result.branch == "main"
 
 
+def test_get_device_name_and_time():
+    """
+    Fetch device name and time from their respective endpoints.
+
+    Verifies both responses are parsed correctly.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/name":
+            return httpx.Response(200, json={"name": "BusyBar"})
+        if request.url.path == "/api/time":
+            return httpx.Response(200, json={"timestamp": "2024-01-01T10:00:00"})
+        return httpx.Response(404, json={"error": "missing", "code": 404})
+
+    client = make_client(responder)
+    name = client.get_device_name()
+    assert name.name == "BusyBar"
+    time_info = client.get_device_time()
+    assert time_info.timestamp == "2024-01-01T10:00:00"
+
+
 def test_error_response_raises_api_error():
+    """
+    Raise BusyBarAPIError on JSON error responses.
+
+    Ensures error payload is surfaced through the exception.
+    """
+
     def responder(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": "fail", "code": 500})
 
@@ -58,6 +105,12 @@ def test_error_response_raises_api_error():
 
 
 def test_plain_text_error_response():
+    """
+    Raise BusyBarAPIError on plain-text error responses.
+
+    Confirms non-JSON failures still propagate with HTTP status.
+    """
+
     def responder(request: httpx.Request) -> httpx.Response:
         return httpx.Response(404, text="not found")
 
@@ -69,6 +122,12 @@ def test_plain_text_error_response():
 
 
 def test_get_version_incompatible_requires_device_update():
+    """
+    Reject incompatible firmware API versions.
+
+    Ensures the version guard raises a dedicated error.
+    """
+
     def responder(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"api_semver": "0.9.0"})
 
@@ -79,6 +138,11 @@ def test_get_version_incompatible_requires_device_update():
 
 
 def test_request_carries_api_version_header():
+    """
+    Send API version header with each request.
+
+    Verifies the header is derived from client configuration.
+    """
     seen = {}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -92,6 +156,11 @@ def test_request_carries_api_version_header():
 
 
 def test_retry_on_transport_error():
+    """
+    Retry transient transport failures when configured.
+
+    Ensures the second attempt succeeds after a connection error.
+    """
     calls = {"count": 0}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -107,6 +176,11 @@ def test_retry_on_transport_error():
 
 
 def test_draw_on_display_sends_utf8_body():
+    """
+    Ensure JSON payloads are encoded as UTF-8 without ASCII escaping.
+
+    This keeps non-ASCII text readable on the device.
+    """
     payload = {
         "app_id": "demo",
         "elements": [
@@ -135,6 +209,11 @@ def test_draw_on_display_sends_utf8_body():
 
 
 def test_get_screen_frame_returns_bytes():
+    """
+    Return raw bytes for screen frame requests.
+
+    Confirms binary content is not JSON-decoded.
+    """
     expected = b"\x00\x01\x02"
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -165,6 +244,12 @@ def test_get_screen_frame_returns_bytes():
     ],
 )
 def test_simple_success_methods(method: str, path: str):
+    """
+    Verify simple methods hit expected endpoints and succeed.
+
+    Covers a set of API methods with uniform response handling.
+    """
+
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.url.path == path
         return httpx.Response(200, json={"result": "OK"})
@@ -186,6 +271,11 @@ def test_simple_success_methods(method: str, path: str):
 
 
 def test_connect_wifi_serialization():
+    """
+    Serialize Wi-Fi configuration into JSON payload.
+
+    Ensures the expected fields are present in the request body.
+    """
     seen = {}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -201,6 +291,11 @@ def test_connect_wifi_serialization():
 
 
 def test_display_brightness_validation_and_payload():
+    """
+    Validate display brightness parameters and payload shape.
+
+    Confirms query params and empty body are sent as expected.
+    """
     seen = {}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -219,6 +314,11 @@ def test_display_brightness_validation_and_payload():
 
 
 def test_set_audio_volume_params():
+    """
+    Validate audio volume query parameters.
+
+    Ensures body is empty and volume is passed via params.
+    """
     seen = {}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -234,6 +334,11 @@ def test_set_audio_volume_params():
 
 
 def test_draw_on_display_color_serialization():
+    """
+    Serialize color strings into hex RGBA values.
+
+    Confirms color conversion in display elements.
+    """
     seen = {}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -241,19 +346,20 @@ def test_draw_on_display_color_serialization():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
+    elements: list[types.DisplayElement] = [
+        types.TextElement(
+            id="t1",
+            type="text",
+            x=0,
+            y=0,
+            text="hi",
+            color="rgba(255, 0, 0, 0.5)",
+            display=types.DisplayName.FRONT,
+        )
+    ]
     display = types.DisplayElements(
         app_id="app",
-        elements=[
-            types.TextElement(
-                id="t1",
-                type="text",
-                x=0,
-                y=0,
-                text="hi",
-                color="rgba(255, 0, 0, 0.5)",
-                display=types.DisplayName.FRONT,
-            )
-        ],
+        elements=elements,
     )
     resp = client.draw_on_display(display)
     assert resp.result == "OK"
@@ -262,6 +368,11 @@ def test_draw_on_display_color_serialization():
 
 
 def test_draw_on_display_color_tuple_alpha():
+    """
+    Serialize color tuples with alpha into hex RGBA values.
+
+    Ensures tuple-based colors are handled consistently.
+    """
     seen = {}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -269,19 +380,20 @@ def test_draw_on_display_color_tuple_alpha():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
+    elements: list[types.DisplayElement] = [
+        types.TextElement(
+            id="t2",
+            type="text",
+            x=0,
+            y=0,
+            text="hi",
+            color=(255, 255, 255, 100),
+            display=types.DisplayName.FRONT,
+        )
+    ]
     display = types.DisplayElements(
         app_id="app",
-        elements=[
-            types.TextElement(
-                id="t2",
-                type="text",
-                x=0,
-                y=0,
-                text="hi",
-                color=(255, 255, 255, 100),
-                display=types.DisplayName.FRONT,
-            )
-        ],
+        elements=elements,
     )
     resp = client.draw_on_display(display)
     assert resp.result == "OK"

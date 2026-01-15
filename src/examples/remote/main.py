@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+
+from . import runner as remote_runner
+from .constants import (
+    DEFAULT_ADDR,
+    DEFAULT_LOG_LEVEL,
+    DEFAULT_SPACER,
+    ICON_MODE,
+    ICON_SETS,
+    TEXT_ARG_ADDR,
+    TEXT_ARG_DESC,
+    TEXT_ARG_HTTP,
+    TEXT_ARG_KEYMAP,
+    TEXT_ARG_LOG_FILE,
+    TEXT_ARG_LOG_LEVEL,
+    TEXT_ARG_NO_INPUT,
+    TEXT_ARG_PIXEL,
+    TEXT_ARG_SPACER,
+    TEXT_ARG_TOKEN,
+)
+from .terminal_utils import (
+    _clear_screen,
+    _clear_terminal,
+    _format_error_message,
+    _print_status_message,
+    _print_user_message,
+    _setup_logging,
+)
+
+
+def _select_icon_set(mode: str) -> dict[str, str]:
+    """
+    Select the icon set for the terminal UI.
+
+    Unknown modes fall back to the emoji icon set.
+    """
+    normalized = mode.strip().lower()
+    return ICON_SETS.get(normalized, ICON_SETS["emoji"])
+
+
+ICONS = _select_icon_set(ICON_MODE)
+PIXEL_CHAR = ICONS["pixel"]
+
+
+def parse_args() -> argparse.Namespace:
+    """
+    Parse CLI arguments for streaming and input forwarding.
+    Keep defaults aligned with file-only logging.
+    """
+    parser = argparse.ArgumentParser(description=TEXT_ARG_DESC)
+    parser.add_argument("--addr", default=DEFAULT_ADDR, help=TEXT_ARG_ADDR)
+    parser.add_argument("--token", default=None, help=TEXT_ARG_TOKEN)
+    parser.add_argument(
+        "--http-poll-interval",
+        type=float,
+        default=None,
+        help=TEXT_ARG_HTTP,
+    )
+    parser.add_argument(
+        "--spacer",
+        type=str,
+        default=DEFAULT_SPACER,
+        help=TEXT_ARG_SPACER,
+    )
+    parser.add_argument(
+        "--pixel-char",
+        type=str,
+        default=PIXEL_CHAR,
+        help=TEXT_ARG_PIXEL.format(pixel=PIXEL_CHAR),
+    )
+    parser.add_argument(
+        "--log-level",
+        default=DEFAULT_LOG_LEVEL,
+        help=TEXT_ARG_LOG_LEVEL,
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help=TEXT_ARG_LOG_FILE,
+    )
+    parser.add_argument(
+        "--no-send-input",
+        action="store_true",
+        help=TEXT_ARG_NO_INPUT,
+    )
+    parser.add_argument(
+        "--keymap-file",
+        type=str,
+        default=None,
+        help=TEXT_ARG_KEYMAP,
+    )
+    return parser.parse_args()
+
+
+async def _run(args: argparse.Namespace) -> None:
+    """
+    Run the remote streaming loop with renderer and CLI options.
+
+    Delegates the heavy lifting to the runner module.
+    """
+    _setup_logging(level=args.log_level, log_file=args.log_file)
+    await remote_runner._run(
+        args,
+        icons=ICONS,
+        clear_screen=_clear_screen,
+        clear_terminal=_clear_terminal,
+        status_message=_print_status_message,
+    )
+
+
+def main() -> None:
+    """
+    Entry point for remote screen streaming.
+    """
+    args = None
+    try:
+        args = parse_args()
+        asyncio.run(_run(args))
+    except KeyboardInterrupt as exc:
+        prefix, message = _format_error_message(exc)
+        _print_user_message(
+            prefix,
+            message,
+            addr=None if args is None else getattr(args, "addr", None),
+        )
+        sys.exit(130)
+    except Exception as exc:
+        prefix, message = _format_error_message(exc)
+        _print_user_message(
+            prefix,
+            message,
+            addr=None if args is None else getattr(args, "addr", None),
+        )
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -4,12 +4,13 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import AsyncIterable, Iterable
 from typing import Any
 
 import httpx
 
 from .. import exceptions, versioning
-
+from ..settings import settings
 
 JsonType = dict[str, Any] | list[Any] | str | int | float | bool | None
 
@@ -24,7 +25,16 @@ def _json_bytes(payload: Any) -> bytes:
     """
     Encode JSON payload as UTF-8 without ASCII escaping.
     """
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
+
+
+def _data_length(data: Any) -> int | None:
+    try:
+        return len(data)  # type: ignore[arg-type]
+    except Exception:
+        return None
 
 
 def _as_timeout(value: float | httpx.Timeout | None) -> httpx.Timeout:
@@ -43,6 +53,8 @@ class SyncClientBase:
     Sync foundation: connection setup, retries, and low-level HTTP requests.
     """
 
+    is_cloud = False
+
     def __init__(
         self,
         addr: str | None = None,
@@ -55,9 +67,10 @@ class SyncClientBase:
         api_version: str | None = None,
     ) -> None:
         if addr is None and token is None:
-            self.base_url = "http://10.0.4.20"
+            self.base_url = settings.base_url
         elif addr is None:
-            self.base_url = "https://proxy.dev.busy.app"
+            self.is_cloud = True
+            self.base_url = settings.cloud_base_url
         else:
             self.base_url = addr if "://" in addr else f"http://{addr}"
 
@@ -67,8 +80,12 @@ class SyncClientBase:
         self._device_api_version: str | None = None
 
         headers: dict[str, str] = {versioning.API_VERSION_HEADER: self.api_version}
-        if token is not None:
+        if token is None:
+            pass
+        elif self.is_cloud:
             headers["Authorization"] = f"Bearer {token}"
+        else:
+            headers["X-API-Token"] = token
 
         self.client = httpx.Client(
             base_url=self.base_url,
@@ -92,18 +109,20 @@ class SyncClientBase:
         path: str,
         *,
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
         json_payload: JsonType | None = None,
-        data: bytes | None = None,
+        data: bytes | Iterable[bytes] | None = None,
         expect_bytes: bool = False,
+        timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
-        headers: dict[str, str] = {}
-        content = None
+        headers_local: dict[str, str] = dict(headers or {})
+        content: bytes | Iterable[bytes] | None = None
         serialized_json = None
 
         if json_payload is not None:
             serialized_json = _json_bytes(json_payload)
             content = serialized_json
-            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers_local["Content-Type"] = "application/json; charset=utf-8"
         elif data is not None:
             content = data
 
@@ -112,9 +131,9 @@ class SyncClientBase:
             method,
             path,
             params,
-            headers or None,
+            headers_local or None,
             None if serialized_json is None else serialized_json.decode("utf-8"),
-            None if data is None else len(data),
+            None if data is None else _data_length(data),
         )
 
         last_exc: Exception | None = None
@@ -125,7 +144,8 @@ class SyncClientBase:
                     path,
                     params=params,
                     content=content,
-                    headers=headers or None,
+                    headers=headers_local or None,
+                    timeout=_as_timeout(timeout),
                 )
             except httpx.RequestError as exc:
                 last_exc = exc
@@ -137,7 +157,9 @@ class SyncClientBase:
             if response.status_code >= 400:
                 try:
                     payload = response.json()
-                    error = payload.get("error") or payload.get("message") or response.text
+                    error = (
+                        payload.get("error") or payload.get("message") or response.text
+                    )
                     code = payload.get("code", response.status_code)
                 except json.JSONDecodeError:
                     error = f"HTTP {response.status_code}: {response.text}"
@@ -156,7 +178,9 @@ class SyncClientBase:
                 return response.content
 
             try:
-                logger.debug("Response %s %s status=%s", method, path, response.status_code)
+                logger.debug(
+                    "Response %s %s status=%s", method, path, response.status_code
+                )
                 return response.json()
             except json.JSONDecodeError:
                 logger.debug(
@@ -177,6 +201,8 @@ class AsyncClientBase:
     Async foundation: connection setup, retries, and low-level HTTP requests.
     """
 
+    is_cloud = False
+
     def __init__(
         self,
         addr: str | None = None,
@@ -189,9 +215,10 @@ class AsyncClientBase:
         api_version: str | None = None,
     ) -> None:
         if addr is None and token is None:
-            self.base_url = "http://10.0.4.20"
+            self.base_url = settings.base_url
         elif addr is None:
-            self.base_url = "https://proxy.dev.busy.app"
+            self.is_cloud = True
+            self.base_url = settings.cloud_base_url
         else:
             self.base_url = addr if "://" in addr else f"http://{addr}"
 
@@ -201,8 +228,12 @@ class AsyncClientBase:
         self._device_api_version: str | None = None
 
         headers: dict[str, str] = {versioning.API_VERSION_HEADER: self.api_version}
-        if token is not None:
+        if token is None:
+            pass
+        elif self.is_cloud:
             headers["Authorization"] = f"Bearer {token}"
+        else:
+            headers["X-API-Token"] = token
 
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
@@ -226,18 +257,20 @@ class AsyncClientBase:
         path: str,
         *,
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
         json_payload: JsonType | None = None,
-        data: bytes | None = None,
+        data: bytes | AsyncIterable[bytes] | None = None,
         expect_bytes: bool = False,
+        timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
-        headers: dict[str, str] = {}
-        content = None
+        headers_local: dict[str, str] = dict(headers or {})
+        content: bytes | AsyncIterable[bytes] | None = None
         serialized_json = None
 
         if json_payload is not None:
             serialized_json = _json_bytes(json_payload)
             content = serialized_json
-            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers_local["Content-Type"] = "application/json; charset=utf-8"
         elif data is not None:
             content = data
 
@@ -246,9 +279,9 @@ class AsyncClientBase:
             method,
             path,
             params,
-            headers or None,
+            headers_local or None,
             None if serialized_json is None else serialized_json.decode("utf-8"),
-            None if data is None else len(data),
+            None if data is None else _data_length(data),
         )
 
         last_exc: Exception | None = None
@@ -259,7 +292,8 @@ class AsyncClientBase:
                     path,
                     params=params,
                     content=content,
-                    headers=headers or None,
+                    headers=headers_local or None,
+                    timeout=_as_timeout(timeout),
                 )
             except httpx.RequestError as exc:
                 last_exc = exc
@@ -271,7 +305,9 @@ class AsyncClientBase:
             if response.status_code >= 400:
                 try:
                     payload = response.json()
-                    error = payload.get("error") or payload.get("message") or response.text
+                    error = (
+                        payload.get("error") or payload.get("message") or response.text
+                    )
                     code = payload.get("code", response.status_code)
                 except json.JSONDecodeError:
                     error = f"HTTP {response.status_code}: {response.text}"
@@ -289,7 +325,9 @@ class AsyncClientBase:
                 return response.content
 
             try:
-                logger.debug("Response %s %s status=%s", method, path, response.status_code)
+                logger.debug(
+                    "Response %s %s status=%s", method, path, response.status_code
+                )
                 return response.json()
             except json.JSONDecodeError:
                 logger.debug(

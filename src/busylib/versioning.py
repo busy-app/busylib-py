@@ -5,7 +5,6 @@ import re
 
 from . import exceptions
 
-
 API_VERSION = os.environ.get("BUSY_API_VERSION", "0.1.0")
 API_VERSION_HEADER = "X-Busy-Api-Version"
 

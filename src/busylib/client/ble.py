@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from .base import AsyncClientBase, SyncClientBase
 from .. import types
+from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
 

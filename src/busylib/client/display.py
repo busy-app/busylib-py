@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import os
+import json
 import logging
 from typing import Any, AsyncIterator
 from urllib.parse import urlparse, urlunparse
-import json
 
 import websockets
 
-from .base import AsyncClientBase, SyncClientBase
 from .. import display, types
+from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
 
@@ -56,15 +55,15 @@ def _back_b4_to_b8(data: bytes) -> bytes:
     return bytes(out)
 
 
-def _decode_frame_bytes(data: bytes, display_index: int, *, from_ws: bool) -> bytes | None:
-    spec = display.get_display_spec(display_index)
+def _decode_frame_bytes(data: bytes, display_id: int, *, from_ws: bool) -> bytes | None:
+    spec = display.get_display_spec(display_id)
     width, height = spec.width, spec.height
     expected = width * height * 3
     nibble_expected = (width * height) // 2
     gray_expected = width * height
 
     if from_ws:
-        blk_size = 2 if display_index == 1 else 3
+        blk_size = 2 if display_id == 1 else 3
         decoded = _rle_decode(data, blk_size)
         if decoded:
             data = decoded
@@ -77,13 +76,15 @@ def _decode_frame_bytes(data: bytes, display_index: int, *, from_ws: bool) -> by
         return b"".join(bytes((v * 17, v * 17, v * 17)) for v in unpacked)
 
     if len(data) == gray_expected:
-        factor = 17 if display_index == 1 else 1
+        factor = 17 if display_id == 1 else 1
         return b"".join(bytes((v * factor, v * factor, v * factor)) for v in data)
 
     return None
 
 
-def _ws_auth_headers(base_url: str, client_headers: dict[str, str] | None) -> dict[str, str]:
+def _ws_auth_headers(
+    base_url: str, client_headers: dict[str, str] | None
+) -> dict[str, str]:
     return dict(client_headers) if client_headers else {}
 
 
@@ -98,7 +99,9 @@ class DisplayMixin(SyncClientBase):
     ) -> types.SuccessResponse:
         logger.info(
             "draw_on_display app_id=%s",
-            display_data.app_id if isinstance(display_data, types.DisplayElements) else display_data.get("app_id"),
+            display_data.app_id
+            if isinstance(display_data, types.DisplayElements)
+            else display_data.get("app_id"),
         )
         model = (
             display_data
@@ -171,7 +174,7 @@ class DisplayMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    def get_screen_frame(self, display: int) -> bytes:
+    def get_screen_frame(self, display_id: int) -> bytes:
         """
         Fetch a single display frame via GET /api/screen.
 
@@ -181,17 +184,21 @@ class DisplayMixin(SyncClientBase):
         replies 200 with `image/bmp` content type or 400 when the display index
         is invalid. Response is decoded to RGB bytes when possible.
         """
-        logger.info("get_screen_frame display=%s", display)
-        data = self._request(
+        logger.info("get_screen_frame display=%s", display_id)
+        target = display.get_display_spec(display_id)
+        raw = self._request(
             "GET",
             "/api/screen",
-            params={"display": display},
+            params={"display": target.index},
             expect_bytes=True,
         )  # type: ignore[return-value]
-        decoded = _decode_frame_bytes(data, display, from_ws=False)
+        if not isinstance(raw, (bytes, bytearray)):
+            raise TypeError("Expected bytes response for screen frame")
+        data = bytes(raw)
+        decoded = _decode_frame_bytes(data, target.index, from_ws=False)
         return decoded if decoded is not None else data
 
-    def stream_screen_ws(self, display: int) -> None:
+    def stream_screen_ws(self, display_id: int) -> None:
         """
         WebSocket streaming via GET /api/screen/ws.
 
@@ -204,7 +211,9 @@ class DisplayMixin(SyncClientBase):
         Heartbeat: server pings, client must respond with pong. Not implemented
         in this sync client; use busylib.screen CLI or a WebSocket client.
         """
-        raise NotImplementedError("WebSocket streaming is not implemented in this client.")
+        raise NotImplementedError(
+            "WebSocket streaming is implemented only for async client."
+        )
 
 
 class AsyncDisplayMixin(AsyncClientBase):
@@ -218,7 +227,9 @@ class AsyncDisplayMixin(AsyncClientBase):
     ) -> types.SuccessResponse:
         logger.info(
             "async draw_on_display app_id=%s",
-            display_data.app_id if isinstance(display_data, types.DisplayElements) else display_data.get("app_id"),
+            display_data.app_id
+            if isinstance(display_data, types.DisplayElements)
+            else display_data.get("app_id"),
         )
         model = (
             display_data
@@ -291,7 +302,7 @@ class AsyncDisplayMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    async def get_screen_frame(self, display: int) -> bytes:
+    async def get_screen_frame(self, display_id: int) -> bytes:
         """
         Fetch a single display frame via GET /api/screen.
 
@@ -301,56 +312,61 @@ class AsyncDisplayMixin(AsyncClientBase):
         replies 200 with `image/bmp` content type or 400 when the display index
         is invalid. Response is decoded to RGB bytes when possible.
         """
-        logger.info("async get_screen_frame display=%s", display)
-        data = await self._request(
+        logger.info("async get_screen_frame display=%s", display_id)
+        target = display.get_display_spec(display_id)
+        raw = await self._request(
             "GET",
             "/api/screen",
-            params={"display": display},
+            params={"display": target.index},
             expect_bytes=True,
         )  # type: ignore[return-value]
-        decoded = _decode_frame_bytes(data, display, from_ws=False)
+        if not isinstance(raw, (bytes, bytearray)):
+            raise TypeError("Expected bytes response for screen frame")
+        data = bytes(raw)
+        decoded = _decode_frame_bytes(data, target.index, from_ws=False)
         return decoded if decoded is not None else data
 
-    async def stream_screen_ws(self, display: int) -> AsyncIterator[bytes]:
+    async def stream_screen_ws(self, display_id: int) -> AsyncIterator[bytes | str]:
         """
         WebSocket streaming via GET /api/screen/ws.
 
-        Server upgrades HTTP to WebSocket; client must send `{"display": 0|1}`
-        JSON to select front/back. Server streams binary frames compressed with
-        RLE: front encodes runs of 3-byte BGR pixels (source 72x16x24bpp =>
-        3456 bytes before compression); back encodes runs of 1-byte L4 values
-        (source 160x80 L4 => 6400 bytes before compression). Frame sizes vary.
-        Up to 4 clients supported; otherwise 400 Exceed max clients count.
-        Heartbeat: server pings, client must respond with pong. This client
-        disables automatic pings and relies on websockets' built-in pong
-        replies to server pings. Token for WS upgrade is passed in query
-        param `x-api-token`, per server implementation.
+        Yields bytes for image frames and strings for server messages.
         """
-        headers = dict(self.client.headers) if self.client.headers else {}
-        # Token for WS upgrade is carried in query per server implementation.
-        token = self.client.headers.get("Authorization")
+        headers = self.client.headers
+        token = headers.get("Authorization") if headers else None
         if token and token.lower().startswith("bearer "):
             token = token.split(" ", 1)[1]
         else:
-            token = headers.get("x-api-token") or headers.get("X-API-Token")
+            token = (
+                None
+                if headers is None
+                else (headers.get("x-api-token") or headers.get("X-API-Token"))
+            )
 
+        target = display.get_display_spec(display_id)
         ws_url = _http_to_ws(self.base_url).rstrip("/") + "/api/screen/ws"
         if token:
             ws_url += f"?x-api-token={token}"
 
         async with websockets.connect(
             ws_url,
-            additional_headers=headers or None,
             max_size=None,
             ping_interval=None,
         ) as ws:
-            await ws.send(json.dumps({"display": display}))
+            await ws.send(json.dumps({"display": target.index}))
             async for message in ws:
                 if isinstance(message, bytes):
-                    decoded = _decode_frame_bytes(message, display, from_ws=True)
+                    decoded = _decode_frame_bytes(message, target.index, from_ws=True)
                     yield decoded if decoded is not None else message
-                    continue
+                else:
+                    yield message
 
-                # websockets delivers pings as a call to ws.ping() on the protocol,
-                # so text frames are unexpected here; just log and continue.
-                logger.debug("Ignoring text WS message len=%s", len(message))
+    def _ws_headers(self, headers: dict[str, str]) -> dict[str, str]:
+        """
+        Build a minimal header set for WebSocket upgrades.
+
+        This intentionally returns no extra headers to match the debug client.
+        """
+        allowed_headers: set[str] = set()
+
+        return {k: v for k, v in headers.items() if k.lower() in allowed_headers}

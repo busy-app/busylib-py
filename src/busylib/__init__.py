@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .client import BusyBar, AsyncBusyBar
 from . import exceptions, types
+from .client import AsyncBusyBar, BusyBar
 
 __all__ = [
     "BusyBar",

@@ -1,15 +1,31 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
 import termios
 import tty
-import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from .types import InputKey
+
+TermiosAttrs = (
+    list[int | list[bytes | int]] | list[int | list[bytes]] | list[int | list[int]]
+)
+
+
+def _termios_flags(attrs: TermiosAttrs) -> int:
+    """
+    Extract termios flag field as an integer.
+    """
+    flags = attrs[0]
+    if not isinstance(flags, int):
+        raise TypeError("termios flags must be int")
+    return flags
 
 
 @dataclass(frozen=True)
@@ -18,8 +34,8 @@ class KeyMap:
     labels: dict[bytes, str]
     help_sequences: set[bytes]
     exit_sequences: set[bytes]
-    reader_factory: callable | None = None
-    decoder_factory: callable | None = None
+    reader_factory: Callable[..., object] | None = None
+    decoder_factory: Callable[..., object] | None = None
 
 
 def _encode_human_key(spec: str) -> bytes:
@@ -78,7 +94,9 @@ _DEFAULT_HELP_KEYS: set[str] = set()
 _DEFAULT_EXIT_KEYS = {"ctrl+q"}
 
 
-def _build_keymap(human_map: dict[str, InputKey], help_keys: set[str], exit_keys: set[str]) -> KeyMap:
+def _build_keymap(
+    human_map: dict[str, InputKey], help_keys: set[str], exit_keys: set[str]
+) -> KeyMap:
     mapping: dict[bytes, InputKey] = {}
     labels: dict[bytes, str] = {}
 
@@ -102,14 +120,21 @@ def _build_keymap(human_map: dict[str, InputKey], help_keys: set[str], exit_keys
 
     help_sequences = {_encode_human_key(k) for k in help_keys}
     exit_sequences = {_encode_human_key(k) for k in exit_keys}
-    return KeyMap(mapping=mapping, labels=labels, help_sequences=help_sequences, exit_sequences=exit_sequences)
+    return KeyMap(
+        mapping=mapping,
+        labels=labels,
+        help_sequences=help_sequences,
+        exit_sequences=exit_sequences,
+    )
 
 
 def default_keymap() -> KeyMap:
     """
     Return default keymap with human-readable labels and meta keys.
     """
-    return _build_keymap(_DEFAULT_KEYMAP_HUMAN, set(_DEFAULT_HELP_KEYS), set(_DEFAULT_EXIT_KEYS))
+    return _build_keymap(
+        _DEFAULT_KEYMAP_HUMAN, set(_DEFAULT_HELP_KEYS), set(_DEFAULT_EXIT_KEYS)
+    )
 
 
 def load_keymap(path: str | Path | None) -> KeyMap:
@@ -139,16 +164,19 @@ class StdinReader:
     Raw stdin reader that collects key sequences.
     """
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue[bytes]) -> None:
+    def __init__(
+        self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue[bytes]
+    ) -> None:
         self.loop = loop
         self.queue = queue
         self.fd = sys.stdin.fileno()
-        self._old_settings: list[int] | None = None
+        self._old_settings: TermiosAttrs | None = None
 
     def start(self) -> None:
-        self._old_settings = termios.tcgetattr(self.fd)
-        new_settings = termios.tcgetattr(self.fd)
-        new_settings[0] &= ~(termios.IXON | termios.IXOFF | termios.IXANY)
+        self._old_settings = cast(TermiosAttrs, termios.tcgetattr(self.fd))
+        new_settings = cast(TermiosAttrs, termios.tcgetattr(self.fd))
+        flags = _termios_flags(new_settings)
+        new_settings[0] = flags & ~(termios.IXON | termios.IXOFF | termios.IXANY)
         termios.tcsetattr(self.fd, termios.TCSANOW, new_settings)
         tty.setcbreak(self.fd)
         self.loop.add_reader(self.fd, self._on_input)
@@ -184,7 +212,9 @@ class KeyDecoder:
         events: list[tuple[bytes, InputKey | None]] = []
         self._buffer += chunk
         while self._buffer:
-            match = next((seq for seq in self._sequences if self._buffer.startswith(seq)), None)
+            match = next(
+                (seq for seq in self._sequences if self._buffer.startswith(seq)), None
+            )
             if match:
                 events.append((match, self.mapping.get(match)))
                 self._buffer = self._buffer[len(match) :]

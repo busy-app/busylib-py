@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from .types import DisplayName
 
@@ -48,6 +47,8 @@ def get_display_spec(display: DisplayName | int | str | None) -> DisplaySpec:
     Resolve display spec by enum, index, or string.
     Defaults to FRONT display when None/unknown.
     """
+    if isinstance(display, DisplaySpec):
+        return display
     if isinstance(display, DisplayName):
         return _DISPLAY_BY_NAME.get(display, FRONT_DISPLAY)
     if isinstance(display, int):
