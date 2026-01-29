@@ -60,13 +60,26 @@ class SyncClientBase:
         addr: str | None = None,
         *,
         token: str | None = None,
+        cloud: bool | None = None,
         timeout: float | httpx.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
         transport: httpx.BaseTransport | None = None,
         api_version: str | None = None,
     ) -> None:
-        if addr is None and token is None:
+        self.is_cloud = False
+        if cloud is True:
+            self.is_cloud = True
+            if addr is None:
+                self.base_url = settings.cloud_base_url
+            else:
+                self.base_url = addr if "://" in addr else f"http://{addr}"
+        elif cloud is False:
+            if addr is None:
+                self.base_url = settings.base_url
+            else:
+                self.base_url = addr if "://" in addr else f"http://{addr}"
+        elif addr is None and token is None:
             self.base_url = settings.base_url
         elif addr is None:
             self.is_cloud = True
@@ -208,13 +221,26 @@ class AsyncClientBase:
         addr: str | None = None,
         *,
         token: str | None = None,
+        cloud: bool | None = None,
         timeout: float | httpx.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
         transport: httpx.AsyncBaseTransport | None = None,
         api_version: str | None = None,
     ) -> None:
-        if addr is None and token is None:
+        self.is_cloud = False
+        if cloud is True:
+            self.is_cloud = True
+            if addr is None:
+                self.base_url = settings.cloud_base_url
+            else:
+                self.base_url = addr if "://" in addr else f"http://{addr}"
+        elif cloud is False:
+            if addr is None:
+                self.base_url = settings.base_url
+            else:
+                self.base_url = addr if "://" in addr else f"http://{addr}"
+        elif addr is None and token is None:
             self.base_url = settings.base_url
         elif addr is None:
             self.is_cloud = True

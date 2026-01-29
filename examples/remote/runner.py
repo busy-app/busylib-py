@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from busylib import display
 from busylib.client import AsyncBusyBar
 from busylib.keymap import KeyDecoder, KeyMap, StdinReader, load_keymap
+from busylib.settings import settings
 
 from .constants import (
     DEFAULT_FRAME_SLEEP,
@@ -64,7 +65,12 @@ def _build_client(addr: str, token_arg: str | None) -> AsyncBusyBar:
     host = parsed.hostname or ""
     token = token_arg
 
-    client = AsyncBusyBar(addr=host, token=token)
+    cloud = token is not None and _is_cloud_addr(base_addr)
+    if cloud and "://" not in addr:
+        client_addr = settings.cloud_base_url
+    else:
+        client_addr = base_addr if cloud else host
+    client = AsyncBusyBar(addr=client_addr, token=token, cloud=cloud)
     return client
 
 
@@ -80,6 +86,25 @@ def _format_streaming_info(addr: str, protocol: str) -> str:
     if parsed.port:
         host = f"{host}:{parsed.port}"
     return TEXT_STREAMING_INFO.format(protocol=protocol, host=host)
+
+
+def _is_cloud_addr(addr: str) -> bool:
+    """
+    Decide whether the address matches the configured cloud proxy.
+
+    The match compares hostnames and honors explicit ports.
+    """
+    base_addr = addr if "://" in addr else f"http://{addr}"
+    cloud_addr = settings.cloud_base_url
+    parsed = urlparse(base_addr)
+    cloud_parsed = urlparse(cloud_addr)
+    if parsed.hostname and cloud_parsed.hostname:
+        if parsed.hostname != cloud_parsed.hostname:
+            return False
+        if cloud_parsed.port is not None and parsed.port != cloud_parsed.port:
+            return False
+        return True
+    return base_addr.rstrip("/") == cloud_addr.rstrip("/")
 
 
 async def _forward_keys(
@@ -269,10 +294,14 @@ async def _run(
                 icons,
                 clear_screen=clear_screen,
             )
+            poll_interval = args.http_poll_interval
+            if client.is_cloud:
+                if poll_interval is None or poll_interval < 1.0:
+                    poll_interval = 1.0
             parsed_addr = urlparse(
                 args.addr if "://" in args.addr else f"http://{args.addr}"
             )
-            if args.http_poll_interval is not None and args.http_poll_interval > 0:
+            if poll_interval is not None and poll_interval > 0:
                 protocol = parsed_addr.scheme or "http"
             else:
                 protocol = "wss" if parsed_addr.scheme == "https" else "ws"
@@ -316,10 +345,10 @@ async def _run(
 
             tasks.append(asyncio.create_task(_periodic_loop()))
 
-            if args.http_poll_interval is not None and args.http_poll_interval > 0:
+            if poll_interval is not None and poll_interval > 0:
                 logger.info(
                     TEXT_HTTP_POLL.format(
-                        interval=args.http_poll_interval,
+                        interval=poll_interval,
                         addr=args.addr,
                     )
                 )
@@ -328,7 +357,7 @@ async def _run(
                         _poll_http(
                             client=client,
                             spec=spec,
-                            interval=args.http_poll_interval,
+                            interval=poll_interval,
                             stop_event=stop_event,
                             renderer=renderer,
                             clear_screen=clear_screen,

@@ -14,6 +14,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        # tags for setuptools-scm
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -21,8 +24,9 @@ jobs:
 
       - name: Build release distributions
         run: |
-          python -m pip install build
+          python -m pip install -U pip build twine
           python -m build
+          twine check dist/*
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -34,6 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - release-build
+    environment:
+      name: pypi
 
     steps:
       - name: Retrieve release distributions

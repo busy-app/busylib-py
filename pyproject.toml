@@ -1,11 +1,10 @@
 [build-system]
 build-backend = "setuptools.build_meta"
 
-requires = [ "setuptools>=61", "wheel" ]
+requires = [ "setuptools>=61", "setuptools-scm", "wheel" ]
 
 [project]
 name = "busylib"
-version = "0.3.0"
 description = "Python library for Busy Bar API"
 readme = "README.md"
 authors = [
@@ -21,6 +20,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+dynamic = [ "version" ]
 dependencies = [
   "httpx>=0.28.1",
   "pillow>=12",
@@ -30,25 +30,12 @@ dependencies = [
   "websockets>=12",
 ]
 
-optional-dependencies.dev = [
-  "isort",
-  "mypy",
-  "pre-commit",
-  "pyproject-fmt",
-  "pytest==8.4.1",
-  "pytest-asyncio==0.24",
-  "pytest-cov",
-  "ruff",
-  "tomli>=2.2",
-]
 urls.Documentation = "https://busylib.readthedocs.io"
 urls.Homepage = "https://github.com/busy-app/busylib-py"
 urls.Repository = "https://github.com/busy-app/busylib-py"
 
 [dependency-groups]
 dev = [
-  "isort>=5.13.2",
-  "mypy>=1.13",
   "pre-commit>=3.8",
   "pyproject-fmt>=2.5.1",
   "pytest>=8.4.1",
@@ -63,6 +50,9 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = [ "src" ]
+
+[tool.setuptools_scm]
+version_file = "src/busylib/_version.py"
 
 [tool.ruff]
 target-version = "py310"
@@ -88,15 +78,6 @@ format.skip-magic-trailing-comma = false
 format.docstring-code-line-length = "dynamic"
 format.docstring-code-format = false
 
-[tool.isort]
-profile = "black"
-line_length = 88
-
 [tool.pytest.ini_options]
 addopts = "-q"
 asyncio_mode = "auto"
-
-[tool.mypy]
-python_version = "3.13"
-ignore_missing_imports = true
-exclude = "^(src/examples/)"
