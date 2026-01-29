@@ -12,7 +12,7 @@ from busylib.client import AsyncBusyBar
 from busylib.keymap import KeyDecoder, KeyMap, StdinReader, load_keymap
 from busylib.settings import settings
 
-from .constants import (
+from examples.remote.constants import (
     DEFAULT_FRAME_SLEEP,
     DEFAULT_KEY_TIMEOUT,
     SWITCH_DISPLAY_SEQUENCES,

@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 
 import httpx
 
-from .constants import TEXT_ERR_CONNECT, TEXT_ERR_TIMEOUT, TEXT_STOPPED
+from examples.remote.constants import TEXT_ERR_CONNECT, TEXT_ERR_TIMEOUT, TEXT_STOPPED
 
 DEBUG_SCREEN_CLEAR = True
 

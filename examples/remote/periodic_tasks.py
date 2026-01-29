@@ -7,8 +7,8 @@ from collections.abc import Awaitable, Callable
 from busylib.client import AsyncBusyBar
 from busylib.features import collect_device_snapshot
 
-from .constants import TEXT_SNAPSHOT_FAIL, TEXT_USB_FAIL
-from .renderers import TerminalRenderer
+from examples.remote.constants import TEXT_SNAPSHOT_FAIL, TEXT_USB_FAIL
+from examples.remote.renderers import TerminalRenderer
 
 logger = logging.getLogger(__name__)
 

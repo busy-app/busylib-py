@@ -9,17 +9,17 @@ from pathlib import Path
 
 from busylib.client import AsyncBusyBar
 
-from .panels import LocalPanel, Panel, RemotePanel, draw_panel
-from .preview import (
+from examples.bc.panels import LocalPanel, Panel, RemotePanel, draw_panel
+from examples.bc.preview import (
     PreviewMode,
     preview_remote,
     preview_thread_alive,
     stop_preview_thread,
 )
-from .runner import AsyncRunner
-from .state import disable_flow_control, load_state, restore_term, save_state
-from .transfer import copy_file
-from .ui_helpers import confirm
+from examples.bc.runner import AsyncRunner
+from examples.bc.state import disable_flow_control, load_state, restore_term, save_state
+from examples.bc.transfer import copy_file
+from examples.bc.ui_helpers import confirm
 
 
 def delete_entry(

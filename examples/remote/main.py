@@ -4,8 +4,8 @@ import argparse
 import asyncio
 import sys
 
-from . import runner as remote_runner
-from .constants import (
+from examples.remote.runner import _run as runner
+from examples.remote.constants import (
     DEFAULT_ADDR,
     DEFAULT_LOG_LEVEL,
     DEFAULT_SPACER,
@@ -22,7 +22,7 @@ from .constants import (
     TEXT_ARG_SPACER,
     TEXT_ARG_TOKEN,
 )
-from .terminal_utils import (
+from examples.remote.terminal_utils import (
     _clear_screen,
     _clear_terminal,
     _format_error_message,
@@ -103,7 +103,7 @@ async def _run(args: argparse.Namespace) -> None:
     Delegates the heavy lifting to the runner module.
     """
     _setup_logging(level=args.log_level, log_file=args.log_file)
-    await remote_runner._run(
+    await runner(
         args,
         icons=ICONS,
         clear_screen=_clear_screen,

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from busylib.exceptions import BusyBarAPIError
 
-from .models import Entry, human_size
+from examples.bc.models import Entry, human_size
 
 if TYPE_CHECKING:
     from .runner import AsyncRunner

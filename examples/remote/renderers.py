@@ -9,7 +9,7 @@ from busylib import display
 from busylib.features import DeviceSnapshot
 from busylib.keymap import KeyMap
 
-from .constants import ICON_SETS
+from examples.remote.constants import ICON_SETS
 
 logger = logging.getLogger(__name__)
 

@@ -7,11 +7,11 @@ import sys
 
 from busylib.client import AsyncBusyBar
 
-from .client_factory import build_client
-from .logging_config import _configure_logging
-from .runner import AsyncRunner
-from .startup import ensure_app_directory
-from .ui import run_ui
+from examples.bc.client_factory import build_client
+from examples.bc.logging_config import _configure_logging
+from examples.bc.runner import AsyncRunner
+from examples.bc.startup import ensure_app_directory
+from examples.bc.ui import run_ui
 
 
 def parse_args() -> argparse.Namespace:

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Protocol
 from busylib import display, types
 from busylib.client import AsyncBusyBar
 
-from .models import Entry
+from examples.bc.models import Entry
 
 if TYPE_CHECKING:
     from .panels import Panel
