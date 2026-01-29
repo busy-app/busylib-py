@@ -6,11 +6,12 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   release-build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v5
@@ -36,10 +37,14 @@ jobs:
 
   pypi-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs:
       - release-build
     environment:
       name: pypi
+      url: https://pypi.org/project/busylib/
 
     steps:
       - name: Retrieve release distributions
