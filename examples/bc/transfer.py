@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from busylib.converter import convert_for_storage
 
-from .panels import LocalPanel, Panel, RemotePanel
-from .ui_helpers import (
+from examples.bc.panels import LocalPanel, Panel, RemotePanel
+from examples.bc.ui_helpers import (
     clear_progress_footer,
     clear_progress_modal,
     draw_progress_footer,
@@ -17,7 +17,7 @@ from .ui_helpers import (
 )
 
 if TYPE_CHECKING:
-    from .runner import AsyncRunner
+    from examples.bc.runner import AsyncRunner
 
 
 def _progress_fraction(done: int, total: int) -> float:

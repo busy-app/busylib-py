@@ -5,6 +5,7 @@ import pytest
 
 from busylib import exceptions
 from busylib.client import base
+from busylib.settings import settings
 
 
 class _SyncBaseClient(base.SyncClientBase):
@@ -125,6 +126,55 @@ def test_request_transport_error_sync() -> None:
         client._request("GET", "/api/fail")
 
 
+def test_cloud_mode_sets_bearer_header() -> None:
+    """
+    Ensure cloud mode triggers bearer authentication.
+
+    This keeps cloud traffic on the Authorization header.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("authorization") == "Bearer token"
+        return httpx.Response(200, json={"result": "OK"})
+
+    transport = httpx.MockTransport(responder)
+    client = base.SyncClientBase(
+        addr=None,
+        token="token",
+        transport=transport,
+        max_retries=0,
+        backoff=0.0,
+    )
+    assert client.is_cloud is True
+    client._request("GET", "/api/ping")
+    client.close()
+
+
+def test_local_available_uses_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Ensure local availability check hits the configured base URL.
+
+    This avoids mixing current client base_url with local probing.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "http://device.local/api/version"
+        assert request.headers.get("x-api-token") == "token"
+        return httpx.Response(200, json={"api_semver": "2.0.0"})
+
+    monkeypatch.setattr(settings, "base_url", "http://device.local")
+    transport = httpx.MockTransport(responder)
+    client = base.SyncClientBase(
+        addr="http://other.local",
+        token="token",
+        transport=transport,
+        max_retries=0,
+        backoff=0.0,
+    )
+    assert client.is_local_available() is True
+    client.close()
+
+
 @pytest.mark.asyncio
 async def test_request_text_fallback_async() -> None:
     """
@@ -152,4 +202,28 @@ async def test_request_expect_bytes_async() -> None:
     client = _AsyncBaseClient(httpx.MockTransport(responder))
     result = await client._request("GET", "/api/bin", expect_bytes=True)
     assert result == b"bin"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_local_available_async(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Ensure async local availability check hits the configured base URL.
+    """
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "http://device.local/api/version"
+        assert request.headers.get("x-api-token") == "token"
+        return httpx.Response(200, json={"api_semver": "2.0.0"})
+
+    monkeypatch.setattr(settings, "base_url", "http://device.local")
+    transport = httpx.MockTransport(responder)
+    client = base.AsyncClientBase(
+        addr="http://other.local",
+        token="token",
+        transport=transport,
+        max_retries=0,
+        backoff=0.0,
+    )
+    assert await client.is_local_available() is True
     await client.aclose()

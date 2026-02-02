@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterable, Iterable
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -17,6 +17,7 @@ JsonType = dict[str, Any] | list[Any] | str | int | float | bool | None
 
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0, read=10.0, write=10.0, pool=5.0)
 DEFAULT_BACKOFF = 0.25
+LOCAL_CHECK_TIMEOUT = httpx.Timeout(1.5, connect=0.5, read=1.0, write=1.0, pool=0.5)
 
 logger = logging.getLogger(__name__)
 
@@ -48,45 +49,44 @@ def _as_timeout(value: float | httpx.Timeout | None) -> httpx.Timeout:
     return httpx.Timeout(value)
 
 
+def _normalize_addr(addr: str) -> str:
+    """
+    Normalize an address to include a URL scheme.
+
+    Falls back to http when the scheme is missing.
+    """
+    return addr if "://" in addr else f"http://{addr}"
+
+
 class SyncClientBase:
     """
     Sync foundation: connection setup, retries, and low-level HTTP requests.
     """
 
-    is_cloud = False
+    connection_type: Literal["local", "cloud", "network"] = "network"
 
     def __init__(
         self,
         addr: str | None = None,
         *,
         token: str | None = None,
-        cloud: bool | None = None,
         timeout: float | httpx.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
         transport: httpx.BaseTransport | None = None,
         api_version: str | None = None,
     ) -> None:
-        self.is_cloud = False
-        if cloud is True:
-            self.is_cloud = True
-            if addr is None:
-                self.base_url = settings.cloud_base_url
-            else:
-                self.base_url = addr if "://" in addr else f"http://{addr}"
-        elif cloud is False:
-            if addr is None:
-                self.base_url = settings.base_url
-            else:
-                self.base_url = addr if "://" in addr else f"http://{addr}"
-        elif addr is None and token is None:
+        if addr is None and token is None:
             self.base_url = settings.base_url
+            self.connection_type = "local"
         elif addr is None:
-            self.is_cloud = True
             self.base_url = settings.cloud_base_url
+            self.connection_type = "cloud"
         else:
-            self.base_url = addr if "://" in addr else f"http://{addr}"
+            self.base_url = _normalize_addr(addr)
+            self.connection_type = "network"
 
+        self._token = token
         self.max_retries = max(0, int(max_retries))
         self.backoff = backoff
         self.api_version = api_version or versioning.API_VERSION
@@ -106,6 +106,45 @@ class SyncClientBase:
             timeout=_as_timeout(timeout),
             transport=transport,
         )
+
+    @property
+    def is_cloud(self) -> bool:
+        """
+        Проверить, что соединение идёт через облако.
+
+        Возвращает True для cloud connection_type.
+        """
+        return self.connection_type == "cloud"
+
+    @property
+    def is_local(self) -> bool:
+        """
+        Проверить, что соединение идёт через локальный адрес.
+
+        Возвращает True для local connection_type.
+        """
+        return self.connection_type == "local"
+
+    def is_local_available(self) -> bool:
+        """
+        Проверить доступность локального API на base_url.
+
+        Возвращает True, если /api/version отвечает без ошибок сети.
+        """
+        base_url = _normalize_addr(settings.base_url).rstrip("/")
+        url = f"{base_url}/api/version"
+        headers = {versioning.API_VERSION_HEADER: self.api_version}
+        if self._token:
+            headers["X-API-Token"] = self._token
+        try:
+            response = self.client.get(
+                url,
+                headers=headers,
+                timeout=LOCAL_CHECK_TIMEOUT,
+            )
+        except httpx.RequestError:
+            return False
+        return response.status_code < 400
 
     def __enter__(self) -> "SyncClientBase":
         return self
@@ -214,40 +253,30 @@ class AsyncClientBase:
     Async foundation: connection setup, retries, and low-level HTTP requests.
     """
 
-    is_cloud = False
+    connection_type: Literal["local", "cloud", "network"] = "network"
 
     def __init__(
         self,
         addr: str | None = None,
         *,
         token: str | None = None,
-        cloud: bool | None = None,
         timeout: float | httpx.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
         transport: httpx.AsyncBaseTransport | None = None,
         api_version: str | None = None,
     ) -> None:
-        self.is_cloud = False
-        if cloud is True:
-            self.is_cloud = True
-            if addr is None:
-                self.base_url = settings.cloud_base_url
-            else:
-                self.base_url = addr if "://" in addr else f"http://{addr}"
-        elif cloud is False:
-            if addr is None:
-                self.base_url = settings.base_url
-            else:
-                self.base_url = addr if "://" in addr else f"http://{addr}"
-        elif addr is None and token is None:
+        if addr is None and token is None:
             self.base_url = settings.base_url
+            self.connection_type = "local"
         elif addr is None:
-            self.is_cloud = True
             self.base_url = settings.cloud_base_url
+            self.connection_type = "cloud"
         else:
-            self.base_url = addr if "://" in addr else f"http://{addr}"
+            self.base_url = _normalize_addr(addr)
+            self.connection_type = "network"
 
+        self._token = token
         self.max_retries = max(0, int(max_retries))
         self.backoff = backoff
         self.api_version = api_version or versioning.API_VERSION
@@ -267,6 +296,45 @@ class AsyncClientBase:
             timeout=_as_timeout(timeout),
             transport=transport,
         )
+
+    @property
+    def is_cloud(self) -> bool:
+        """
+        Проверить, что соединение идёт через облако.
+
+        Возвращает True для cloud connection_type.
+        """
+        return self.connection_type == "cloud"
+
+    @property
+    def is_local(self) -> bool:
+        """
+        Проверить, что соединение идёт через локальный адрес.
+
+        Возвращает True для local connection_type.
+        """
+        return self.connection_type == "local"
+
+    async def is_local_available(self) -> bool:
+        """
+        Проверить доступность локального API на base_url.
+
+        Возвращает True, если /api/version отвечает без ошибок сети.
+        """
+        base_url = _normalize_addr(settings.base_url).rstrip("/")
+        url = f"{base_url}/api/version"
+        headers = {versioning.API_VERSION_HEADER: self.api_version}
+        if self._token:
+            headers["X-API-Token"] = self._token
+        try:
+            response = await self.client.get(
+                url,
+                headers=headers,
+                timeout=LOCAL_CHECK_TIMEOUT,
+            )
+        except httpx.RequestError:
+            return False
+        return response.status_code < 400
 
     async def __aenter__(self) -> "AsyncClientBase":
         return self

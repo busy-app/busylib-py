@@ -12,6 +12,34 @@ from examples.remote.constants import TEXT_ERR_CONNECT, TEXT_ERR_TIMEOUT, TEXT_S
 DEBUG_SCREEN_CLEAR = True
 
 
+def _enter_fullscreen() -> None:
+    """
+    Enter alternate screen buffer and hide the terminal cursor.
+
+    This keeps the normal scrollback clean for full-screen rendering.
+    """
+    sys.stdout.write("\x1b[?1049h\x1b[?25l")
+    sys.stdout.flush()
+
+
+def _hide_cursor() -> None:
+    """
+    Hide the terminal cursor without switching screen buffers.
+    """
+    sys.stdout.write("\x1b[?25l")
+    sys.stdout.flush()
+
+
+def _exit_fullscreen() -> None:
+    """
+    Exit alternate screen buffer and show the terminal cursor.
+
+    This restores the user's terminal state after remote finishes.
+    """
+    sys.stdout.write("\x1b[?25h\x1b[?1049l")
+    sys.stdout.flush()
+
+
 def _clear_screen(reason: str, *, home: bool = False) -> None:
     """
     Clear the terminal screen and optionally reset cursor position.
@@ -109,6 +137,7 @@ def _print_status_message(message: str) -> None:
 
     This is used for startup and initialization updates.
     """
-    sys.stderr.write("\n\x1b[0m\x1b[?25h")
+    sys.stderr.write("\n\x1b[0m")
     sys.stderr.write(f"{message}\n")
     sys.stderr.flush()
+    _hide_cursor()

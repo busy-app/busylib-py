@@ -1,4 +1,6 @@
 .DS_Store
+.history
+.version.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -135,6 +135,191 @@ class DeviceTimeResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+HttpAccessMode = Literal["disabled", "enabled", "key"]
+
+
+class HttpAccessInfo(BaseModel):
+    mode: HttpAccessMode | None = None
+    key_valid: bool | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class TimestampInfo(BaseModel):
+    timestamp: str
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BusySnapshotNotStarted(BaseModel):
+    type: Literal["NOT_STARTED"]
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BusySnapshotInfinite(BaseModel):
+    type: Literal["INFINITE"]
+    card_id: str
+    is_paused: bool
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BusySnapshotSimple(BaseModel):
+    type: Literal["SIMPLE"]
+    card_id: str
+    time_left_ms: int
+    is_paused: bool
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BusySnapshotIntervalSettings(BaseModel):
+    type: Literal["INTERVAL"]
+    interval_work_ms: int
+    interval_rest_ms: int
+    interval_work_cycles_count: int
+    is_autostart_enabled: bool
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BusySnapshotInterval(BaseModel):
+    type: Literal["INTERVAL"]
+    card_id: str
+    current_interval: int
+    current_interval_time_total_ms: int
+    current_interval_time_left_ms: int
+    is_paused: bool
+    interval_settings: BusySnapshotIntervalSettings
+
+    model_config = ConfigDict(extra="ignore")
+
+
+BusySnapshotVariant = Annotated[
+    BusySnapshotNotStarted
+    | BusySnapshotInfinite
+    | BusySnapshotSimple
+    | BusySnapshotInterval,
+    Field(discriminator="type"),
+]
+
+
+class BusySnapshot(BaseModel):
+    snapshot: BusySnapshotVariant
+    snapshot_timestamp_ms: int
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccountInfo(BaseModel):
+    linked: bool | None = None
+    id: str | None = None
+    email: str | None = None
+    user_id: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccountState(BaseModel):
+    state: Literal["error", "disconnected", "connected"] | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccountProfile(BaseModel):
+    state: Literal["dev", "prod", "local", "custom"] | None = None
+    custom_url: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccountLink(BaseModel):
+    code: str | None = None
+    expires_at: int | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class UpdateInstallDownload(BaseModel):
+    speed_bytes_per_sec: int | None = None
+    received_bytes: int | None = None
+    total_bytes: int | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class UpdateInstallStatus(BaseModel):
+    is_allowed: bool | None = None
+    event: (
+        Literal[
+            "session_start",
+            "session_stop",
+            "action_begin",
+            "action_done",
+            "detail_change",
+            "action_progress",
+            "none",
+        ]
+        | None
+    ) = None
+    action: (
+        Literal[
+            "download",
+            "sha_verification",
+            "unpack",
+            "prepare",
+            "apply",
+            "none",
+        ]
+        | None
+    ) = None
+    status: (
+        Literal[
+            "ok",
+            "battery_low",
+            "busy",
+            "download_failure",
+            "download_abort",
+            "sha_mismatch",
+            "unpack_staging_dir_failure",
+            "unpack_archive_open_failure",
+            "unpack_archive_unpack_failure",
+            "install_manifest_not_found",
+            "install_manifest_invalid",
+            "install_session_config_failure",
+            "install_pointer_setup_failure",
+            "unknown_failure",
+        ]
+        | None
+    ) = None
+    detail: str | None = None
+    download: UpdateInstallDownload | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class UpdateCheckStatus(BaseModel):
+    available_version: str | None = None
+    event: Literal["start", "stop", "none"] | None = None
+    result: Literal["available", "not_available", "failure", "none"] | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class UpdateStatus(BaseModel):
+    install: UpdateInstallStatus | None = None
+    check: UpdateCheckStatus | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class UpdateChangelogResponse(BaseModel):
+    changelog: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class StorageFileElement(BaseModel):
     type: Literal["file"] = "file"
     name: str

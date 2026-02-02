@@ -57,6 +57,56 @@ async def test_get_device_name_and_time_async():
 
 
 @pytest.mark.asyncio
+async def test_get_account_info_async():
+    """
+    Parse linked account info from the async client.
+    """
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/account/info"
+        return httpx.Response(200, json={"linked": False, "email": "name@example.com"})
+
+    client = make_client(responder)
+    result = await client.get_account_info()
+    assert result.linked is False
+    assert result.email == "name@example.com"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_account_status_async():
+    """
+    Parse MQTT account state from the async client.
+    """
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/account/status"
+        return httpx.Response(200, json={"state": "connected"})
+
+    client = make_client(responder)
+    result = await client.get_account_status()
+    assert result.state == "connected"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_link_account_async():
+    """
+    Parse account link response from the async client.
+    """
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/account/link"
+        return httpx.Response(200, json={"code": "EFGH", "expires_at": 1700000001})
+
+    client = make_client(responder)
+    result = await client.link_account()
+    assert result.code == "EFGH"
+    assert result.expires_at == 1700000001
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_async_retry_on_transport_error():
     """
     Retry transport failures for async requests.

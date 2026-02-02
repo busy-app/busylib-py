@@ -6,8 +6,10 @@ import shutil
 import time
 
 from busylib import display
+from examples.remote.settings import settings
 from busylib.features import DeviceSnapshot
-from busylib.keymap import KeyMap
+from pydantic_extra_types.color import Color
+from examples.remote.keymap import KeyMap
 
 from examples.remote.constants import ICON_SETS
 
@@ -40,6 +42,8 @@ class TerminalRenderer:
         spacer: str,
         pixel_char: str,
         icons: dict[str, str],
+        frame_mode: str = "horizontal",
+        frame_color: str = "#00FF00",
         *,
         clear_screen,
     ) -> None:
@@ -57,16 +61,27 @@ class TerminalRenderer:
         self._fits = True
         self._size_info: tuple[int, int, int, int] = (0, 0, 0, 0)
         self._cleared = False
+        self._frame_mode = frame_mode
+        self._frame_color = self._parse_frame_color(frame_color)
+        frame_char = settings.frame_char
+        self._frame_char = frame_char[0] if frame_char else "-"
         front_req = self._required_size(display.FRONT_DISPLAY)
         back_req = self._required_size(display.BACK_DISPLAY)
         self._alt_required = {"front": front_req, "back": back_req}
         self._terminal_size = (80, 24)
+        self._command_line: str | None = None
         self._update_size(force=True)
         self._help_active = False
         self._help_keymap: KeyMap | None = None
         self._info: DeviceSnapshot | None = None
         self._usb_connected = False
         self._streaming_info: str | None = None
+        self._link_connected: bool | None = None
+        self._link_key: str | None = None
+        self._link_email: str | None = None
+        self._update_available: bool | None = None
+        self._last_frame: bytes | None = None
+        self._command_line_cursor: int | None = None
 
     def _get_terminal_size(self) -> tuple[int, int]:
         """
@@ -101,12 +116,15 @@ class TerminalRenderer:
         now = time.monotonic()
         if force or now >= self._next_size_check:
             cols, rows = self._get_terminal_size()
-            req_cols, req_rows = self._required_size(self.spec)
+            extra_rows = 1 if self._command_line is not None else 0
+            req_cols, req_rows = self._required_size(self.spec, extra_rows=extra_rows)
             self._size_info = (cols, rows, req_cols, req_rows)
             self._fits = cols >= req_cols and rows >= req_rows
             self._next_size_check = now + 1.0
 
-    def _required_size(self, spec: display.DisplaySpec) -> tuple[int, int]:
+    def _required_size(
+        self, spec: display.DisplaySpec, *, extra_rows: int = 0
+    ) -> tuple[int, int]:
         """
         Compute the terminal size required to render a display.
 
@@ -114,13 +132,16 @@ class TerminalRenderer:
         """
         cell_width = len(self.pixel_char) + len(self.spacer)
         required_cols = spec.width * cell_width - len(self.spacer)
-        required_rows = spec.height
+        frame_cols, frame_rows = self._frame_padding()
+        required_cols += frame_cols
+        required_rows = spec.height + extra_rows + frame_rows
         return required_cols, required_rows
 
     def render(self, bgr_bytes: bytes) -> None:
         """
         Render a single RGB frame to the terminal with size guarding.
         """
+        self._last_frame = bgr_bytes
         self._update_size()
         if self._help_active:
             self._render_help_frame()
@@ -150,10 +171,22 @@ class TerminalRenderer:
                 row_parts.append(cell)
             lines.append(spacer_str.join(row_parts))
 
+        frame_lines: list[str] = ["\x1b[H"]
+
         header = self._format_info_line()
-        body = "\n".join(lines)
-        frame = header + "\n" + body if header else body
-        print("\x1b[H" + frame, end="", flush=True)
+        if header:
+            frame_lines.append(header)
+
+        frame_lines.extend(self._apply_frame(lines))
+
+        if self._command_line is not None:
+            frame_lines.append(
+                self._format_command_line(
+                    self._command_line, cursor=self._command_line_cursor
+                )
+            )
+
+        print("\n".join(frame_lines), end="", flush=True)
 
     def _render_size_warning(
         self, cols: int, rows: int, required_cols: int, required_rows: int
@@ -183,6 +216,10 @@ class TerminalRenderer:
         snapshot: DeviceSnapshot | None = None,
         usb_connected: bool | None = None,
         streaming_info: str | None = None,
+        link_connected: bool | None = None,
+        link_key: str | None = None,
+        link_email: str | None = None,
+        update_available: bool | None = None,
     ) -> None:
         """
         Update the cached snapshot and USB status for the info bar.
@@ -195,6 +232,132 @@ class TerminalRenderer:
             self._usb_connected = usb_connected
         if streaming_info is not None:
             self._streaming_info = streaming_info
+        if link_connected is not None:
+            self._link_connected = link_connected
+        if link_key is not None:
+            self._link_key = link_key
+        if link_email is not None:
+            self._link_email = link_email
+        if update_available is not None:
+            self._update_available = update_available
+
+    def update_command_line(
+        self, text: str | None, *, cursor: int | None = None
+    ) -> None:
+        """
+        Update the command line prompt displayed under the stream.
+
+        Passing None hides the command line and restores default sizing.
+        """
+        self._command_line = text
+        self._command_line_cursor = cursor
+        if text is None and self._last_frame and not self._help_active:
+            self._cleared = False
+            self._clear_screen("command_line_hide", home=True)
+            self.render(self._last_frame)
+
+    def _format_command_line(self, text: str, *, cursor: int | None) -> str:
+        """
+        Format the command line prompt to fit within terminal width.
+
+        The line is truncated to keep it on a single row.
+        """
+        cols, _rows = self._get_terminal_size()
+        prompt = ":" + text
+        if cols <= 0:
+            return prompt
+        if cursor is None:
+            return prompt[:cols].ljust(cols)
+
+        cursor = max(0, min(cursor, len(text)))
+        cursor_pos = 1 + cursor
+
+        if len(prompt) <= cols:
+            visible = prompt
+            start = 0
+        else:
+            start = max(0, min(cursor_pos - cols // 2, len(prompt) - cols))
+            visible = prompt[start : start + cols]
+
+        padded = visible.ljust(cols)
+        cursor_in_slice = cursor_pos - start
+        if cursor_in_slice < 0:
+            cursor_in_slice = 0
+        if cursor_in_slice >= cols:
+            cursor_in_slice = cols - 1
+        return self._apply_cursor(padded, cursor_in_slice)
+
+    @staticmethod
+    def _apply_cursor(text: str, cursor_pos: int) -> str:
+        """
+        Render the cursor position using reverse-video highlighting.
+        """
+        if cursor_pos < 0:
+            cursor_pos = 0
+        if cursor_pos >= len(text):
+            cursor_pos = len(text) - 1 if text else 0
+        return (
+            text[:cursor_pos]
+            + "\x1b[7m"
+            + text[cursor_pos]
+            + "\x1b[0m"
+            + text[cursor_pos + 1 :]
+        )
+
+    def _frame_padding(self) -> tuple[int, int]:
+        """
+        Return extra columns/rows required for the frame.
+        """
+        mode = self._frame_mode
+        if mode == "full":
+            return 2, 2
+        if mode == "horizontal":
+            return 0, 2
+        return 0, 0
+
+    def _apply_frame(self, lines: list[str]) -> list[str]:
+        """
+        Apply the configured frame around rendered lines.
+        """
+        mode = self._frame_mode
+        if mode == "none":
+            return lines
+        if not lines:
+            return lines
+        content_width = self._visible_len(lines[0])
+        horiz = self._frame_string(self._frame_char * content_width)
+        if mode == "horizontal":
+            return [horiz, *lines, horiz]
+
+        side = self._frame_string(self._frame_char)
+        top = self._frame_string(self._frame_char * (content_width + 2))
+        bottom = self._frame_string(self._frame_char * (content_width + 2))
+        framed = [top]
+        for line in lines:
+            framed.append(f"{side}{line}{side}")
+        framed.append(bottom)
+        return framed
+
+    def _frame_string(self, text: str) -> str:
+        """
+        Apply frame color to a string.
+        """
+        if not self._frame_color:
+            return text
+        r, g, b = self._frame_color
+        return f"\x1b[38;2;{r};{g};{b}m{text}\x1b[0m"
+
+    @staticmethod
+    def _parse_frame_color(color: str) -> tuple[int, int, int] | None:
+        """
+        Parse a color string into RGB.
+        """
+        try:
+            col = Color(color)
+        except ValueError:
+            return None
+        r, g, b = col.as_rgb_tuple()
+        return r, g, b
 
     def _build_columns(self, segments: list[str], width: int) -> list[list[str]]:
         """
@@ -232,24 +395,44 @@ class TerminalRenderer:
         Returns an empty string when no snapshot data is available.
         """
         snap = self._info
-        if not snap:
-            return ""
 
         cols, _rows = self._get_terminal_size()
 
         left_segments: list[str] = []
-        if snap.name:
+        if snap and snap.name:
             streaming = (
                 f"{snap.name} ({self._streaming_info})"
                 if self._streaming_info
                 else snap.name
             )
+            if self._usb_connected:
+                streaming = f"{streaming} {self.icons['usb_connected']}"
             left_segments.append(f"{self.icons['device']} {streaming}")
         elif self._streaming_info:
-            left_segments.append(f"{self.icons['device']} {self._streaming_info}")
-        if snap.system and snap.system.version:
-            left_segments.append(f"{self.icons['system']} {snap.system.version}")
-        if snap.storage:
+            streaming = self._streaming_info
+            if self._usb_connected:
+                streaming = f"{streaming} {self.icons['usb_connected']}"
+            left_segments.append(f"{self.icons['device']} {streaming}")
+
+        if self._link_connected is not None:
+            if self._link_connected:
+                link = self.icons["link_connected"]
+                if self._link_email:
+                    link = f"{link} {self._link_email}"
+                left_segments.append(link)
+            else:
+                link = self.icons["link_disconnected"]
+                if self._link_key:
+                    link = f"{link} {self._link_key}"
+                left_segments.append(link)
+
+        if snap and snap.system and snap.system.version:
+            version = snap.system.version
+            if self._update_available:
+                version = f"{version} {self.icons['update_available']}"
+            left_segments.append(f"{self.icons['system']} {version}")
+
+        if snap and snap.storage:
             used = snap.storage.used
             total = snap.storage.total
             if total is not None:
@@ -258,35 +441,35 @@ class TerminalRenderer:
                 )
 
         center_segments: list[str] = []
-        if snap.time:
+        if snap and snap.time:
             tzinfo = snap.time.tzinfo.tzname(snap.time) if snap.time.tzinfo else "UTC"
             center_segments.append(
                 f"{self.icons['time']} {snap.time.strftime('%H:%M:%S')} {tzinfo}"
             )
-        if snap.brightness:
+        if snap and snap.brightness:
             front = snap.brightness.front or "-"
             back = snap.brightness.back or "-"
             center_segments.append(f"{self.icons['brightness']} {front} | {back}")
-        if snap.volume and snap.volume.volume is not None:
+        if snap and snap.volume and snap.volume.volume is not None:
             center_segments.append(f"{self.icons['volume']} {int(snap.volume.volume)}%")
 
         right_segments: list[str] = []
-        if snap.wifi:
+        if snap and snap.wifi:
             ssid = snap.wifi.ssid or ""
-            right_segments.append(f"{self.icons['wifi']} {ssid}")
-        if snap.power and snap.power.battery_charge is not None:
+            ip_addr = (
+                snap.wifi.ip_config.address
+                if snap.wifi.ip_config and snap.wifi.ip_config.address
+                else None
+            )
+            if ip_addr:
+                ssid = f"{ssid} {ip_addr}"
+            right_segments.append(f"{self._wifi_icon(snap.wifi.rssi)} {ssid}")
+        if snap and snap.power and snap.power.battery_charge is not None:
             charge = snap.power.battery_charge
             bar = (
                 self.icons["battery_full"] if charge > 20 else self.icons["battery_low"]
             )
             right_segments.append(f"{bar} {charge}%")
-
-        usb_icon = (
-            self.icons["usb_connected"]
-            if self._usb_connected
-            else self.icons["usb_disconnected"]
-        )
-        right_segments.append(f"USB:{usb_icon}")
 
         if not (left_segments or center_segments or right_segments):
             return ""
@@ -294,6 +477,20 @@ class TerminalRenderer:
         return self._render_infobar(
             left_segments, center_segments, right_segments, cols
         )
+
+    def _wifi_icon(self, rssi: int | None) -> str:
+        """
+        Pick the Wi-Fi icon based on RSSI level.
+
+        Falls back to the default Wi-Fi icon when RSSI is unknown.
+        """
+        if rssi is None:
+            return self.icons["wifi"]
+        if rssi >= -60:
+            return self.icons["wifi_high"]
+        if rssi >= -75:
+            return self.icons["wifi_mid"]
+        return self.icons["wifi_low"]
 
     def _render_infobar(
         self, left: list[str], center: list[str], right: list[str], width: int

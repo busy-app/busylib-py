@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 
+from .access import AccessMixin, AsyncAccessMixin
+from .account import AccountMixin, AsyncAccountMixin
+from .busy import AsyncBusyMixin, BusyMixin
 from .assets import AssetsMixin, AsyncAssetsMixin
 from .audio import AsyncAudioMixin, AudioMixin
 from .base import AsyncClientBase, SyncClientBase
@@ -10,6 +13,8 @@ from .display import AsyncDisplayMixin, DisplayMixin
 from .firmware import AsyncFirmwareMixin, FirmwareMixin
 from .input import AsyncInputMixin, InputMixin
 from .storage import AsyncStorageMixin, StorageMixin
+from .time import AsyncTimeMixin, TimeMixin
+from .updater import AsyncUpdaterMixin, UpdaterMixin
 from .usb import AsyncUsbController, UsbController
 from .wifi import AsyncWifiMixin, WifiMixin
 
@@ -17,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 class BusyBar(
+    AccessMixin,
+    AccountMixin,
+    BusyMixin,
+    TimeMixin,
+    UpdaterMixin,
     FirmwareMixin,
     StorageMixin,
     AssetsMixin,
@@ -68,6 +78,11 @@ class BusyBar(
 
 
 class AsyncBusyBar(
+    AsyncAccessMixin,
+    AsyncAccountMixin,
+    AsyncBusyMixin,
+    AsyncTimeMixin,
+    AsyncUpdaterMixin,
     AsyncFirmwareMixin,
     AsyncStorageMixin,
     AsyncAssetsMixin,

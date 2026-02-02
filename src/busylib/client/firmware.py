@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class FirmwareMixin(SyncClientBase):
     """
-    Version, firmware update, and system status methods.
+    Version and system status methods.
     """
 
     def get_version(self) -> types.VersionInfo:
@@ -25,24 +24,6 @@ class FirmwareMixin(SyncClientBase):
                 device_version=version_info.api_semver,
             )
         return version_info
-
-    def update_firmware(
-        self,
-        firmware_data: bytes,
-        name: str | None = None,
-    ) -> types.SuccessResponse:
-        logger.info("update_firmware name=%s size=%s", name, len(firmware_data))
-        params: dict[str, Any] = {}
-        if name:
-            params["name"] = name
-
-        data = self._request(
-            "POST",
-            "/api/update",
-            params=params or None,
-            data=firmware_data,
-        )
-        return types.SuccessResponse.model_validate(data)
 
     def get_status(self) -> types.Status:
         logger.info("get_status")
@@ -78,7 +59,7 @@ class FirmwareMixin(SyncClientBase):
 
 class AsyncFirmwareMixin(AsyncClientBase):
     """
-    Async variant of version, firmware update, and system status methods.
+    Async variant of version and system status methods.
     """
 
     async def get_version(self) -> types.VersionInfo:
@@ -92,24 +73,6 @@ class AsyncFirmwareMixin(AsyncClientBase):
                 device_version=version_info.api_semver,
             )
         return version_info
-
-    async def update_firmware(
-        self,
-        firmware_data: bytes,
-        name: str | None = None,
-    ) -> types.SuccessResponse:
-        logger.info("async update_firmware name=%s size=%s", name, len(firmware_data))
-        params: dict[str, Any] = {}
-        if name:
-            params["name"] = name
-
-        data = await self._request(
-            "POST",
-            "/api/update",
-            params=params or None,
-            data=firmware_data,
-        )
-        return types.SuccessResponse.model_validate(data)
 
     async def get_status(self) -> types.Status:
         logger.info("async get_status")

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from busylib.exceptions import BusyBarAPIError
 
-from .app_paths import app_assets_dir
-from .runner import AsyncRunner
+from examples.bc.app_paths import app_assets_dir
+from examples.bc.runner import AsyncRunner
 
 
 def ensure_app_directory(runner: AsyncRunner, app: str) -> str:

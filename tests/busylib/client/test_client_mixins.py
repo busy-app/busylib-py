@@ -101,6 +101,70 @@ def test_ble_and_wifi_status_sync() -> None:
     assert seen == ["/api/ble/status", "/api/wifi/status", "/api/wifi/networks"]
 
 
+def test_access_mode_sync() -> None:
+    """
+    Ensure HTTP access endpoints use query params and parse info.
+    """
+    seen: list[dict[str, object]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append({"path": request.url.path, "params": dict(request.url.params)})
+        if request.url.path == "/api/access":
+            if request.method == "GET":
+                return httpx.Response(200, json={"mode": "key", "key_valid": True})
+            return httpx.Response(200, json={"result": "OK"})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_sync_client(responder)
+    info = client.get_http_access()
+    assert info.mode == "key"
+    assert info.key_valid is True
+    resp = client.set_http_access("enabled", "1234")
+    assert resp.result == "OK"
+    assert seen == [
+        {"path": "/api/access", "params": {}},
+        {"path": "/api/access", "params": {"mode": "enabled", "key": "1234"}},
+    ]
+
+
+def test_busy_snapshot_sync() -> None:
+    """
+    Ensure busy snapshot endpoints send and parse payloads.
+    """
+    seen: list[dict[str, object]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append({"path": request.url.path, "body": request.content})
+        if request.url.path == "/api/busy/snapshot":
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={
+                        "snapshot": {
+                            "type": "SIMPLE",
+                            "card_id": "card",
+                            "time_left_ms": 9000,
+                            "is_paused": False,
+                        },
+                        "snapshot_timestamp_ms": 123,
+                    },
+                )
+            return httpx.Response(200, json={"result": "OK"})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_sync_client(responder)
+    snapshot = client.get_busy_snapshot()
+    assert snapshot.snapshot.type == "SIMPLE"
+    assert snapshot.snapshot.card_id == "card"
+    assert snapshot.snapshot.time_left_ms == 9000
+    assert snapshot.snapshot.is_paused is False
+    resp = client.set_busy_snapshot(snapshot)
+    assert resp.result == "OK"
+    assert len(seen) == 2
+    assert seen[0]["path"] == "/api/busy/snapshot"
+    assert seen[1]["path"] == "/api/busy/snapshot"
+
+
 @pytest.mark.asyncio
 async def test_ble_and_wifi_status_async() -> None:
     """
@@ -129,9 +193,77 @@ async def test_ble_and_wifi_status_async() -> None:
     await client.aclose()
 
 
-def test_firmware_update_sync_params() -> None:
+@pytest.mark.asyncio
+async def test_access_mode_async() -> None:
     """
-    Ensure firmware update uses optional name param and raw body.
+    Ensure async HTTP access endpoints use query params and parse info.
+    """
+    seen: list[dict[str, object]] = []
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        seen.append({"path": request.url.path, "params": dict(request.url.params)})
+        if request.url.path == "/api/access":
+            if request.method == "GET":
+                return httpx.Response(200, json={"mode": "key", "key_valid": True})
+            return httpx.Response(200, json={"result": "OK"})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_async_client(responder)
+    info = await client.get_http_access()
+    assert info.mode == "key"
+    assert info.key_valid is True
+    resp = await client.set_http_access("enabled", "1234")
+    assert resp.result == "OK"
+    assert seen == [
+        {"path": "/api/access", "params": {}},
+        {"path": "/api/access", "params": {"mode": "enabled", "key": "1234"}},
+    ]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_busy_snapshot_async() -> None:
+    """
+    Ensure async busy snapshot endpoints send and parse payloads.
+    """
+    seen: list[dict[str, object]] = []
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        seen.append({"path": request.url.path, "body": request.content})
+        if request.url.path == "/api/busy/snapshot":
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={
+                        "snapshot": {
+                            "type": "SIMPLE",
+                            "card_id": "card",
+                            "time_left_ms": 9000,
+                            "is_paused": False,
+                        },
+                        "snapshot_timestamp_ms": 123,
+                    },
+                )
+            return httpx.Response(200, json={"result": "OK"})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_async_client(responder)
+    snapshot = await client.get_busy_snapshot()
+    assert snapshot.snapshot.type == "SIMPLE"
+    assert snapshot.snapshot.card_id == "card"
+    assert snapshot.snapshot.time_left_ms == 9000
+    assert snapshot.snapshot.is_paused is False
+    resp = await client.set_busy_snapshot(snapshot)
+    assert resp.result == "OK"
+    assert len(seen) == 2
+    assert seen[0]["path"] == "/api/busy/snapshot"
+    assert seen[1]["path"] == "/api/busy/snapshot"
+    await client.aclose()
+
+
+def test_updater_update_firmware_sync() -> None:
+    """
+    Ensure firmware update sends raw body without params.
     """
     seen: dict[str, object] = {}
 
@@ -141,16 +273,40 @@ def test_firmware_update_sync_params() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    resp = client.update_firmware(b"fw", name="demo.bin")
+    resp = client.update_firmware(b"fw")
     assert resp.result == "OK"
-    assert seen["params"] == {"name": "demo.bin"}
+    assert seen["params"] == {}
     assert seen["body"] == b"fw"
 
 
-@pytest.mark.asyncio
-async def test_firmware_update_async_no_name() -> None:
+def test_time_endpoints_sync() -> None:
     """
-    Ensure async firmware update omits params when name is absent.
+    Ensure time endpoints use query params.
+    """
+    seen: list[dict[str, object]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append({"path": request.url.path, "params": dict(request.url.params)})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_sync_client(responder)
+    resp = client.set_time_timestamp("2025-10-02T14:30:45+04:00")
+    assert resp.result == "OK"
+    resp = client.set_time_timezone("Europe/Moscow")
+    assert resp.result == "OK"
+    assert seen == [
+        {
+            "path": "/api/time/timestamp",
+            "params": {"timestamp": "2025-10-02T14:30:45+04:00"},
+        },
+        {"path": "/api/time/timezone", "params": {"timezone": "Europe/Moscow"}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_updater_update_firmware_async() -> None:
+    """
+    Ensure async firmware update omits params.
     """
 
     async def responder(request: httpx.Request) -> httpx.Response:
@@ -161,6 +317,104 @@ async def test_firmware_update_async_no_name() -> None:
     client = _make_async_client(responder)
     resp = await client.update_firmware(b"fw")
     assert resp.result == "OK"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_time_endpoints_async() -> None:
+    """
+    Ensure async time endpoints use query params.
+    """
+    seen: list[dict[str, object]] = []
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        seen.append({"path": request.url.path, "params": dict(request.url.params)})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_async_client(responder)
+    resp = await client.set_time_timestamp("2025-10-02T14:30:45+04:00")
+    assert resp.result == "OK"
+    resp = await client.set_time_timezone("Europe/Moscow")
+    assert resp.result == "OK"
+    assert seen == [
+        {
+            "path": "/api/time/timestamp",
+            "params": {"timestamp": "2025-10-02T14:30:45+04:00"},
+        },
+        {"path": "/api/time/timezone", "params": {"timezone": "Europe/Moscow"}},
+    ]
+    await client.aclose()
+
+
+def test_updater_check_status_and_changelog_sync() -> None:
+    """
+    Ensure updater endpoints call correct paths and params.
+    """
+    seen: list[str] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path == "/api/update/status":
+            return httpx.Response(200, json={"install": {"status": "ok"}})
+        if request.url.path == "/api/update/changelog":
+            assert dict(request.url.params) == {"version": "1.2.3"}
+            return httpx.Response(200, json={"changelog": "Fixes"})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_sync_client(responder)
+    resp = client.check_firmware_update()
+    assert resp.result == "OK"
+    status = client.get_update_status()
+    assert status.install is not None
+    changelog = client.get_update_changelog("1.2.3")
+    assert changelog.changelog == "Fixes"
+    resp = client.install_firmware_update("1.2.3")
+    assert resp.result == "OK"
+    resp = client.abort_firmware_download()
+    assert resp.result == "OK"
+    assert seen == [
+        "/api/update/check",
+        "/api/update/status",
+        "/api/update/changelog",
+        "/api/update/install",
+        "/api/update/abort_download",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_updater_check_status_and_changelog_async() -> None:
+    """
+    Ensure async updater endpoints call correct paths and params.
+    """
+    seen: list[str] = []
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path == "/api/update/status":
+            return httpx.Response(200, json={"check": {"result": "available"}})
+        if request.url.path == "/api/update/changelog":
+            assert dict(request.url.params) == {"version": "2.0.0"}
+            return httpx.Response(200, json={"changelog": "New"})
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_async_client(responder)
+    resp = await client.check_firmware_update()
+    assert resp.result == "OK"
+    status = await client.get_update_status()
+    assert status.check is not None
+    changelog = await client.get_update_changelog("2.0.0")
+    assert changelog.changelog == "New"
+    resp = await client.install_firmware_update("2.0.0")
+    assert resp.result == "OK"
+    resp = await client.abort_firmware_download()
+    assert resp.result == "OK"
+    assert seen == [
+        "/api/update/check",
+        "/api/update/status",
+        "/api/update/changelog",
+        "/api/update/install",
+        "/api/update/abort_download",
+    ]
     await client.aclose()
 
 

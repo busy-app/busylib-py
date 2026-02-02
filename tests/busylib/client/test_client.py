@@ -37,7 +37,7 @@ def test_init_token_sets_cloud_base_and_header():
     Also validates the Authorization header value.
     """
     client = BusyBar(token="secret")
-    assert client.base_url == "https://proxy.dev.busy.app"
+    assert client.base_url == "https://proxy.busy.app"
     assert client.client.headers["authorization"] == "Bearer secret"
 
 
@@ -85,6 +85,55 @@ def test_get_device_name_and_time():
     assert name.name == "BusyBar"
     time_info = client.get_device_time()
     assert time_info.timestamp == "2024-01-01T10:00:00"
+
+
+def test_get_account_info():
+    """
+    Parse linked account info from the client.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/account/info"
+        return httpx.Response(200, json={"linked": True, "email": "name@example.com"})
+
+    client = make_client(responder)
+    result = client.get_account_info()
+    assert result.linked is True
+    assert result.email == "name@example.com"
+
+
+def test_set_account_profile() -> None:
+    """
+    Ensure account profile updates are sent as query params.
+    """
+    seen = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    resp = client.set_account_profile("custom", custom_url="mqtts://mqtt.example.com")
+    assert resp.result == "OK"
+    assert seen["params"] == {
+        "profile": "custom",
+        "custom_url": "mqtts://mqtt.example.com",
+    }
+
+
+def test_link_account():
+    """
+    Parse account link response from the client.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/account/link"
+        return httpx.Response(200, json={"code": "ABCD", "expires_at": 1700000000})
+
+    client = make_client(responder)
+    result = client.link_account()
+    assert result.code == "ABCD"
+    assert result.expires_at == 1700000000
 
 
 def test_error_response_raises_api_error():

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     )
     cloud_base_url: str = Field(
         validation_alias="CLOUD_URL",
-        default="https://proxy.dev.busy.app",
+        default="https://proxy.busy.app",
     )
 
 

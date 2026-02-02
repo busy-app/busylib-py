@@ -7,14 +7,19 @@ import time
 from collections.abc import Awaitable, Callable
 from urllib.parse import urlparse
 
-from busylib import display
+from busylib import display, exceptions
 from busylib.client import AsyncBusyBar
-from busylib.keymap import KeyDecoder, KeyMap, StdinReader, load_keymap
-from busylib.settings import settings
-
+from examples.remote.keymap import KeyDecoder, KeyMap, StdinReader, load_keymap
+from examples.remote.command_plugins import (
+    AudioCommand,
+    ClearCommand,
+    ClockCommand,
+    QuitCommand,
+    TextCommand,
+    build_call_handler,
+)
+from examples.remote.commands import CommandInput, CommandRegistry, register_command
 from examples.remote.constants import (
-    DEFAULT_FRAME_SLEEP,
-    DEFAULT_KEY_TIMEOUT,
     SWITCH_DISPLAY_SEQUENCES,
     TEXT_HTTP_POLL,
     TEXT_INIT_CONNECTING,
@@ -32,8 +37,9 @@ from examples.remote.constants import (
     TEXT_WS_STREAM,
     TEXT_WS_STREAM_VERBOSE,
 )
-from .periodic_tasks import build_periodic_tasks, dashboard
+from .periodic_tasks import build_periodic_tasks, cloud_link, dashboard, update_check
 from .renderers import TerminalRenderer
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,8 @@ PERIODIC_TASKS: dict[
     tuple[Callable[[AsyncBusyBar, TerminalRenderer], Awaitable[None]], float],
 ] = {
     "info_update": (dashboard, 1),
+    "link_check": (cloud_link, 10),
+    "update_check": (update_check, 3600),
     # "usb_check": (usb, 5),
 }
 
@@ -60,17 +68,7 @@ def _build_client(addr: str, token_arg: str | None) -> AsyncBusyBar:
 
     This keeps address normalization and header logic in one place.
     """
-    base_addr = addr if addr.startswith(("http://", "https://")) else f"http://{addr}"
-    parsed = urlparse(base_addr)
-    host = parsed.hostname or ""
-    token = token_arg
-
-    cloud = token is not None and _is_cloud_addr(base_addr)
-    if cloud and "://" not in addr:
-        client_addr = settings.cloud_base_url
-    else:
-        client_addr = base_addr if cloud else host
-    client = AsyncBusyBar(addr=client_addr, token=token, cloud=cloud)
+    client = AsyncBusyBar(addr=addr, token=token_arg)
     return client
 
 
@@ -88,31 +86,16 @@ def _format_streaming_info(addr: str, protocol: str) -> str:
     return TEXT_STREAMING_INFO.format(protocol=protocol, host=host)
 
 
-def _is_cloud_addr(addr: str) -> bool:
-    """
-    Decide whether the address matches the configured cloud proxy.
-
-    The match compares hostnames and honors explicit ports.
-    """
-    base_addr = addr if "://" in addr else f"http://{addr}"
-    cloud_addr = settings.cloud_base_url
-    parsed = urlparse(base_addr)
-    cloud_parsed = urlparse(cloud_addr)
-    if parsed.hostname and cloud_parsed.hostname:
-        if parsed.hostname != cloud_parsed.hostname:
-            return False
-        if cloud_parsed.port is not None and parsed.port != cloud_parsed.port:
-            return False
-        return True
-    return base_addr.rstrip("/") == cloud_addr.rstrip("/")
-
-
 async def _forward_keys(
     client: AsyncBusyBar,
     keymap: KeyMap,
     stop_event: asyncio.Event,
+    status_message: Callable[[str], None] | None = None,
+    command_queue: asyncio.Queue[Callable[[], Awaitable[None]]] | None = None,
     renderer: TerminalRenderer | None = None,
     on_switch: Callable[[], None] | None = None,
+    command_registry: CommandRegistry | None = None,
+    command_input: CommandInput | None = None,
 ) -> None:
     """
     Forward terminal key presses to the Busy Bar input API.
@@ -123,33 +106,158 @@ async def _forward_keys(
     queue: asyncio.Queue[bytes] = asyncio.Queue()
     reader = StdinReader(loop, queue)
     decoder = KeyDecoder(keymap)
+    command_active = False
+    command_buffer = ""
+    command_input = command_input or CommandInput()
     reader.start()
     try:
         while not stop_event.is_set():
             try:
-                chunk = await asyncio.wait_for(queue.get(), timeout=DEFAULT_KEY_TIMEOUT)
+                chunk = await asyncio.wait_for(
+                    queue.get(), timeout=settings.key_timeout
+                )
             except asyncio.TimeoutError:
                 continue
-            if on_switch and _should_switch_display(chunk):
+            if not command_active and on_switch and _should_switch_display(chunk):
                 on_switch()
                 stop_event.set()
                 return
-            if renderer and any(b in (0x68, 0x48) for b in chunk):  # h/H for help
+            if (
+                not command_active
+                and renderer
+                and any(b in (0x68, 0x48) for b in chunk)
+            ):  # h/H for help
                 renderer.render_help(keymap)
                 continue
-            for raw_seq, key_event in decoder.feed(chunk):
-                # help already handled above; decoder-only path not needed
-                if raw_seq in keymap.exit_sequences:
-                    stop_event.set()
-                    return
-                if key_event is None:
-                    continue
-                try:
-                    await client.send_input_key(key_event)
-                except Exception as exc:  # noqa: BLE001 pragma: no cover - network dependent
-                    logger.debug("Failed to send key %s: %s", key_event.value, exc)
+
+            async def handle_key_bytes(data: bytes) -> bool:
+                """
+                Decode and forward key bytes to the device input API.
+
+                Returns True when a stop request was triggered.
+                """
+                for raw_seq, key_event in decoder.feed(data):
+                    if raw_seq in keymap.exit_sequences:
+                        stop_event.set()
+                        return True
+                    if key_event is None:
+                        continue
+                    try:
+                        await client.send_input_key(key_event)
+                    except Exception as exc:  # noqa: BLE001 pragma: no cover - network dependent
+                        logger.debug("Failed to send key %s: %s", key_event.value, exc)
+                return False
+
+            async def handle_command_bytes(data: bytes) -> None:
+                """
+                Consume command mode input and dispatch on Enter.
+
+                Supports history navigation and ESC to cancel the prompt.
+                """
+                nonlocal command_active, command_buffer
+                for event, payload in command_input.feed(data):
+                    if event == "cancel":
+                        command_active = False
+                        command_buffer = ""
+                        if renderer:
+                            renderer.update_command_line(None)
+                        continue
+                    if event == "submit":
+                        line = (payload or "").strip()
+                        command_active = False
+                        command_buffer = ""
+                        command_input.begin()
+                        if renderer:
+                            renderer.update_command_line(None)
+                        if line and command_queue and command_registry:
+                            await command_queue.put(
+                                lambda line=line: _handle_command_line(
+                                    line,
+                                    command_registry=command_registry,
+                                    status_message=status_message,
+                                )
+                            )
+                        continue
+                    if event == "update":
+                        if isinstance(payload, tuple):
+                            command_buffer, command_cursor = payload
+                        else:
+                            command_buffer = payload or ""
+                            command_cursor = len(command_buffer)
+                        if renderer:
+                            renderer.update_command_line(
+                                command_buffer, cursor=command_cursor
+                            )
+
+            if command_active:
+                await handle_command_bytes(chunk)
+                continue
+
+            if b":" in chunk:
+                before, _sep, after = chunk.partition(b":")
+                if before:
+                    should_stop = await handle_key_bytes(before)
+                    if should_stop:
+                        return
+                command_active = True
+                command_buffer = ""
+                command_input.begin()
+                if renderer:
+                    renderer.update_command_line("", cursor=0)
+                if after:
+                    await handle_command_bytes(after)
+                continue
+
+            should_stop = await handle_key_bytes(chunk)
+            if should_stop:
+                return
     finally:
         reader.stop()
+
+
+async def _handle_command_line(
+    line: str,
+    *,
+    command_registry: CommandRegistry,
+    status_message: Callable[[str], None] | None = None,
+) -> None:
+    """
+    Execute a command line with error handling.
+    """
+    try:
+        await command_registry.handle(line)
+    except exceptions.BusyBarAPIError as exc:
+        if exc.code == 423:
+            message = f"{exc.error} (code: {exc.code})"
+            logger.info("Command blocked: %s", message)
+            if status_message:
+                status_message(message)
+            return
+        logger.warning("Command failed: %s", exc)
+        if status_message:
+            status_message(str(exc))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Command failed")
+        if status_message:
+            status_message(str(exc))
+
+
+async def _run_command_queue(
+    queue: asyncio.Queue[Callable[[], Awaitable[None]]],
+    *,
+    stop_event: asyncio.Event,
+) -> None:
+    """
+    Process queued command lines without blocking the frame loop.
+    """
+    while True:
+        if stop_event.is_set() and queue.empty():
+            return
+        try:
+            task = await asyncio.wait_for(queue.get(), timeout=0.05)
+        except asyncio.TimeoutError:
+            continue
+        await task()
 
 
 async def _stream_ws(
@@ -264,6 +372,7 @@ async def _run(
     """
     current_display = display.FRONT_DISPLAY
     keymap = load_keymap(args.keymap_file) if not args.no_send_input else None
+    command_input = CommandInput()
 
     had_error = False
     try:
@@ -285,28 +394,47 @@ async def _run(
             spec = display.get_display_spec(current_display)
             stop_event = asyncio.Event()
             status_message(TEXT_INIT_START)
-            status_message(TEXT_INIT_CONNECTING.format(addr=args.addr))
             client = _build_client(args.addr, args.token)
+            status_message(TEXT_INIT_CONNECTING.format(addr=client.base_url))
+            command_registry = CommandRegistry()
+            register_command(command_registry, TextCommand(client))
+            register_command(command_registry, QuitCommand(stop_event))
+            register_command(command_registry, ClearCommand(client))
+            register_command(command_registry, ClockCommand(client))
+            register_command(command_registry, AudioCommand(client, status_message))
+            register_command(
+                command_registry,
+                "call",
+                build_call_handler(client, status_message),
+            )
+            register_command(
+                command_registry,
+                "api",
+                build_call_handler(client, status_message),
+            )
+            command_queue: asyncio.Queue[Callable[[], Awaitable[None]]] = (
+                asyncio.Queue()
+            )
             renderer = TerminalRenderer(
                 spec,
                 args.spacer,
-                args.pixel_char,
+                settings.pixel_char,
                 icons,
+                frame_mode=args.frame,
+                frame_color=args.frame_color,
                 clear_screen=clear_screen,
             )
             poll_interval = args.http_poll_interval
             if client.is_cloud:
                 if poll_interval is None or poll_interval < 1.0:
                     poll_interval = 1.0
-            parsed_addr = urlparse(
-                args.addr if "://" in args.addr else f"http://{args.addr}"
-            )
+            parsed_addr = urlparse(client.base_url)
             if poll_interval is not None and poll_interval > 0:
                 protocol = parsed_addr.scheme or "http"
             else:
                 protocol = "wss" if parsed_addr.scheme == "https" else "ws"
             renderer.update_info(
-                streaming_info=_format_streaming_info(args.addr, protocol)
+                streaming_info=_format_streaming_info(client.base_url, protocol)
             )
             info_stop = asyncio.Event()
 
@@ -318,11 +446,23 @@ async def _run(
                             client=client,
                             keymap=keymap,
                             stop_event=stop_event,
+                            status_message=status_message,
+                            command_queue=command_queue,
                             renderer=renderer,
                             on_switch=_switch_display,
+                            command_registry=command_registry,
+                            command_input=command_input,
                         )
                     )
                 )
+            tasks.append(
+                asyncio.create_task(
+                    _run_command_queue(
+                        command_queue,
+                        stop_event=stop_event,
+                    )
+                )
+            )
 
             async def _periodic_loop() -> None:
                 """
@@ -338,10 +478,10 @@ async def _run(
 
                     for name, (interval, task) in task_map.items():
                         if now - last_run[name] >= interval:
-                            await task()
+                            await command_queue.put(lambda task=task: task())
                             last_run[name] = now
 
-                    await asyncio.sleep(DEFAULT_FRAME_SLEEP)
+                    await asyncio.sleep(settings.frame_sleep)
 
             tasks.append(asyncio.create_task(_periodic_loop()))
 
@@ -349,7 +489,7 @@ async def _run(
                 logger.info(
                     TEXT_HTTP_POLL.format(
                         interval=poll_interval,
-                        addr=args.addr,
+                        addr=client.base_url,
                     )
                 )
                 tasks.append(
@@ -366,7 +506,7 @@ async def _run(
                     )
                 )
             else:
-                logger.info(TEXT_WS_STREAM.format(addr=args.addr))
+                logger.info(TEXT_WS_STREAM.format(addr=client.base_url))
                 tasks.append(
                     asyncio.create_task(
                         _stream_ws(

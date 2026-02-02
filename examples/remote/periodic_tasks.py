@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import inspect
 import logging
 from collections.abc import Awaitable, Callable
 
 from busylib.client import AsyncBusyBar
 from busylib.features import collect_device_snapshot
 
-from examples.remote.constants import TEXT_SNAPSHOT_FAIL, TEXT_USB_FAIL
+from examples.remote.constants import (
+    TEXT_LINK_FAIL,
+    TEXT_SNAPSHOT_FAIL,
+    TEXT_UPDATE_FAIL,
+    TEXT_USB_FAIL,
+)
 from examples.remote.renderers import TerminalRenderer
 
 logger = logging.getLogger(__name__)
@@ -29,14 +33,46 @@ async def usb(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
     Refresh USB status and update the renderer.
     """
     try:
-        result = client.usb.discover()
-        if inspect.isawaitable(result):
-            is_connected = await result
-        else:
-            is_connected = result
-        renderer.update_info(usb_connected=is_connected)
+        renderer.update_info(usb_connected=await client.is_local_available())
     except Exception as exc:
         logger.warning(TEXT_USB_FAIL, exc)
+
+
+async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
+    """
+    Refresh cloud link status and update the renderer.
+    """
+    try:
+        info = await client.get_account_info()
+        if info.linked:
+            renderer.update_info(
+                link_connected=True,
+                link_key=None,
+                link_email=info.email,
+            )
+            return
+        link_info = await client.link_account()
+        renderer.update_info(
+            link_connected=False,
+            link_key=link_info.code,
+        )
+    except Exception as exc:
+        logger.warning(TEXT_LINK_FAIL, exc)
+
+
+async def update_check(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
+    """
+    Request a firmware update check and update the renderer.
+    """
+    try:
+        await client.check_firmware_update()
+        status = await client.get_update_status()
+        available = False
+        if status.check and status.check.available_version:
+            available = True
+        renderer.update_info(update_available=available)
+    except Exception as exc:
+        logger.warning(TEXT_UPDATE_FAIL, exc)
 
 
 def build_periodic_tasks(
