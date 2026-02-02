@@ -1,0 +1,11 @@
+include LICENSE
+include README.md
+include pyproject.toml
+
+prune tests
+prune examples
+prune .github
+prune *.egg-info
+prune **/*.egg-info
+
+global-exclude *.pyc __pycache__ .DS_Store

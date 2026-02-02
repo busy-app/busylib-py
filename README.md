@@ -1,5 +1,9 @@
 # busylib
 
+[![PyPI](https://img.shields.io/pypi/v/busylib.svg)](https://pypi.org/project/busylib/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/busylib.svg)](https://pypi.org/project/busylib/)
+[![License](https://img.shields.io/pypi/l/busylib.svg)](https://github.com/busy-app/busylib-py/blob/main/LICENSE)
+
 A simple and intuitive Python client for interacting with the Busy Bar API. This library allows you to programmatically control the device's display, audio, and assets.
 
 ## Features
@@ -16,6 +20,12 @@ You can install `busylib` directly from PyPI:
 
 ```bash
 pip install busylib
+```
+
+Upgrade to the latest release:
+
+```bash
+pip install --upgrade busylib
 ```
 
 ## Usage
@@ -41,6 +51,24 @@ with BusyBar("10.0.4.20") as bb:
     print(f"Device version: {version_info.version}")
 ```
 
+For concurrent workflows, use the async client to avoid blocking I/O.
+
+```python
+import asyncio
+
+from busylib import AsyncBusyBar
+
+
+async def main() -> None:
+    async with AsyncBusyBar("10.0.4.20") as bb:
+        version_info = await bb.get_version()
+        print(f"Device version: {version_info.version}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ## API Examples
 
 Here are some examples of how to use the library to control your Busy Bar device.
@@ -55,7 +83,7 @@ with open("path/to/your/image.png", "rb") as f:
     response = bb.upload_asset(
         app_id="my-app",
         filename="logo.png",
-        data=file_bytes
+        data=file_bytes,
     )
     print(f"Upload result: {response.result}")
 
@@ -65,7 +93,7 @@ with open("path/to/your/sound.wav", "rb") as f:
     response = bb.upload_asset(
         app_id="my-app",
         filename="notification.wav",
-        data=file_bytes
+        data=file_bytes,
     )
 ```
 
@@ -184,13 +212,19 @@ response = bb.create_storage_directory(path="/my-app/subdirectory")
 response = bb.remove_storage_file(path="/my-app/data.txt")
 ```
 
+## Links
+
+- Documentation: https://busylib.readthedocs.io
+- Source: https://github.com/busy-app/busylib-py
+- PyPI: https://pypi.org/project/busylib/
+
 ## Development
 
 To set up a development environment, clone the repository and install the package in editable mode with test dependencies:
 
 ```bash
-git clone https://github.com/busy-app/busylib
-cd busylib
+git clone https://github.com/busy-app/busylib-py
+cd busylib-py
 python3 -m venv .venv
 source .venv/bin/activate
 make install-dev
