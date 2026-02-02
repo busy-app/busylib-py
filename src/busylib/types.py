@@ -72,7 +72,7 @@ class InputKey(StrEnum):
     BACK = "back"
     START = "start"
     BUSY = "busy"
-    STATUS = "status"
+    CUSTOM = "custom"
     OFF = "off"
     APPS = "apps"
     SETTINGS = "settings"
