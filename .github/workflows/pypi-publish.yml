@@ -14,7 +14,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         # tags for setuptools-scm
         with:
           fetch-depth: 0
