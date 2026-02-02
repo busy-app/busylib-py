@@ -54,7 +54,7 @@ class InputKey(enum.Enum):
     BACK = "back"
     START = "start"
     BUSY = "busy"
-    STATUS = "status"
+    CUSTOM = "custom"
     OFF = "off"
     APPS = "apps"
     SETTINGS = "settings"
