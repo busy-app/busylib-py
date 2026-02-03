@@ -174,6 +174,18 @@ class CommandInput:
 
         Direction is "up" or "down".
         """
+        if direction == "left":
+            if self._cursor > 0:
+                self._cursor -= 1
+                events.append(("update", (self._buffer, self._cursor)))
+            return
+
+        if direction == "right":
+            if self._cursor < len(self._buffer):
+                self._cursor += 1
+                events.append(("update", (self._buffer, self._cursor)))
+            return
+
         if not self._history:
             return
         if direction == "up":
@@ -198,17 +210,6 @@ class CommandInput:
             self._cursor = len(self._buffer)
             events.append(("update", (self._buffer, self._cursor)))
             return
-
-        if direction == "left":
-            if self._cursor > 0:
-                self._cursor -= 1
-                events.append(("update", (self._buffer, self._cursor)))
-            return
-
-        if direction == "right":
-            if self._cursor < len(self._buffer):
-                self._cursor += 1
-                events.append(("update", (self._buffer, self._cursor)))
 
 
 def register(command: str, handler: CommandHandler) -> None:

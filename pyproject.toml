@@ -45,6 +45,11 @@ dev = [
   "ruff>=0.9",
   "tomli>=2.2",
 ]
+examples = [
+  "beautifulsoup4>=4.12",
+  "hltv>=0.2",
+  "lxml>=5",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }

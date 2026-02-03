@@ -106,7 +106,7 @@ _DEFAULT_KEYMAP_HUMAN: dict[str, InputKey] = {
     "esc": InputKey.BACK,
     "space": InputKey.START,
     "f1": InputKey.BUSY,
-    "f2": InputKey.STATUS,
+    "f2": InputKey.CUSTOM,
     "f3": InputKey.OFF,
     "f4": InputKey.APPS,
     "f5": InputKey.SETTINGS,

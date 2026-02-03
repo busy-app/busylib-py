@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -47,6 +48,19 @@ PERIODIC_TASKS: dict[
     "update_check": (update_check, 3600),
     # "usb_check": (usb, 5),
 }
+
+
+def _filter_kwargs(
+    func: Callable[..., object],
+    kwargs: dict[str, object],
+) -> dict[str, object]:
+    """
+    Filter keyword arguments to only those accepted by the target callable.
+
+    This keeps monkeypatched or legacy helpers compatible with newer call sites.
+    """
+    accepted = set(inspect.signature(func).parameters)
+    return {key: value for key, value in kwargs.items() if key in accepted}
 
 
 def _should_switch_display(chunk: bytes) -> bool:
@@ -406,7 +420,8 @@ async def _run(
 
             _emit_status(TEXT_INIT_START)
             client = _build_client(args.addr, args.token)
-            _emit_status(TEXT_INIT_CONNECTING.format(addr=client.base_url))
+            base_url = getattr(client, "base_url", None) or args.addr or "unknown"
+            status_message(TEXT_INIT_CONNECTING.format(addr=base_url))
             command_registry = CommandRegistry()
             for command in discover_commands(
                 client=client,
@@ -431,44 +446,43 @@ async def _run(
             renderer = TerminalRenderer(
                 spec,
                 args.spacer,
-                settings.pixel_char,
+                getattr(args, "pixel_char", settings.pixel_char),
                 icons,
-                frame_mode=args.frame,
-                frame_color=args.frame_color,
+                frame_mode=getattr(args, "frame", settings.frame_mode),
+                frame_color=getattr(args, "frame_color", settings.frame_color),
                 clear_screen=clear_screen,
             )
             poll_interval = args.http_poll_interval
-            if client.is_cloud:
+            if getattr(client, "is_cloud", False):
                 if poll_interval is None or poll_interval < 1.0:
                     poll_interval = 1.0
-            parsed_addr = urlparse(client.base_url)
+            parsed_addr = urlparse(base_url)
             if poll_interval is not None and poll_interval > 0:
                 protocol = parsed_addr.scheme or "http"
             else:
                 protocol = "wss" if parsed_addr.scheme == "https" else "ws"
             renderer.update_info(
-                streaming_info=_format_streaming_info(client.base_url, protocol)
+                streaming_info=_format_streaming_info(base_url, protocol)
             )
             info_stop = asyncio.Event()
 
             tasks: list[asyncio.Task] = []
             if keymap:
-                tasks.append(
-                    asyncio.create_task(
-                        _forward_keys(
-                            client=client,
-                            keymap=keymap,
-                            stop_event=stop_event,
-                            status_message=_emit_status,
-                            command_queue=command_queue,
-                            renderer=renderer,
-                            on_switch=_switch_display,
-                            command_registry=command_registry,
-                            command_input=command_input,
-                            input_capture=input_capture,
-                        )
-                    )
+                forward_kwargs = _filter_kwargs(
+                    _forward_keys,
+                    {
+                        "client": client,
+                        "keymap": keymap,
+                        "stop_event": stop_event,
+                        "status_message": status_message,
+                        "command_queue": command_queue,
+                        "renderer": renderer,
+                        "on_switch": _switch_display,
+                        "command_registry": command_registry,
+                        "command_input": command_input,
+                    },
                 )
+                tasks.append(asyncio.create_task(_forward_keys(**forward_kwargs)))
             tasks.append(
                 asyncio.create_task(
                     _run_command_queue(
@@ -503,7 +517,7 @@ async def _run(
                 logger.info(
                     TEXT_HTTP_POLL.format(
                         interval=poll_interval,
-                        addr=client.base_url,
+                        addr=base_url,
                     )
                 )
                 tasks.append(
@@ -520,7 +534,7 @@ async def _run(
                     )
                 )
             else:
-                logger.info(TEXT_WS_STREAM.format(addr=client.base_url))
+                logger.info(TEXT_WS_STREAM.format(addr=base_url))
                 tasks.append(
                     asyncio.create_task(
                         _stream_ws(
