@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,8 +17,8 @@ class RemoteSettings(BaseSettings):
     icon_mode: str = Field(default="nerd")
     spacer: str = Field(default=" ")
     pixel_char: str = Field(default=ICON_SETS["nerd"]["pixel"])
-    frame_mode: str = Field(default="horizontal")
-    frame_color: str = Field(default="#00FF00")
+    black_pixels_transparent: bool = Field(default=False)
+    frame_mode: Literal["full", "horizontal", "none"] = Field(default="horizontal")
     frame_char: str = Field(default="·")
     key_timeout: float = Field(default=0.1)
     frame_sleep: float = Field(default=0.1)

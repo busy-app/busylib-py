@@ -8,7 +8,6 @@ import time
 from busylib import display
 from examples.remote.settings import settings
 from busylib.features import DeviceSnapshot
-from pydantic_extra_types.color import Color
 from examples.remote.keymap import KeyMap
 
 from examples.remote.constants import ICON_SETS
@@ -43,7 +42,6 @@ class TerminalRenderer:
         pixel_char: str,
         icons: dict[str, str],
         frame_mode: str = "horizontal",
-        frame_color: str = "#00FF00",
         *,
         clear_screen,
     ) -> None:
@@ -62,7 +60,6 @@ class TerminalRenderer:
         self._size_info: tuple[int, int, int, int] = (0, 0, 0, 0)
         self._cleared = False
         self._frame_mode = frame_mode
-        self._frame_color = self._parse_frame_color(frame_color)
         frame_char = settings.frame_char
         self._frame_char = frame_char[0] if frame_char else "-"
         front_req = self._required_size(display.FRONT_DISPLAY)
@@ -165,7 +162,7 @@ class TerminalRenderer:
             for x in range(self.spec.width):
                 idx = (y * self.spec.width + x) * 3
                 b, g, r = bgr_bytes[idx : idx + 3]
-                if b == g == r == 0:
+                if b == g == r == 0 and settings.black_pixels_transparent:
                     cell = " "
                 else:
                     cell = f"\x1b[38;2;{r};{g};{b}m{self.pixel_char}\x1b[0m"
@@ -337,7 +334,7 @@ class TerminalRenderer:
         """
         mode = self._frame_mode
         if mode == "full":
-            return 2, 2
+            return 3, 2
         if mode == "horizontal":
             return 0, 2
         return 0, 0
@@ -357,11 +354,11 @@ class TerminalRenderer:
             return [horiz, *lines, horiz]
 
         side = self._frame_string(self._frame_char)
-        top = self._frame_string(self._frame_char * (content_width + 2))
-        bottom = self._frame_string(self._frame_char * (content_width + 2))
+        top = self._frame_string(self._frame_char * (content_width + 3))
+        bottom = self._frame_string(self._frame_char * (content_width + 3))
         framed = [top]
         for line in lines:
-            framed.append(f"{side}{line}{side}")
+            framed.append(f"{side}{line} {side}")
         framed.append(bottom)
         return framed
 
@@ -377,22 +374,7 @@ class TerminalRenderer:
         """
         Apply frame color to a string.
         """
-        if not self._frame_color:
-            return text
-        r, g, b = self._frame_color
-        return f"\x1b[38;2;{r};{g};{b}m{text}\x1b[0m"
-
-    @staticmethod
-    def _parse_frame_color(color: str) -> tuple[int, int, int] | None:
-        """
-        Parse a color string into RGB.
-        """
-        try:
-            col = Color(color)
-        except ValueError:
-            return None
-        r, g, b = col.as_rgb_tuple()
-        return r, g, b
+        return text
 
     def _build_columns(self, segments: list[str], width: int) -> list[list[str]]:
         """

@@ -11,7 +11,6 @@ from examples.remote.constants import (
     TEXT_ARG_ADDR,
     TEXT_ARG_DESC,
     TEXT_ARG_FRAME,
-    TEXT_ARG_FRAME_COLOR,
     TEXT_ARG_HTTP,
     TEXT_ARG_KEYMAP,
     TEXT_ARG_LOG_FILE,
@@ -93,11 +92,6 @@ def parse_args() -> argparse.Namespace:
         choices=["full", "horizontal", "none"],
         default=settings.frame_mode,
         help=TEXT_ARG_FRAME,
-    )
-    parser.add_argument(
-        "--frame-color",
-        default=settings.frame_color,
-        help=TEXT_ARG_FRAME_COLOR,
     )
     return parser.parse_args()
 

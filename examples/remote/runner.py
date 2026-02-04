@@ -449,7 +449,6 @@ async def _run(
                 getattr(args, "pixel_char", settings.pixel_char),
                 icons,
                 frame_mode=getattr(args, "frame", settings.frame_mode),
-                frame_color=getattr(args, "frame_color", settings.frame_color),
                 clear_screen=clear_screen,
             )
             poll_interval = args.http_poll_interval
