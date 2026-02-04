@@ -13,7 +13,7 @@ def test_select_icon_set_prefers_named_mode() -> None:
     This protects the fallback logic from overriding valid modes.
     """
     icons = remote_main._select_icon_set("text")
-    assert icons["pixel"] == "*"
+    assert icons["pixel"] == remote_main.ICON_SETS["text"]["pixel"]
     assert icons["wifi"] == "WIFI"
 
 

@@ -4,13 +4,13 @@ import logging
 import re
 import shutil
 import time
+import unicodedata
 
 from busylib import display
 from examples.remote.settings import settings
 from busylib.features import DeviceSnapshot
 from examples.remote.keymap import KeyMap
 
-from examples.remote.constants import ICON_SETS
 
 logger = logging.getLogger(__name__)
 
@@ -94,17 +94,6 @@ class TerminalRenderer:
         self._terminal_size = (cols, rows)
         return cols, rows
 
-    def _emoji_extra_width(self, *parts: str) -> int:
-        """
-        Estimate extra width for emoji icons in the info bar.
-
-        Emoji icons often occupy two terminal columns.
-        """
-        if self.icons != ICON_SETS["emoji"]:
-            return 0
-        icon_values = [value for key, value in self.icons.items() if key != "pixel"]
-        return sum(part.count(icon) for part in parts for icon in icon_values)
-
     def _update_size(self, *, force: bool = False) -> None:
         """
         Refresh cached terminal size information when needed.
@@ -157,13 +146,24 @@ class TerminalRenderer:
 
         lines: list[str] = []
         spacer_str = self.spacer or ""
+        if spacer_str and settings.black_pixel_mode == "space_bg":
+            spacer_str = "\x1b[48;2;0;0;0m \x1b[0m"
         for y in range(self.spec.height):
             row_parts: list[str] = []
             for x in range(self.spec.width):
                 idx = (y * self.spec.width + x) * 3
                 b, g, r = bgr_bytes[idx : idx + 3]
-                if b == g == r == 0 and settings.black_pixels_transparent:
+                original_black = b == g == r == 0
+                if settings.invert_colors:
+                    r, g, b = 255 - r, 255 - g, 255 - b
+                if original_black and settings.black_pixel_mode == "transparent":
                     cell = " "
+                elif original_black and settings.black_pixel_mode == "space_bg":
+                    cell = "\x1b[48;2;0;0;0m \x1b[0m"
+                elif settings.black_pixel_mode == "space_bg":
+                    cell = f"\x1b[48;2;0;0;0m\x1b[38;2;{r};{g};{b}m{self.pixel_char}\x1b[0m"
+                elif settings.background_mode == "match":
+                    cell = f"\x1b[48;2;{r};{g};{b}m{self.pixel_char}\x1b[0m"
                 else:
                     cell = f"\x1b[38;2;{r};{g};{b}m{self.pixel_char}\x1b[0m"
                 row_parts.append(cell)
@@ -334,7 +334,7 @@ class TerminalRenderer:
         """
         mode = self._frame_mode
         if mode == "full":
-            return 3, 2
+            return 4, 2
         if mode == "horizontal":
             return 0, 2
         return 0, 0
@@ -354,11 +354,11 @@ class TerminalRenderer:
             return [horiz, *lines, horiz]
 
         side = self._frame_string(self._frame_char)
-        top = self._frame_string(self._frame_char * (content_width + 3))
-        bottom = self._frame_string(self._frame_char * (content_width + 3))
+        top = self._frame_string(self._frame_char * (content_width + 4))
+        bottom = self._frame_string(self._frame_char * (content_width + 4))
         framed = [top]
         for line in lines:
-            framed.append(f"{side}{line} {side}")
+            framed.append(f"{side} {line} {side}")
         framed.append(bottom)
         return framed
 
@@ -517,9 +517,16 @@ class TerminalRenderer:
 
         Trims segments to fit the available width.
         """
-        left_part = " ".join(left)
-        center_part = " ".join(center)
-        right_part = " ".join(right)
+        left_segments = list(left)
+        center_segments = list(center)
+        right_segments = list(right)
+
+        def build_parts() -> tuple[str, str, str]:
+            return (
+                " ".join(left_segments),
+                " ".join(center_segments),
+                " ".join(right_segments),
+            )
 
         def length_with_gaps(lp: str, cp: str, rp: str) -> int:
             gaps = (
@@ -527,27 +534,48 @@ class TerminalRenderer:
                 + (1 if cp and rp else 0)
                 + (1 if lp and not cp and rp else 0)
             )
-            extra = self._emoji_extra_width(lp, cp, rp)
-            return len(lp) + len(cp) + len(rp) + gaps + extra
+            return (
+                self._visible_len(lp)
+                + self._visible_len(cp)
+                + self._visible_len(rp)
+                + gaps
+            )
 
-        # Trim until fits: center -> left (end) -> right (start)
+        def content_len(lp: str, cp: str, rp: str) -> int:
+            return self._visible_len(lp) + self._visible_len(cp) + self._visible_len(rp)
+
+        def segment_len(segment: str) -> int:
+            return self._visible_len(segment)
+
+        def drop_longest_segment() -> bool:
+            candidates: list[tuple[int, str, int]] = []
+            for name, segments in (
+                ("center", center_segments),
+                ("left", left_segments),
+                ("right", right_segments),
+            ):
+                for idx, segment in enumerate(segments):
+                    candidates.append((segment_len(segment), name, idx))
+            if not candidates:
+                return False
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            _length, bucket, index = candidates[0]
+            if bucket == "center":
+                center_segments.pop(index)
+            elif bucket == "left":
+                left_segments.pop(index)
+            else:
+                right_segments.pop(index)
+            return True
+
+        left_part, center_part, right_part = build_parts()
         while length_with_gaps(left_part, center_part, right_part) > width:
-            if center_part:
-                center_part = center_part[:-1]
-                continue
-            if left_part:
-                left_part = left_part[:-1]
-                continue
-            if right_part:
-                right_part = right_part[1:]
-                continue
-            break
+            if not drop_longest_segment():
+                break
+            left_part, center_part, right_part = build_parts()
 
         # After trimming, spread remaining space evenly to left/right around center
-        occupied = (
-            len(left_part) + len(center_part) + len(right_part)
-            # + sum(1 for x in left + center + right)
-        )
+        occupied = content_len(left_part, center_part, right_part)
         gaps_available = max(0, width - occupied)
         gap_left = gaps_available // 2
         gap_right = gaps_available - gap_left
@@ -717,7 +745,14 @@ class TerminalRenderer:
 
         This helps align colored text in the terminal.
         """
-        return len(TerminalRenderer._strip_ansi(text))
+        stripped = TerminalRenderer._strip_ansi(text)
+        width = 0
+        for char in stripped:
+            if unicodedata.east_asian_width(char) in ("W", "F"):
+                width += 2
+            else:
+                width += 1
+        return width
 
     @staticmethod
     def _strip_ansi(text: str) -> str:
