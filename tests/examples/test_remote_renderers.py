@@ -77,7 +77,8 @@ def test_renderer_shows_update_available() -> None:
     snapshot.system = types.StatusSystem(version="1.2.3")
     renderer.update_info(snapshot=snapshot, update_available=True)
     line = renderer._format_info_line()
-    assert "SYS 1.2.3 UPDATE" in line
+    update_icon = constants.ICON_SETS["text"]["update_available"]
+    assert f"SYS 1.2.3 {update_icon}" in line
 
 
 def test_renderer_shows_wifi_ip_and_signal() -> None:
@@ -117,6 +118,39 @@ def test_renderer_shows_link_without_snapshot() -> None:
     renderer.update_info(link_connected=True)
     line = renderer._format_info_line()
     assert "LINK" in line
+
+
+def test_infobar_trims_for_emoji_width() -> None:
+    """
+    Ensure emoji icons count as extra width in the status bar.
+    """
+    renderer = renderers.TerminalRenderer(
+        spec=display.FRONT_DISPLAY,
+        spacer=" ",
+        pixel_char="*",
+        icons=constants.ICON_SETS["emoji"],
+        clear_screen=lambda *_args, **_kwargs: None,
+    )
+    left = ["📟 📟 Device"]
+    line = renderer._render_infobar(left, [], [], width=len("📟 📟 Device"))
+    assert line != "📟 📟 Device"
+
+
+def test_infobar_drops_longest_segments() -> None:
+    """
+    Ensure trimming drops whole segments starting from the longest.
+    """
+    renderer = renderers.TerminalRenderer(
+        spec=display.FRONT_DISPLAY,
+        spacer=" ",
+        pixel_char="*",
+        icons=constants.ICON_SETS["text"],
+        clear_screen=lambda *_args, **_kwargs: None,
+    )
+    left = ["LONG_SEGMENT", "S"]
+    line = renderer._render_infobar(left, [], [], width=len("S"))
+    assert "LONG_SEGMENT" not in line
+    assert "S" in line
 
 
 def test_renderer_command_line_initializes() -> None:
@@ -188,12 +222,14 @@ def test_full_frame_adds_right_padding_space() -> None:
     )
     framed = renderer._apply_frame(["abcd"])
     frame_char = renderers.settings.frame_char[:1] or "-"
-    assert f"abcd {frame_char}" in renderers.TerminalRenderer._strip_ansi(framed[1])
+    plain = renderers.TerminalRenderer._strip_ansi(framed[1])
+    assert plain.startswith(f"{frame_char} ")
+    assert f"abcd {frame_char}" in plain
 
 
 def test_renderer_black_pixel_opacity_settings(capsys) -> None:
     """
-    Ensure black pixels render as opaque unless transparency is enabled.
+    Ensure black pixels render as transparent unless disabled.
     """
     spec = display.DisplaySpec(
         name=display.DisplayName.FRONT,
@@ -211,17 +247,114 @@ def test_renderer_black_pixel_opacity_settings(capsys) -> None:
     )
     frame = bytes([0, 0, 0])
 
-    old_setting = renderers.settings.black_pixels_transparent
+    old_setting = renderers.settings.black_pixel_mode
     try:
-        renderers.settings.black_pixels_transparent = False
-        renderer.render(frame)
-        output = capsys.readouterr().out
-        assert "\x1b[38;2;0;0;0m*\x1b[0m" in output
-
-        renderers.settings.black_pixels_transparent = True
+        renderers.settings.black_pixel_mode = "transparent"
         renderer.render(frame)
         output = capsys.readouterr().out
         assert " " in output
         assert "\x1b[38;2;0;0;0m*\x1b[0m" not in output
+
+        renderers.settings.black_pixel_mode = "space_bg"
+        renderer.render(frame)
+        output = capsys.readouterr().out
+        assert "\x1b[48;2;0;0;0m \x1b[0m" in output
     finally:
-        renderers.settings.black_pixels_transparent = old_setting
+        renderers.settings.black_pixel_mode = old_setting
+
+
+def test_invert_colors_renders_black_as_white(capsys) -> None:
+    """
+    Ensure inverted mode flips white pixels to black.
+    """
+    spec = display.DisplaySpec(
+        name=display.DisplayName.FRONT,
+        index=0,
+        width=1,
+        height=1,
+        description="test",
+    )
+    renderer = renderers.TerminalRenderer(
+        spec=spec,
+        spacer="",
+        pixel_char="*",
+        icons=constants.ICON_SETS["text"],
+        clear_screen=lambda *_args, **_kwargs: None,
+    )
+    frame = bytes([255, 255, 255])
+
+    old_mode = renderers.settings.black_pixel_mode
+    old_invert = renderers.settings.invert_colors
+    try:
+        renderers.settings.black_pixel_mode = "transparent"
+        renderers.settings.invert_colors = True
+        renderer.render(frame)
+        output = capsys.readouterr().out
+        assert "\x1b[38;2;0;0;0m*\x1b[0m" in output
+    finally:
+        renderers.settings.black_pixel_mode = old_mode
+        renderers.settings.invert_colors = old_invert
+
+
+def test_background_mode_matches_pixel_color(capsys) -> None:
+    """
+    Ensure background mode uses ANSI background color for pixels.
+    """
+    spec = display.DisplaySpec(
+        name=display.DisplayName.FRONT,
+        index=0,
+        width=1,
+        height=1,
+        description="test",
+    )
+    renderer = renderers.TerminalRenderer(
+        spec=spec,
+        spacer="",
+        pixel_char="*",
+        icons=constants.ICON_SETS["text"],
+        clear_screen=lambda *_args, **_kwargs: None,
+    )
+    frame = bytes([10, 20, 30])
+
+    old_background = renderers.settings.background_mode
+    old_mode = renderers.settings.black_pixel_mode
+    try:
+        renderers.settings.black_pixel_mode = "transparent"
+        renderers.settings.background_mode = "match"
+        renderer.render(frame)
+        output = capsys.readouterr().out
+        assert "\x1b[48;2;30;20;10m*\x1b[0m" in output
+    finally:
+        renderers.settings.background_mode = old_background
+        renderers.settings.black_pixel_mode = old_mode
+
+
+def test_space_bg_applies_black_spacer(capsys) -> None:
+    """
+    Ensure space_bg mode uses a black background spacer between pixels.
+    """
+    spec = display.DisplaySpec(
+        name=display.DisplayName.FRONT,
+        index=0,
+        width=2,
+        height=1,
+        description="test",
+    )
+    renderer = renderers.TerminalRenderer(
+        spec=spec,
+        spacer=" ",
+        pixel_char="*",
+        icons=constants.ICON_SETS["text"],
+        clear_screen=lambda *_args, **_kwargs: None,
+    )
+    frame = bytes([10, 20, 30, 40, 50, 60])
+
+    old_mode = renderers.settings.black_pixel_mode
+    try:
+        renderers.settings.black_pixel_mode = "space_bg"
+        renderer.render(frame)
+        output = capsys.readouterr().out
+        assert "\x1b[48;2;0;0;0m \x1b[0m" in output
+        assert "\x1b[48;2;0;0;0m\x1b[38;2;30;20;10m*\x1b[0m" in output
+    finally:
+        renderers.settings.black_pixel_mode = old_mode

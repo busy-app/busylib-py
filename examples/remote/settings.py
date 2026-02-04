@@ -3,8 +3,6 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from examples.remote.constants import ICON_SETS
-
 
 class RemoteSettings(BaseSettings):
     """
@@ -16,8 +14,13 @@ class RemoteSettings(BaseSettings):
     app_id: str = Field(default="remote")
     icon_mode: str = Field(default="nerd")
     spacer: str = Field(default=" ")
-    pixel_char: str = Field(default=ICON_SETS["nerd"]["pixel"])
-    black_pixels_transparent: bool = Field(default=False)
+    pixel_char: str | None = Field(default=None)
+    black_pixel_mode: Literal["transparent", "space_bg"] = Field(
+        default="transparent",
+    )
+    invert_colors: bool = Field(default=False)
+    audio_cache_dir: str | None = Field(default=None)
+    background_mode: Literal["none", "match"] = Field(default="none")
     frame_mode: Literal["full", "horizontal", "none"] = Field(default="horizontal")
     frame_char: str = Field(default="·")
     key_timeout: float = Field(default=0.1)
