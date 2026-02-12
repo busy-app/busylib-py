@@ -363,6 +363,66 @@ class CommandRegistry:
             return
         raise TypeError("Command entry must be a CommandBase")
 
+    def get_entry(self, name: str) -> CommandEntry | None:
+        """
+        Return a registered command entry by name.
+
+        Lookup is case-insensitive and ignores surrounding whitespace.
+        """
+        normalized = name.strip().lower()
+        if not normalized:
+            return None
+        return self._handlers.get(normalized)
+
+    def list_command_objects(self) -> list[CommandBase]:
+        """
+        Return unique command objects stored in the registry.
+
+        Aliases registered as plain handlers are not duplicated here.
+        """
+        seen: set[int] = set()
+        commands: list[CommandBase] = []
+        for entry in self._handlers.values():
+            if not isinstance(entry, CommandBase):
+                continue
+            marker = id(entry)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            commands.append(entry)
+        return commands
+
+    def find_command_object(self, name: str) -> CommandBase | None:
+        """
+        Resolve a command object by canonical name or alias.
+
+        Returns None when no command object is registered for the name.
+        """
+        normalized = name.strip().lower()
+        if not normalized:
+            return None
+        direct = self._handlers.get(normalized)
+        if isinstance(direct, CommandBase):
+            return direct
+        for command in self.list_command_objects():
+            if normalized in {alias.lower() for alias in command.aliases}:
+                return command
+        return None
+
+    def list_commands(self) -> list[str]:
+        """
+        Return sorted canonical command names.
+
+        Aliases are excluded so help output stays compact.
+        """
+        aliases = {
+            alias.lower()
+            for command in self.list_command_objects()
+            for alias in command.aliases
+        }
+        names = {name for name in self._handlers if name not in aliases}
+        return sorted(names)
+
     async def handle(self, line: str) -> CommandResult:
         """
         Parse a command line and dispatch to the registered handler.

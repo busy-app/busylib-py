@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import inspect
 import logging
+import shlex
 import time
 from collections.abc import Awaitable, Callable
 from urllib.parse import urlparse
@@ -11,10 +12,15 @@ from urllib.parse import urlparse
 from busylib import display, exceptions
 from busylib.client import AsyncBusyBar
 from examples.remote.keymap import KeyDecoder, KeyMap, StdinReader, load_keymap
-from examples.remote.command_core import CommandInput, CommandRegistry, register_command
+from examples.remote.command_core import (
+    CommandInput,
+    CommandRegistry,
+    register_command,
+)
 from examples.remote.commands import InputCapture, discover_commands
 from examples.remote.commands.call import build_call_handler
 from examples.remote.constants import (
+    ICON_SETS,
     SWITCH_DISPLAY_SEQUENCES,
     TEXT_HTTP_POLL,
     TEXT_INIT_CONNECTING,
@@ -78,6 +84,26 @@ def _build_client(addr: str, token_arg: str | None) -> AsyncBusyBar:
     """
     client = AsyncBusyBar(addr=addr, token=token_arg)
     return client
+
+
+def _resolve_pixel_char(args: argparse.Namespace, icons: dict[str, str]) -> str:
+    """
+    Resolve the pixel character for frame rendering.
+
+    Priority is CLI argument, settings override, default icon-set pixel, then fallback.
+    """
+    cli_value = getattr(args, "pixel_char", None)
+    if isinstance(cli_value, str) and cli_value:
+        return cli_value
+
+    if settings.pixel_char:
+        return settings.pixel_char
+
+    default_icon_value = ICON_SETS.get("nerd", {}).get("pixel")
+    if default_icon_value:
+        return default_icon_value
+
+    return "*"
 
 
 def _format_streaming_info(addr: str, protocol: str) -> str:
@@ -235,25 +261,130 @@ async def _handle_command_line(
     """
     Execute a command line with error handling.
     """
+    command_name = _extract_command_name(line)
+    if status_message and command_name:
+        status_message(f"command: start {command_name}")
+
     try:
         handled, error = await command_registry.handle(line)
         if not handled and status_message:
-            message = error or "Unknown command"
-            status_message(f"command: {message}")
+            if error and error.startswith("Unknown command: "):
+                status_message(f"command: not found {command_name or 'unknown'}")
+            else:
+                status_message(
+                    f"command: failed {command_name or 'unknown'}: {error or 'Unknown command'}"
+                )
+            return
+        if handled and status_message:
+            status_message(f"command: done {command_name or 'unknown'}")
     except exceptions.BusyBarAPIError as exc:
         if exc.code == 423:
             message = f"{exc.error} (code: {exc.code})"
             logger.info("Command blocked: %s", message)
             if status_message:
-                status_message(message)
+                status_message(
+                    f"command: failed {command_name or 'unknown'}: {message}"
+                )
             return
         logger.warning("Command failed: %s", exc)
         if status_message:
-            status_message(str(exc))
+            status_message(f"command: failed {command_name or 'unknown'}: {exc}")
     except Exception as exc:  # noqa: BLE001
         logger.exception("Command failed")
         if status_message:
-            status_message(str(exc))
+            status_message(f"command: failed {command_name or 'unknown'}: {exc}")
+
+
+def _extract_command_name(line: str) -> str | None:
+    """
+    Extract the command name from a raw command line.
+
+    Returns None for empty or syntactically invalid command lines.
+    """
+    try:
+        parts = shlex.split(line, posix=True)
+    except ValueError:
+        return None
+    if not parts:
+        return None
+    return parts[0].strip().lower() or None
+
+
+def _build_help_handler(
+    command_registry: CommandRegistry,
+    status_message: Callable[[str], None],
+) -> Callable[[list[str]], Awaitable[None]]:
+    """
+    Build command help handler using registry metadata and command parsers.
+
+    Shows per-command descriptions and arguments extracted from command classes.
+    """
+
+    async def _handler(args: list[str]) -> None:
+        """
+        Render command help to the remote log pane.
+        """
+        if not args:
+            names = command_registry.list_commands()
+            status_message(f"help: commands {', '.join(names)}")
+            status_message("help: use help <cmd>")
+            return
+
+        target = args[0].strip().lower()
+        if not target:
+            status_message("help: missing command name")
+            return
+
+        command = command_registry.find_command_object(target)
+        if command is None:
+            entry = command_registry.get_entry(target)
+            if entry is not None:
+                status_message(f"help {target}: built-in handler")
+                return
+            status_message(f"help: not found {target}")
+            return
+
+        description = inspect.getdoc(command.__class__) or "No description."
+        summary = description.splitlines()[0].strip()
+        status_message(f"help {command.name}: {summary}")
+        if command.aliases:
+            status_message(f"aliases: {', '.join(command.aliases)}")
+
+        parser = command.build_parser()
+        for line in _format_parser_arguments(parser):
+            status_message(line)
+
+    return _handler
+
+
+def _format_parser_arguments(parser: argparse.ArgumentParser) -> list[str]:
+    """
+    Format parser actions for compact command help output.
+
+    Returns one line per positional/optional argument, excluding built-in help.
+    """
+    lines: list[str] = []
+    for action in parser._actions:
+        if isinstance(action, argparse._HelpAction):
+            continue
+
+        help_text = (action.help or "").strip()
+        if action.option_strings:
+            opts = ", ".join(action.option_strings)
+            takes_value = action.nargs != 0
+            metavar = action.metavar or action.dest.upper()
+            suffix = f" <{metavar}>" if takes_value else ""
+            descriptor = f"arg: {opts}{suffix}"
+        else:
+            descriptor = f"arg: {action.dest}"
+
+        if help_text:
+            descriptor = f"{descriptor} - {help_text}"
+        lines.append(descriptor)
+
+    if not lines:
+        return ["arg: (none)"]
+    return lines
 
 
 async def _run_command_queue(
@@ -409,19 +540,22 @@ async def _run(
             spec = display.get_display_spec(current_display)
             stop_event = asyncio.Event()
             renderer: TerminalRenderer | None = None
+            status_history: list[str] = []
 
             def _emit_status(message: str) -> None:
                 """
-                Emit a status message and mirror it in the renderer footer.
+                Emit a status message into logs and fallback stderr output.
                 """
-                status_message(message)
+                status_history.append(message)
                 if renderer is not None:
-                    renderer.update_status_line(message)
+                    renderer.append_log(message)
+                    return
+                status_message(message)
 
             _emit_status(TEXT_INIT_START)
             client = _build_client(args.addr, args.token)
             base_url = getattr(client, "base_url", None) or args.addr or "unknown"
-            status_message(TEXT_INIT_CONNECTING.format(addr=base_url))
+            _emit_status(TEXT_INIT_CONNECTING.format(addr=base_url))
             command_registry = CommandRegistry()
             for command in discover_commands(
                 client=client,
@@ -440,17 +574,24 @@ async def _run(
                 "api",
                 build_call_handler(client, _emit_status),
             )
+            register_command(
+                command_registry,
+                "help",
+                _build_help_handler(command_registry, _emit_status),
+            )
             command_queue: asyncio.Queue[Callable[[], Awaitable[None]]] = (
                 asyncio.Queue()
             )
             renderer = TerminalRenderer(
                 spec,
                 args.spacer,
-                getattr(args, "pixel_char", settings.pixel_char),
+                _resolve_pixel_char(args, icons),
                 icons,
                 frame_mode=getattr(args, "frame", settings.frame_mode),
                 clear_screen=clear_screen,
             )
+            for message in status_history:
+                renderer.append_log(message)
             poll_interval = args.http_poll_interval
             if getattr(client, "is_cloud", False):
                 if poll_interval is None or poll_interval < 1.0:

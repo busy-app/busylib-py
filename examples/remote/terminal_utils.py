@@ -47,7 +47,7 @@ def _clear_screen(reason: str, *, home: bool = False) -> None:
     When debug is enabled, log the reason to stderr.
     """
     if DEBUG_SCREEN_CLEAR:
-        sys.stderr.write(f"\n[remote] clear_screen: {reason}\n")
+        sys.stderr.write(f"[remote] clear_screen: {reason}\n")
         sys.stderr.flush()
 
     sequence = "\x1b[2J"
@@ -123,7 +123,7 @@ def _print_user_message(
     This resets ANSI state and ensures the error line is visible.
     """
     suffix = f" (addr: {addr})" if addr else ""
-    sys.stderr.write("\n\x1b[0m\x1b[?25h")
+    sys.stderr.write("\x1b[0m\x1b[?25h")
     if prefix:
         sys.stderr.write(f"{prefix}: {message}{suffix}\n")
     else:
@@ -137,7 +137,6 @@ def _print_status_message(message: str) -> None:
 
     This is used for startup and initialization updates.
     """
-    sys.stderr.write("\n\x1b[0m")
-    sys.stderr.write(f"{message}\n")
+    sys.stderr.write(f"\x1b[0m{message}\n")
     sys.stderr.flush()
     _hide_cursor()

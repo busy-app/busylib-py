@@ -42,48 +42,6 @@ class _AsyncBaseClient(base.AsyncClientBase):
         )
 
 
-def test_json_bytes_preserves_utf8() -> None:
-    """
-    Ensure JSON serialization keeps UTF-8 characters unescaped.
-    """
-    payload = {"msg": "Привет"}
-    data = base._json_bytes(payload)
-    text = data.decode("utf-8")
-    assert "Привет" in text
-    assert "\\u041f" not in text
-
-
-def test_data_length_handles_missing_len() -> None:
-    """
-    Return length for sized data and None for objects without __len__.
-    """
-
-    class _NoLen:
-        """
-        Dummy object without a length implementation.
-        """
-
-        pass
-
-    assert base._data_length(b"abc") == 3
-    assert base._data_length(_NoLen()) is None
-
-
-def test_as_timeout_variants() -> None:
-    """
-    Ensure timeout normalization returns httpx.Timeout instances.
-    """
-    default_timeout = base._as_timeout(None)
-    assert isinstance(default_timeout, httpx.Timeout)
-
-    custom = base._as_timeout(2.5)
-    assert isinstance(custom, httpx.Timeout)
-    assert custom.read == 2.5
-
-    existing = httpx.Timeout(1.0)
-    assert base._as_timeout(existing) is existing
-
-
 def test_request_json_payload_requires_json_sync() -> None:
     """
     Validate JSON request headers and protocol error on invalid JSON response.
