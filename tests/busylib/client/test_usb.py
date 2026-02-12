@@ -2,6 +2,7 @@ import socket
 
 import pytest
 
+from busylib import exceptions
 from busylib.client import usb
 
 
@@ -167,3 +168,19 @@ async def test_async_usb_discover_runs_in_thread(
 
     assert result is True
     assert calls["func"] == controller._controller.discover
+
+
+def test_usb_reboot_raise_on_error() -> None:
+    """
+    Re-raise USB errors from reboot when strict mode is enabled.
+    """
+
+    controller = usb.UsbController(host="10.0.4.20", port=23, timeout=2.0)
+
+    def fail_power(_subcommand: str = "info") -> str:
+        raise exceptions.BusyBarUsbError("boom")
+
+    controller.power = fail_power  # type: ignore[method-assign]
+
+    with pytest.raises(exceptions.BusyBarUsbError):
+        controller.reboot(raise_on_error=True)

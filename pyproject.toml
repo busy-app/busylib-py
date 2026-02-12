@@ -83,3 +83,4 @@ format.docstring-code-format = false
 [tool.pytest.ini_options]
 addopts = "-q"
 asyncio_mode = "auto"
+pythonpath = [ "." ]

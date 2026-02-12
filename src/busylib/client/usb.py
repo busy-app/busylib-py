@@ -295,16 +295,19 @@ class UsbController:
         """
         return self.send_command("power", subcommand)
 
-    def reboot(self) -> bool:
+    def reboot(self, *, raise_on_error: bool = False) -> bool:
         """
         Reboot the device using the power command.
 
-        Returns True on success and False on failure.
+        Returns True on success and False on failure by default.
+        If raise_on_error is True, re-raises BusyBarUsbError instead.
         """
         try:
             self.power("reboot")
             return True
         except exceptions.BusyBarUsbError:
+            if raise_on_error:
+                raise
             return False
 
     def storage(self, *args: str) -> str:
@@ -505,11 +508,11 @@ class AsyncUsbController:
         """
         return await self._call(self._controller.power, subcommand)
 
-    async def reboot(self) -> bool:
+    async def reboot(self, *, raise_on_error: bool = False) -> bool:
         """
         Reboot the device using the power command.
         """
-        return await self._call(self._controller.reboot)
+        return await self._call(self._controller.reboot, raise_on_error=raise_on_error)
 
     async def storage(self, *args: str) -> str:
         """

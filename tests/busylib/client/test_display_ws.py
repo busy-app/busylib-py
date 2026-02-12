@@ -1,6 +1,6 @@
 import pytest
 
-from busylib import AsyncBusyBar
+from busylib import AsyncBusyBar, exceptions
 from busylib.client import display as display_client
 
 
@@ -101,3 +101,26 @@ async def test_stream_screen_ws_uses_query_token(
     assert "user_agent_header" not in extra
     assert extra.get("max_size") is None
     assert extra.get("ping_interval") is None
+
+
+@pytest.mark.asyncio
+async def test_stream_screen_ws_wraps_connection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Ensure websocket transport errors are wrapped into domain exceptions.
+    """
+
+    def fake_connect(_url: str, **_kwargs):
+        raise RuntimeError("ws boom")
+
+    monkeypatch.setattr(display_client.websockets, "connect", fake_connect)
+
+    client = AsyncBusyBar(addr="http://device.local", token="secret")
+    with pytest.raises(exceptions.BusyBarWebSocketError) as exc:
+        async for _frame in client.stream_screen_ws(0):
+            pass
+    await client.aclose()
+
+    assert exc.value.path == "/api/screen/ws"
+    assert isinstance(exc.value.__cause__, RuntimeError)

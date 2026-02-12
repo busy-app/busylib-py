@@ -61,20 +61,22 @@ class BusyBar(
         """
         return self.usb.is_connected
 
-    def usb_reboot(self) -> bool:
+    def usb_reboot(self, *, raise_on_error: bool = False) -> bool:
         """
         Attempt to reboot the device via USB.
-        Raises BusyBarUsbError if not connected.
-        """
-        return self.usb.reboot()
 
-    def usb_reset(self) -> bool:
+        Returns True on success and False on failure by default.
+        If raise_on_error is True, re-raises BusyBarUsbError.
+        """
+        return self.usb.reboot(raise_on_error=raise_on_error)
+
+    def usb_reset(self, *, raise_on_error: bool = False) -> bool:
         """
         Alias for usb_reboot().
 
         Provided for callers that prefer "reset" naming.
         """
-        return self.usb_reboot()
+        return self.usb_reboot(raise_on_error=raise_on_error)
 
 
 class AsyncBusyBar(
@@ -117,19 +119,19 @@ class AsyncBusyBar(
         """
         return self.usb.is_connected
 
-    async def usb_reboot(self) -> bool:
+    async def usb_reboot(self, *, raise_on_error: bool = False) -> bool:
         """
         Attempt to reboot the device via USB.
         """
-        return await self.usb.reboot()
+        return await self.usb.reboot(raise_on_error=raise_on_error)
 
-    async def usb_reset(self) -> bool:
+    async def usb_reset(self, *, raise_on_error: bool = False) -> bool:
         """
         Alias for usb_reboot().
 
         Provided for callers that prefer "reset" naming.
         """
-        return await self.usb_reboot()
+        return await self.usb_reboot(raise_on_error=raise_on_error)
 
 
 __all__ = ["BusyBar", "AsyncBusyBar"]

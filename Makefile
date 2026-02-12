@@ -1,4 +1,9 @@
-.PHONY: help install install-dev test test-cov lint format clean build upload docs
+.PHONY: help install install-dev test test-cov lint format clean build upload docs run-example
+
+ifneq (,$(filter run-example,$(firstword $(MAKECMDGOALS))))
+RUN_EXAMPLE_GOALS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+$(eval $(RUN_EXAMPLE_GOALS):;@:)
+endif
 
 # Default target
 help:
@@ -13,6 +18,7 @@ help:
 	@echo "  build       - Build package"
 	@echo "  upload      - Upload to PyPI"
 	@echo "  docs        - Generate documentation"
+	@echo "  run-example - Run example main module via uv (usage: make run-example <name> [args...])"
 
 # Install package
 install:
@@ -61,3 +67,15 @@ upload: build
 # Generate documentation (placeholder)
 docs:
 	@echo "Documentation generation not implemented yet"
+
+# Run example by directory name via uv.
+# Usage: make run-example remote -- --flag value
+run-example:
+	@EXAMPLE="$(word 1,$(RUN_EXAMPLE_GOALS))"; \
+	ARGS="$(wordlist 2,$(words $(RUN_EXAMPLE_GOALS)),$(RUN_EXAMPLE_GOALS))"; \
+	if [ -z "$$EXAMPLE" ]; then \
+		echo "Usage: make run-example <name> [args...]"; \
+		echo "Example: make run-example remote -- --help"; \
+		exit 1; \
+	fi; \
+	uv run python -m "examples.$$EXAMPLE.main" $$ARGS

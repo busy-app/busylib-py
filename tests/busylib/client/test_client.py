@@ -144,13 +144,39 @@ def test_error_response_raises_api_error():
     """
 
     def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, json={"error": "fail", "code": 500})
+        return httpx.Response(
+            500,
+            json={"error": "fail", "code": 500},
+            headers={"X-Request-ID": "req-500"},
+        )
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
         client.get_version()
     assert exc.value.code == 500
+    assert exc.value.status_code == 500
+    assert exc.value.method == "GET"
+    assert exc.value.path == "/api/version"
+    assert exc.value.request_id == "req-500"
+    assert exc.value.response_excerpt == '{"error":"fail","code":500}'
     assert "fail" in str(exc.value)
+
+
+def test_api_error_has_truncated_excerpt() -> None:
+    """
+    Keep response excerpt compact for diagnostic fields in API errors.
+    """
+
+    def responder(_request: httpx.Request) -> httpx.Response:
+        long_text = "x" * 400
+        return httpx.Response(503, text=long_text)
+
+    client = make_client(responder)
+    with pytest.raises(exceptions.BusyBarAPIError) as exc:
+        client.get_version()
+    assert exc.value.response_excerpt is not None
+    assert exc.value.response_excerpt.endswith("...")
+    assert len(exc.value.response_excerpt) <= 259
 
 
 def test_plain_text_error_response():
@@ -222,6 +248,40 @@ def test_retry_on_transport_error():
     resp = client.enable_wifi()
     assert resp.result == "OK"
     assert calls["count"] == 2
+
+
+def test_response_validation_error_is_wrapped() -> None:
+    """
+    Wrap model validation failures into BusyBarResponseValidationError.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/version"
+        return httpx.Response(
+            200,
+            json={"api_semver": "1.2.0", "build_date": {"invalid": True}},
+        )
+
+    client = make_client(responder, api_version="1.2.0")
+    with pytest.raises(exceptions.BusyBarResponseValidationError) as exc:
+        client.get_version()
+    assert exc.value.model == "VersionInfo"
+
+
+def test_all_library_errors_inherit_base_error() -> None:
+    """
+    Ensure all public exception types share a single base class.
+    """
+    assert issubclass(exceptions.BusyBarAPIError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarRequestError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarAPIVersionError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarUsbError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarProtocolError, exceptions.BusyBarError)
+    assert issubclass(
+        exceptions.BusyBarResponseValidationError,
+        exceptions.BusyBarError,
+    )
+    assert issubclass(exceptions.BusyBarWebSocketError, exceptions.BusyBarError)
 
 
 def test_draw_on_display_sends_utf8_body():
