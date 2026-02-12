@@ -226,9 +226,9 @@ class SyncClientBase:
 
             if response.status_code >= 400:
                 payload = None
-                request_id = response.headers.get("X-Request-ID") or response.headers.get(
-                    "x-request-id"
-                )
+                request_id = response.headers.get(
+                    "X-Request-ID"
+                ) or response.headers.get("x-request-id")
                 response_excerpt = _truncate_text(response.text)
                 try:
                     payload = response.json()
@@ -246,11 +246,7 @@ class SyncClientBase:
                 logger.error("API error %s: %s (body=%s)", code, error, response.text)
                 raise exceptions.BusyBarAPIError(
                     error=error,
-                    code=(
-                        code
-                        if isinstance(code, int)
-                        else response.status_code
-                    ),
+                    code=(code if isinstance(code, int) else response.status_code),
                     status_code=response.status_code,
                     method=method,
                     path=path,
@@ -467,9 +463,9 @@ class AsyncClientBase:
 
             if response.status_code >= 400:
                 payload = None
-                request_id = response.headers.get("X-Request-ID") or response.headers.get(
-                    "x-request-id"
-                )
+                request_id = response.headers.get(
+                    "X-Request-ID"
+                ) or response.headers.get("x-request-id")
                 response_excerpt = _truncate_text(response.text)
                 try:
                     payload = response.json()
@@ -486,11 +482,7 @@ class AsyncClientBase:
                     error = response.text or f"HTTP {response.status_code} error"
                 raise exceptions.BusyBarAPIError(
                     error=error,
-                    code=(
-                        code
-                        if isinstance(code, int)
-                        else response.status_code
-                    ),
+                    code=(code if isinstance(code, int) else response.status_code),
                     status_code=response.status_code,
                     method=method,
                     path=path,

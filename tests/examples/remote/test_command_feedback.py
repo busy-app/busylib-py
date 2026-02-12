@@ -4,7 +4,11 @@ import argparse
 
 import pytest
 
-from examples.remote.command_core import CommandArgumentParser, CommandBase, CommandRegistry
+from examples.remote.command_core import (
+    CommandArgumentParser,
+    CommandBase,
+    CommandRegistry,
+)
 from examples.remote.runner import _handle_command_line
 
 
@@ -23,10 +27,11 @@ class NeedsArgCommand(CommandBase):
         parser.add_argument("value")
         return parser
 
-    async def run(self, _args: argparse.Namespace) -> None:
+    async def run(self, args: argparse.Namespace) -> None:
         """
         No-op command body used for tests.
         """
+        _ = args
         return None
 
 

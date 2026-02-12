@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable, Iterable
 
+import httpx
 import pytest
 
 from busylib import types
@@ -30,7 +31,8 @@ class _DummyStorage(StorageMixin):
         json_payload: JsonType | None = None,
         data: bytes | Iterable[bytes] | None = None,
         expect_bytes: bool = False,
-        timeout: float | None = None,
+        allow_text: bool = False,
+        timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Record request arguments and return a success payload.
@@ -47,6 +49,7 @@ class _DummyStorage(StorageMixin):
                 "json_payload": json_payload,
                 "data": payload,
                 "expect_bytes": expect_bytes,
+                "allow_text": allow_text,
                 "timeout": timeout,
             }
         )
@@ -78,7 +81,8 @@ class _DummyAsyncStorage(AsyncStorageMixin):
         json_payload: JsonType | None = None,
         data: bytes | AsyncIterable[bytes] | None = None,
         expect_bytes: bool = False,
-        timeout: float | None = None,
+        allow_text: bool = False,
+        timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Record async request arguments and return a success payload.
@@ -98,6 +102,7 @@ class _DummyAsyncStorage(AsyncStorageMixin):
                 "json_payload": json_payload,
                 "data": payload,
                 "expect_bytes": expect_bytes,
+                "allow_text": allow_text,
                 "timeout": timeout,
             }
         )

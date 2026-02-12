@@ -4,7 +4,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal, Sequence
 
-from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel as PydanticBaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+)
 from pydantic_extra_types.color import Color
 
 from . import exceptions
@@ -28,6 +34,7 @@ class BaseModel(PydanticBaseModel):
         context: Any | None = None,
         by_alias: bool | None = None,
         by_name: bool | None = None,
+        extra: Any | None = None,
     ) -> Any:
         """
         Validate input object and convert schema errors to domain exceptions.
@@ -40,6 +47,7 @@ class BaseModel(PydanticBaseModel):
                 context=context,
                 by_alias=by_alias,
                 by_name=by_name,
+                extra=extra,
             )
         except ValidationError as exc:
             raise exceptions.BusyBarResponseValidationError(

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+from busylib.client import AsyncBusyBar
+from examples.remote.commands.record_audio import AudioRecorder
 from examples.remote.commands.record_audio import InputCapture, RecordAudioCommand
 
 
@@ -28,7 +32,7 @@ class _FakeClient:
         self.calls.append((app_id, filename, data))
 
 
-class _FakeRecorder:
+class _FakeRecorder(AudioRecorder):
     """
     Fake recorder that writes deterministic bytes on stop.
     """
@@ -106,10 +110,13 @@ async def test_record_audio_saves_converts_and_uploads(
         return _FakeRecorder(path, started, stopped)
 
     command = RecordAudioCommand(
-        client,
+        cast(AsyncBusyBar, client),
         status_messages.append,
         input_capture,
-        recorder_factory=factory,
+        recorder_factory=cast(
+            Callable[[Path], AudioRecorder],
+            factory,
+        ),
     )
 
     task = asyncio.create_task(command.run(argparse.Namespace()))

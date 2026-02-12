@@ -42,7 +42,9 @@ _DISPLAY_BY_INDEX = {
 }
 
 
-def get_display_spec(display: DisplayName | int | str | None) -> DisplaySpec:
+def get_display_spec(
+    display: DisplaySpec | DisplayName | int | str | None,
+) -> DisplaySpec:
     """
     Resolve display spec by enum, index, or string.
     Defaults to FRONT display when None/unknown.

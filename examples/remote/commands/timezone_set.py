@@ -97,11 +97,7 @@ def _match_direct_timezone(
         return value
 
     lowered = value.lower()
-    matches = [
-        tz
-        for tz in timezones
-        if tz.lower() == lowered
-    ]
+    matches = [tz for tz in timezones if tz.lower() == lowered]
     if len(matches) == 1:
         return matches[0]
     return None
@@ -118,11 +114,7 @@ def _match_short_timezone(
         return None, None
 
     lowered = value.lower()
-    matches = [
-        tz
-        for tz in timezones
-        if tz.rsplit("/", 1)[-1].lower() == lowered
-    ]
+    matches = [tz for tz in timezones if tz.rsplit("/", 1)[-1].lower() == lowered]
     if len(matches) == 1:
         return matches[0], None
     if len(matches) > 1:
