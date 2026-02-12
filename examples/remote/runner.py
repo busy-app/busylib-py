@@ -10,15 +10,9 @@ from urllib.parse import urlparse
 from busylib import display, exceptions
 from busylib.client import AsyncBusyBar
 from examples.remote.keymap import KeyDecoder, KeyMap, StdinReader, load_keymap
-from examples.remote.command_plugins import (
-    AudioCommand,
-    ClearCommand,
-    ClockCommand,
-    QuitCommand,
-    TextCommand,
-    build_call_handler,
-)
-from examples.remote.commands import CommandInput, CommandRegistry, register_command
+from examples.remote.command_core import CommandInput, CommandRegistry, register_command
+from examples.remote.commands import InputCapture, discover_commands
+from examples.remote.commands.call import build_call_handler
 from examples.remote.constants import (
     SWITCH_DISPLAY_SEQUENCES,
     TEXT_HTTP_POLL,
@@ -96,6 +90,7 @@ async def _forward_keys(
     on_switch: Callable[[], None] | None = None,
     command_registry: CommandRegistry | None = None,
     command_input: CommandInput | None = None,
+    input_capture: InputCapture | None = None,
 ) -> None:
     """
     Forward terminal key presses to the Busy Bar input API.
@@ -117,6 +112,8 @@ async def _forward_keys(
                     queue.get(), timeout=settings.key_timeout
                 )
             except asyncio.TimeoutError:
+                continue
+            if input_capture and input_capture.handle(chunk):
                 continue
             if not command_active and on_switch and _should_switch_display(chunk):
                 on_switch()
@@ -225,7 +222,10 @@ async def _handle_command_line(
     Execute a command line with error handling.
     """
     try:
-        await command_registry.handle(line)
+        handled, error = await command_registry.handle(line)
+        if not handled and status_message:
+            message = error or "Unknown command"
+            status_message(f"command: {message}")
     except exceptions.BusyBarAPIError as exc:
         if exc.code == 423:
             message = f"{exc.error} (code: {exc.code})"
@@ -373,6 +373,7 @@ async def _run(
     current_display = display.FRONT_DISPLAY
     keymap = load_keymap(args.keymap_file) if not args.no_send_input else None
     command_input = CommandInput()
+    input_capture = InputCapture()
 
     had_error = False
     try:
@@ -393,24 +394,36 @@ async def _run(
 
             spec = display.get_display_spec(current_display)
             stop_event = asyncio.Event()
-            status_message(TEXT_INIT_START)
+            renderer: TerminalRenderer | None = None
+
+            def _emit_status(message: str) -> None:
+                """
+                Emit a status message and mirror it in the renderer footer.
+                """
+                status_message(message)
+                if renderer is not None:
+                    renderer.update_status_line(message)
+
+            _emit_status(TEXT_INIT_START)
             client = _build_client(args.addr, args.token)
-            status_message(TEXT_INIT_CONNECTING.format(addr=client.base_url))
+            _emit_status(TEXT_INIT_CONNECTING.format(addr=client.base_url))
             command_registry = CommandRegistry()
-            register_command(command_registry, TextCommand(client))
-            register_command(command_registry, QuitCommand(stop_event))
-            register_command(command_registry, ClearCommand(client))
-            register_command(command_registry, ClockCommand(client))
-            register_command(command_registry, AudioCommand(client, status_message))
+            for command in discover_commands(
+                client=client,
+                status_message=_emit_status,
+                stop_event=stop_event,
+                input_capture=input_capture,
+            ):
+                register_command(command_registry, command)
             register_command(
                 command_registry,
                 "call",
-                build_call_handler(client, status_message),
+                build_call_handler(client, _emit_status),
             )
             register_command(
                 command_registry,
                 "api",
-                build_call_handler(client, status_message),
+                build_call_handler(client, _emit_status),
             )
             command_queue: asyncio.Queue[Callable[[], Awaitable[None]]] = (
                 asyncio.Queue()
@@ -446,12 +459,13 @@ async def _run(
                             client=client,
                             keymap=keymap,
                             stop_event=stop_event,
-                            status_message=status_message,
+                            status_message=_emit_status,
                             command_queue=command_queue,
                             renderer=renderer,
                             on_switch=_switch_display,
                             command_registry=command_registry,
                             command_input=command_input,
+                            input_capture=input_capture,
                         )
                     )
                 )
@@ -501,7 +515,7 @@ async def _run(
                             stop_event=stop_event,
                             renderer=renderer,
                             clear_screen=clear_screen,
-                            status_message=status_message,
+                            status_message=_emit_status,
                         )
                     )
                 )
@@ -514,7 +528,7 @@ async def _run(
                             spec=spec,
                             stop_event=stop_event,
                             renderer=renderer,
-                            status_message=status_message,
+                            status_message=_emit_status,
                         )
                     )
                 )

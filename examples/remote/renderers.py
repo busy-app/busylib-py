@@ -70,6 +70,7 @@ class TerminalRenderer:
         self._alt_required = {"front": front_req, "back": back_req}
         self._terminal_size = (80, 24)
         self._command_line: str | None = None
+        self._status_line: str | None = None
         self._update_size(force=True)
         self._help_active = False
         self._help_keymap: KeyMap | None = None
@@ -116,7 +117,7 @@ class TerminalRenderer:
         now = time.monotonic()
         if force or now >= self._next_size_check:
             cols, rows = self._get_terminal_size()
-            extra_rows = 1 if self._command_line is not None else 0
+            extra_rows = 1 if self._has_footer_line() else 0
             req_cols, req_rows = self._required_size(self.spec, extra_rows=extra_rows)
             self._size_info = (cols, rows, req_cols, req_rows)
             self._fits = cols >= req_cols and rows >= req_rows
@@ -185,6 +186,8 @@ class TerminalRenderer:
                     self._command_line, cursor=self._command_line_cursor
                 )
             )
+        elif self._status_line is not None:
+            frame_lines.append(self._format_status_line(self._status_line))
 
         print("\n".join(frame_lines), end="", flush=True)
 
@@ -256,6 +259,18 @@ class TerminalRenderer:
             self._clear_screen("command_line_hide", home=True)
             self.render(self._last_frame)
 
+    def update_status_line(self, text: str | None) -> None:
+        """
+        Update the status line displayed under the stream.
+
+        Passing None hides the line and restores default sizing.
+        """
+        self._status_line = text
+        if text is None and self._last_frame and not self._help_active:
+            self._cleared = False
+            self._clear_screen("status_line_hide", home=True)
+            self.render(self._last_frame)
+
     def _format_command_line(self, text: str, *, cursor: int | None) -> str:
         """
         Format the command line prompt to fit within terminal width.
@@ -286,6 +301,18 @@ class TerminalRenderer:
         if cursor_in_slice >= cols:
             cursor_in_slice = cols - 1
         return self._apply_cursor(padded, cursor_in_slice)
+
+    def _format_status_line(self, text: str) -> str:
+        """
+        Format the status line to fit within terminal width.
+
+        The line is truncated and padded to keep layout stable.
+        """
+        cols, _rows = self._get_terminal_size()
+        line = f"status: {text}"
+        if cols <= 0:
+            return line
+        return line[:cols].ljust(cols)
 
     @staticmethod
     def _apply_cursor(text: str, cursor_pos: int) -> str:
@@ -337,6 +364,14 @@ class TerminalRenderer:
             framed.append(f"{side}{line}{side}")
         framed.append(bottom)
         return framed
+
+    def _has_footer_line(self) -> bool:
+        """
+        Return True when a footer line (command or status) is visible.
+
+        Used to compute extra rows and layout requirements.
+        """
+        return self._command_line is not None or self._status_line is not None
 
     def _frame_string(self, text: str) -> str:
         """

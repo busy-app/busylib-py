@@ -10,6 +10,7 @@ from typing import TypeAlias
 
 CommandHandler = Callable[[list[str]], Awaitable[None] | None]
 CommandEvent = tuple[str, tuple[str, int] | str | None]
+CommandResult = tuple[bool, str | None]
 
 
 class CommandInput:
@@ -281,17 +282,29 @@ class CommandBase:
         """
         raise NotImplementedError
 
-    async def handle(self, argv: list[str]) -> bool:
+    async def handle(self, argv: list[str]) -> CommandResult:
         """
         Parse arguments and run the command.
+
+        Returns a tuple of (handled, error_message).
         """
         parser = self.build_parser()
         try:
             parsed = parser.parse_args(self._normalize_argv(argv))
-        except CommandParseError:
-            return False
+        except CommandParseError as exc:
+            message = str(exc) if str(exc) else "Invalid command arguments"
+            return False, message
         await self.run(parsed)
-        return True
+        return True, None
+
+    @classmethod
+    def build(cls, **_deps: object) -> CommandBase | None:
+        """
+        Optionally build the command with provided dependencies.
+
+        Returns None when the command cannot be constructed.
+        """
+        return None
 
     def _normalize_argv(self, argv: list[str]) -> list[str]:
         """
@@ -349,25 +362,25 @@ class CommandRegistry:
             return
         raise TypeError("Command entry must be a CommandBase")
 
-    async def handle(self, line: str) -> bool:
+    async def handle(self, line: str) -> CommandResult:
         """
         Parse a command line and dispatch to the registered handler.
 
-        Returns True when a handler was found and invoked.
+        Returns a tuple of (handled, error_message).
         """
         parts = self._split_line(line)
         if not parts:
-            return False
+            return False, None
         name = parts[0].lower()
         handler = self._handlers.get(name)
         if handler is None:
-            return False
+            return False, f"Unknown command: {name}"
         if isinstance(handler, CommandBase):
             return await handler.handle(parts[1:])
         result = handler(parts[1:])
         if asyncio.iscoroutine(result):
             await result
-        return True
+        return True, None
 
     @staticmethod
     def _split_line(line: str) -> list[str]:
