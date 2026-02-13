@@ -10,7 +10,6 @@ from examples.remote.constants import (
     TEXT_LINK_FAIL,
     TEXT_SNAPSHOT_FAIL,
     TEXT_UPDATE_FAIL,
-    TEXT_USB_FAIL,
 )
 from examples.remote.renderers import TerminalRenderer
 
@@ -26,16 +25,6 @@ async def dashboard(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
         renderer.update_info(snapshot=snapshot)
     except Exception as exc:
         logger.warning(TEXT_SNAPSHOT_FAIL, exc)
-
-
-async def usb(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
-    """
-    Refresh USB status and update the renderer.
-    """
-    try:
-        renderer.update_info(usb_connected=await client.is_local_available())
-    except Exception as exc:
-        logger.warning(TEXT_USB_FAIL, exc)
 
 
 async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:

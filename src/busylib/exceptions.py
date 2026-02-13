@@ -146,6 +146,26 @@ class BusyBarResponseValidationError(BusyBarError):
         super().__init__(f"Response validation failed for {model}: {details}")
 
 
+class BusyBarConversionError(BusyBarError):
+    """
+    Raised when local file conversion fails before upload to the device.
+
+    Used by storage upload flows to report unsupported formats and failed
+    conversion pipelines with a stable domain exception type.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: str,
+        original: Exception | None = None,
+    ) -> None:
+        self.path = path
+        self.original = original
+        super().__init__(f"{message} ({path})")
+
+
 class BusyBarWebSocketError(BusyBarError):
     """
     Raised when WebSocket connection or stream processing fails.

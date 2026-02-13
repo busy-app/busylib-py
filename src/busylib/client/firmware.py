@@ -48,6 +48,19 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/name")
         return types.DeviceNameResponse.model_validate(data)
 
+    def set_device_name(self, name: str) -> types.SuccessResponse:
+        """
+        Set device name via POST /api/name.
+        """
+        logger.info("set_device_name")
+        payload = types.DeviceNameUpdate(name=name).model_dump()
+        data = self._request(
+            "POST",
+            "/api/name",
+            json_payload=payload,
+        )
+        return types.SuccessResponse.model_validate(data)
+
     def get_device_time(self) -> types.DeviceTimeResponse:
         """
         Fetch device time via GET /api/time.
@@ -96,6 +109,19 @@ class AsyncFirmwareMixin(AsyncClientBase):
         logger.info("async get_device_name")
         data = await self._request("GET", "/api/name")
         return types.DeviceNameResponse.model_validate(data)
+
+    async def set_device_name(self, name: str) -> types.SuccessResponse:
+        """
+        Set device name via POST /api/name.
+        """
+        logger.info("async set_device_name")
+        payload = types.DeviceNameUpdate(name=name).model_dump()
+        data = await self._request(
+            "POST",
+            "/api/name",
+            json_payload=payload,
+        )
+        return types.SuccessResponse.model_validate(data)
 
     async def get_device_time(self) -> types.DeviceTimeResponse:
         """

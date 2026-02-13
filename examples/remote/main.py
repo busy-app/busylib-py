@@ -43,7 +43,6 @@ def _select_icon_set(mode: str) -> dict[str, str]:
 
 
 ICONS = _select_icon_set(settings.icon_mode)
-PIXEL_CHAR = ICONS["pixel"]
 
 
 def _build_env_help_epilog() -> str:

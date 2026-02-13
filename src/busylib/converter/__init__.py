@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
+from .. import exceptions
 from . import audio, image, video
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,8 @@ def convert_for_storage(path: str, data: bytes) -> tuple[str, bytes]:
     """
     Convert a file payload to a device-ready format when supported.
 
-    Falls back to the original data when conversion is not available.
+    Unknown extensions are passed through unchanged. Known extensions must
+    convert successfully, otherwise a domain-level conversion error is raised.
     """
     suffix = Path(path).suffix.lower()
     converter = _registry().get(suffix)
@@ -53,10 +55,23 @@ def convert_for_storage(path: str, data: bytes) -> tuple[str, bytes]:
     try:
         result = converter(path, data)
         if result is None:
-            return path, data
+            raise exceptions.BusyBarConversionError(
+                "Converter returned no output",
+                path=path,
+            )
         return result
-    except NotImplementedError:
+    except exceptions.BusyBarConversionError:
         raise
+    except NotImplementedError as exc:
+        raise exceptions.BusyBarConversionError(
+            "Conversion is not supported for this file type",
+            path=path,
+            original=exc,
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         logger.warning("Conversion failed for %s: %s", path, exc)
-        return path, data
+        raise exceptions.BusyBarConversionError(
+            "Failed to convert file for storage",
+            path=path,
+            original=exc,
+        ) from exc

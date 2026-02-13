@@ -178,6 +178,12 @@ class DeviceNameResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class DeviceNameUpdate(BaseModel):
+    name: str = Field(min_length=1)
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class DeviceTimeResponse(BaseModel):
     timestamp: str | None = None
 

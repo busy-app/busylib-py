@@ -212,15 +212,6 @@ class CommandInput:
             return
 
 
-def register(command: str, handler: CommandHandler) -> None:
-    """
-    Register a command handler in the default registry.
-
-    This provides a simple module-level API for extensions.
-    """
-    _DEFAULT_REGISTRY.register(command, handler)
-
-
 def register_command(
     registry: CommandRegistry,
     command: str | CommandBase,
@@ -452,15 +443,3 @@ class CommandRegistry:
             return shlex.split(line, posix=True)
         except ValueError:
             return []
-
-
-_DEFAULT_REGISTRY = CommandRegistry()
-
-
-def get_registry() -> CommandRegistry:
-    """
-    Return the default command registry.
-
-    Consumers can use it to register or invoke commands.
-    """
-    return _DEFAULT_REGISTRY

@@ -87,6 +87,35 @@ def test_get_device_name_and_time():
     assert time_info.timestamp == "2024-01-01T10:00:00"
 
 
+def test_set_device_name() -> None:
+    """
+    Send device name update payload via POST /api/name.
+    """
+    seen: dict[str, object] = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["method"] = request.method
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    resp = client.set_device_name("Busy Desk")
+    assert resp.result == "OK"
+    assert seen["path"] == "/api/name"
+    assert seen["method"] == "POST"
+    assert seen["body"] == {"name": "Busy Desk"}
+
+
+def test_set_device_name_rejects_empty() -> None:
+    """
+    Reject empty device names before sending request.
+    """
+    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    with pytest.raises(ValueError):
+        client.set_device_name("")
+
+
 def test_get_account_info():
     """
     Parse linked account info from the client.
@@ -281,6 +310,7 @@ def test_all_library_errors_inherit_base_error() -> None:
         exceptions.BusyBarResponseValidationError,
         exceptions.BusyBarError,
     )
+    assert issubclass(exceptions.BusyBarConversionError, exceptions.BusyBarError)
     assert issubclass(exceptions.BusyBarWebSocketError, exceptions.BusyBarError)
 
 

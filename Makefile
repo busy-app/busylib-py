@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-cov lint format clean build upload docs run-example
+.PHONY: help install install-dev test test-cov lint typecheck quality format clean build upload docs run-example
 
 ifneq (,$(filter run-example,$(firstword $(MAKECMDGOALS))))
 RUN_EXAMPLE_GOALS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -12,8 +12,10 @@ help:
 	@echo "  install-dev - Install in development mode with dev dependencies"
 	@echo "  test        - Run tests"
 	@echo "  test-cov    - Run tests with coverage"
-	@echo "  lint        - Run linting checks"
-	@echo "  format      - Format code with black"
+	@echo "  lint        - Run pre-commit style lint checks (ruff + pyproject-fmt --check)"
+	@echo "  typecheck   - Run pyright for src/busylib and tests"
+	@echo "  quality     - Run full local quality gates (lint + typecheck + test)"
+	@echo "  format      - Format code with ruff"
 	@echo "  clean       - Clean build artifacts"
 	@echo "  build       - Build package"
 	@echo "  upload      - Upload to PyPI"
@@ -30,20 +32,28 @@ install-dev:
 
 # Run tests
 test:
-	python -m pytest tests/ -v
+	./.venv/bin/pytest -q
 
 # Run tests with coverage
 test-cov:
-	# python -m pytest tests/ -v --cov=busylib --cov-report=html --cov-report=term
-	@echo "Not implemented yet"
+	./.venv/bin/pytest -q --cov=src/busylib --cov-report=term --cov-report=html
 
 # Run linting
 lint:
-	@echo "Not implemented yet"
+	./.venv/bin/ruff check src/busylib tests
+	./.venv/bin/ruff format --check src/busylib tests
+	./.venv/bin/pyproject-fmt --check pyproject.toml
+
+# Run static typing checks
+typecheck:
+	./.venv/bin/pyright --pythonpath=.venv/bin/python src/busylib tests
+
+# Run full quality gates
+quality: lint typecheck test
 
 # Format code
 format:
-	ruff format .
+	./.venv/bin/ruff format .
 
 # Clean build artifacts
 clean:

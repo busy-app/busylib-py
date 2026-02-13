@@ -52,21 +52,7 @@ PERIODIC_TASKS: dict[
     "info_update": (dashboard, 1),
     "link_check": (cloud_link, 10),
     "update_check": (update_check, 3600),
-    # "usb_check": (usb, 5),
 }
-
-
-def _filter_kwargs(
-    func: Callable[..., object],
-    kwargs: dict[str, object],
-) -> dict[str, object]:
-    """
-    Filter keyword arguments to only those accepted by the target callable.
-
-    This keeps monkeypatched or legacy helpers compatible with newer call sites.
-    """
-    accepted = set(inspect.signature(func).parameters)
-    return {key: value for key, value in kwargs.items() if key in accepted}
 
 
 def _should_switch_display(chunk: bytes) -> bool:
@@ -76,28 +62,18 @@ def _should_switch_display(chunk: bytes) -> bool:
     return any(seq in chunk for seq in SWITCH_DISPLAY_SEQUENCES)
 
 
-def _build_client(addr: str, token_arg: str | None) -> AsyncBusyBar:
-    """
-    Build an AsyncBusyBar client with LAN/cloud token handling.
-
-    This keeps address normalization and header logic in one place.
-    """
-    client = AsyncBusyBar(addr=addr, token=token_arg)
-    return client
-
-
-def _resolve_pixel_char(args: argparse.Namespace, icons: dict[str, str]) -> str:
+def _resolve_pixel_char(icons: dict[str, str]) -> str:
     """
     Resolve the pixel character for frame rendering.
 
-    Priority is CLI argument, settings override, default icon-set pixel, then fallback.
+    Priority is settings override, selected icon-set pixel, then fallback.
     """
-    cli_value = getattr(args, "pixel_char", None)
-    if isinstance(cli_value, str) and cli_value:
-        return cli_value
-
     if settings.pixel_char:
         return settings.pixel_char
+
+    default_icon_value = icons.get("pixel")
+    if default_icon_value:
+        return default_icon_value
 
     default_icon_value = ICON_SETS.get("nerd", {}).get("pixel")
     if default_icon_value:
@@ -142,7 +118,6 @@ async def _forward_keys(
     reader = StdinReader(loop, queue)
     decoder = KeyDecoder(keymap)
     command_active = False
-    command_buffer = ""
     command_input = command_input or CommandInput()
     reader.start()
     try:
@@ -191,18 +166,16 @@ async def _forward_keys(
 
                 Supports history navigation and ESC to cancel the prompt.
                 """
-                nonlocal command_active, command_buffer
+                nonlocal command_active
                 for event, payload in command_input.feed(data):
                     if event == "cancel":
                         command_active = False
-                        command_buffer = ""
                         if renderer:
                             renderer.update_command_line(None)
                         continue
                     if event == "submit":
                         line = (payload or "").strip()
                         command_active = False
-                        command_buffer = ""
                         command_input.begin()
                         if renderer:
                             renderer.update_command_line(None)
@@ -217,13 +190,13 @@ async def _forward_keys(
                         continue
                     if event == "update":
                         if isinstance(payload, tuple):
-                            command_buffer, command_cursor = payload
+                            command_text, command_cursor = payload
                         else:
-                            command_buffer = payload or ""
-                            command_cursor = len(command_buffer)
+                            command_text = payload or ""
+                            command_cursor = len(command_text)
                         if renderer:
                             renderer.update_command_line(
-                                command_buffer, cursor=command_cursor
+                                command_text, cursor=command_cursor
                             )
 
             if command_active:
@@ -237,7 +210,6 @@ async def _forward_keys(
                     if should_stop:
                         return
                 command_active = True
-                command_buffer = ""
                 command_input.begin()
                 if renderer:
                     renderer.update_command_line("", cursor=0)
@@ -553,7 +525,7 @@ async def _run(
                 status_message(message)
 
             _emit_status(TEXT_INIT_START)
-            client = _build_client(args.addr, args.token)
+            client = AsyncBusyBar(addr=args.addr, token=args.token)
             base_url = getattr(client, "base_url", None) or args.addr or "unknown"
             _emit_status(TEXT_INIT_CONNECTING.format(addr=base_url))
             command_registry = CommandRegistry()
@@ -585,7 +557,7 @@ async def _run(
             renderer = TerminalRenderer(
                 spec,
                 args.spacer,
-                _resolve_pixel_char(args, icons),
+                _resolve_pixel_char(icons),
                 icons,
                 frame_mode=getattr(args, "frame", settings.frame_mode),
                 clear_screen=clear_screen,
@@ -608,21 +580,22 @@ async def _run(
 
             tasks: list[asyncio.Task] = []
             if keymap:
-                forward_kwargs = _filter_kwargs(
-                    _forward_keys,
-                    {
-                        "client": client,
-                        "keymap": keymap,
-                        "stop_event": stop_event,
-                        "status_message": status_message,
-                        "command_queue": command_queue,
-                        "renderer": renderer,
-                        "on_switch": _switch_display,
-                        "command_registry": command_registry,
-                        "command_input": command_input,
-                    },
+                tasks.append(
+                    asyncio.create_task(
+                        _forward_keys(
+                            client=client,
+                            keymap=keymap,
+                            stop_event=stop_event,
+                            status_message=status_message,
+                            command_queue=command_queue,
+                            renderer=renderer,
+                            on_switch=_switch_display,
+                            command_registry=command_registry,
+                            command_input=command_input,
+                            input_capture=input_capture,
+                        )
+                    )
                 )
-                tasks.append(asyncio.create_task(_forward_keys(**forward_kwargs)))
             tasks.append(
                 asyncio.create_task(
                     _run_command_queue(
@@ -634,7 +607,7 @@ async def _run(
 
             async def _periodic_loop() -> None:
                 """
-                Periodically refresh device snapshot and USB status.
+                Periodically refresh renderer info tasks.
 
                 Uses the configured intervals to avoid excessive polling.
                 """
