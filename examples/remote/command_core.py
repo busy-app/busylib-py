@@ -10,6 +10,7 @@ from typing import TypeAlias
 
 CommandHandler = Callable[[list[str]], Awaitable[None] | None]
 CommandEvent = tuple[str, tuple[str, int] | str | None]
+CommandResult = tuple[bool, str | None]
 
 
 class CommandInput:
@@ -173,6 +174,18 @@ class CommandInput:
 
         Direction is "up" or "down".
         """
+        if direction == "left":
+            if self._cursor > 0:
+                self._cursor -= 1
+                events.append(("update", (self._buffer, self._cursor)))
+            return
+
+        if direction == "right":
+            if self._cursor < len(self._buffer):
+                self._cursor += 1
+                events.append(("update", (self._buffer, self._cursor)))
+            return
+
         if not self._history:
             return
         if direction == "up":
@@ -197,26 +210,6 @@ class CommandInput:
             self._cursor = len(self._buffer)
             events.append(("update", (self._buffer, self._cursor)))
             return
-
-        if direction == "left":
-            if self._cursor > 0:
-                self._cursor -= 1
-                events.append(("update", (self._buffer, self._cursor)))
-            return
-
-        if direction == "right":
-            if self._cursor < len(self._buffer):
-                self._cursor += 1
-                events.append(("update", (self._buffer, self._cursor)))
-
-
-def register(command: str, handler: CommandHandler) -> None:
-    """
-    Register a command handler in the default registry.
-
-    This provides a simple module-level API for extensions.
-    """
-    _DEFAULT_REGISTRY.register(command, handler)
 
 
 def register_command(
@@ -281,17 +274,29 @@ class CommandBase:
         """
         raise NotImplementedError
 
-    async def handle(self, argv: list[str]) -> bool:
+    async def handle(self, argv: list[str]) -> CommandResult:
         """
         Parse arguments and run the command.
+
+        Returns a tuple of (handled, error_message).
         """
         parser = self.build_parser()
         try:
             parsed = parser.parse_args(self._normalize_argv(argv))
-        except CommandParseError:
-            return False
+        except CommandParseError as exc:
+            message = str(exc) if str(exc) else "Invalid command arguments"
+            return False, message
         await self.run(parsed)
-        return True
+        return True, None
+
+    @classmethod
+    def build(cls, **_deps: object) -> CommandBase | None:
+        """
+        Optionally build the command with provided dependencies.
+
+        Returns None when the command cannot be constructed.
+        """
+        return None
 
     def _normalize_argv(self, argv: list[str]) -> list[str]:
         """
@@ -349,25 +354,85 @@ class CommandRegistry:
             return
         raise TypeError("Command entry must be a CommandBase")
 
-    async def handle(self, line: str) -> bool:
+    def get_entry(self, name: str) -> CommandEntry | None:
+        """
+        Return a registered command entry by name.
+
+        Lookup is case-insensitive and ignores surrounding whitespace.
+        """
+        normalized = name.strip().lower()
+        if not normalized:
+            return None
+        return self._handlers.get(normalized)
+
+    def list_command_objects(self) -> list[CommandBase]:
+        """
+        Return unique command objects stored in the registry.
+
+        Aliases registered as plain handlers are not duplicated here.
+        """
+        seen: set[int] = set()
+        commands: list[CommandBase] = []
+        for entry in self._handlers.values():
+            if not isinstance(entry, CommandBase):
+                continue
+            marker = id(entry)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            commands.append(entry)
+        return commands
+
+    def find_command_object(self, name: str) -> CommandBase | None:
+        """
+        Resolve a command object by canonical name or alias.
+
+        Returns None when no command object is registered for the name.
+        """
+        normalized = name.strip().lower()
+        if not normalized:
+            return None
+        direct = self._handlers.get(normalized)
+        if isinstance(direct, CommandBase):
+            return direct
+        for command in self.list_command_objects():
+            if normalized in {alias.lower() for alias in command.aliases}:
+                return command
+        return None
+
+    def list_commands(self) -> list[str]:
+        """
+        Return sorted canonical command names.
+
+        Aliases are excluded so help output stays compact.
+        """
+        aliases = {
+            alias.lower()
+            for command in self.list_command_objects()
+            for alias in command.aliases
+        }
+        names = {name for name in self._handlers if name not in aliases}
+        return sorted(names)
+
+    async def handle(self, line: str) -> CommandResult:
         """
         Parse a command line and dispatch to the registered handler.
 
-        Returns True when a handler was found and invoked.
+        Returns a tuple of (handled, error_message).
         """
         parts = self._split_line(line)
         if not parts:
-            return False
+            return False, None
         name = parts[0].lower()
         handler = self._handlers.get(name)
         if handler is None:
-            return False
+            return False, f"Unknown command: {name}"
         if isinstance(handler, CommandBase):
             return await handler.handle(parts[1:])
         result = handler(parts[1:])
         if asyncio.iscoroutine(result):
             await result
-        return True
+        return True, None
 
     @staticmethod
     def _split_line(line: str) -> list[str]:
@@ -378,15 +443,3 @@ class CommandRegistry:
             return shlex.split(line, posix=True)
         except ValueError:
             return []
-
-
-_DEFAULT_REGISTRY = CommandRegistry()
-
-
-def get_registry() -> CommandRegistry:
-    """
-    Return the default command registry.
-
-    Consumers can use it to register or invoke commands.
-    """
-    return _DEFAULT_REGISTRY

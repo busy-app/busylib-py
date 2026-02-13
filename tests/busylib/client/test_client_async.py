@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -53,6 +55,39 @@ async def test_get_device_name_and_time_async():
     assert name.name == "BusyBar"
     time_info = await client.get_device_time()
     assert time_info.timestamp == "2024-01-01T10:00:00"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_set_device_name_async() -> None:
+    """
+    Send device name update payload via async POST /api/name.
+    """
+    seen: dict[str, object] = {}
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["method"] = request.method
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    resp = await client.set_device_name("Busy Desk")
+    assert resp.result == "OK"
+    assert seen["path"] == "/api/name"
+    assert seen["method"] == "POST"
+    assert seen["body"] == {"name": "Busy Desk"}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_set_device_name_async_rejects_empty() -> None:
+    """
+    Reject empty device names before async request send.
+    """
+    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    with pytest.raises(ValueError):
+        await client.set_device_name("")
     await client.aclose()
 
 

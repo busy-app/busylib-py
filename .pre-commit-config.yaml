@@ -14,6 +14,7 @@ repos:
     hooks:
       - id: pyright
         files: ^(src/busylib/|tests/)
+        args: ["--pythonpath=.venv/bin/python"]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:

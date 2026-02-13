@@ -2,10 +2,59 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Literal, Sequence
+from typing import Annotated, Any, Literal, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel as PydanticBaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+)
 from pydantic_extra_types.color import Color
+
+from . import exceptions
+
+
+class BaseModel(PydanticBaseModel):
+    """
+    Base response model with domain-level validation error wrapping.
+
+    Any pydantic validation failure is converted into a BusyBar-specific
+    exception so callers can rely on a stable error hierarchy.
+    """
+
+    @classmethod
+    def model_validate(
+        cls,
+        obj: Any,
+        *,
+        strict: bool | None = None,
+        from_attributes: bool | None = None,
+        context: Any | None = None,
+        by_alias: bool | None = None,
+        by_name: bool | None = None,
+        extra: Any | None = None,
+    ) -> Any:
+        """
+        Validate input object and convert schema errors to domain exceptions.
+        """
+        try:
+            return super().model_validate(
+                obj,
+                strict=strict,
+                from_attributes=from_attributes,
+                context=context,
+                by_alias=by_alias,
+                by_name=by_name,
+                extra=extra,
+            )
+        except ValidationError as exc:
+            raise exceptions.BusyBarResponseValidationError(
+                model=cls.__name__,
+                details=str(exc),
+                original=exc,
+            ) from exc
 
 
 class StrEnum(str, Enum):
@@ -125,6 +174,12 @@ class DeviceNameResponse(BaseModel):
     name: str | None = None
     device: str | None = None
     value: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class DeviceNameUpdate(BaseModel):
+    name: str = Field(min_length=1)
 
     model_config = ConfigDict(extra="ignore")
 

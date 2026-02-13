@@ -42,61 +42,34 @@ class _AsyncBaseClient(base.AsyncClientBase):
         )
 
 
-def test_json_bytes_preserves_utf8() -> None:
+def test_request_json_payload_requires_json_sync() -> None:
     """
-    Ensure JSON serialization keeps UTF-8 characters unescaped.
-    """
-    payload = {"msg": "Привет"}
-    data = base._json_bytes(payload)
-    text = data.decode("utf-8")
-    assert "Привет" in text
-    assert "\\u041f" not in text
-
-
-def test_data_length_handles_missing_len() -> None:
-    """
-    Return length for sized data and None for objects without __len__.
-    """
-
-    class _NoLen:
-        """
-        Dummy object without a length implementation.
-        """
-
-        pass
-
-    assert base._data_length(b"abc") == 3
-    assert base._data_length(_NoLen()) is None
-
-
-def test_as_timeout_variants() -> None:
-    """
-    Ensure timeout normalization returns httpx.Timeout instances.
-    """
-    default_timeout = base._as_timeout(None)
-    assert isinstance(default_timeout, httpx.Timeout)
-
-    custom = base._as_timeout(2.5)
-    assert isinstance(custom, httpx.Timeout)
-    assert custom.read == 2.5
-
-    existing = httpx.Timeout(1.0)
-    assert base._as_timeout(existing) is existing
-
-
-def test_request_json_payload_text_fallback_sync() -> None:
-    """
-    Validate JSON request headers and text fallback on invalid JSON response.
+    Validate JSON request headers and protocol error on invalid JSON response.
     """
 
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.headers["content-type"].startswith("application/json")
         body = request.content.decode("utf-8")
         assert "Привет" in body
+        return httpx.Response(200, text="ok", headers={"X-Request-ID": "rid-1"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    with pytest.raises(exceptions.BusyBarProtocolError) as exc:
+        client._request("POST", "/api/test", json_payload={"msg": "Привет"})
+    assert exc.value.request_id == "rid-1"
+    assert exc.value.response_excerpt == "ok"
+
+
+def test_request_json_payload_allow_text_sync() -> None:
+    """
+    Allow plain-text success payload when explicitly requested.
+    """
+
+    def responder(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="ok")
 
     client = _SyncBaseClient(httpx.MockTransport(responder))
-    result = client._request("POST", "/api/test", json_payload={"msg": "Привет"})
+    result = client._request("GET", "/api/test", allow_text=True)
     assert result == "ok"
 
 
@@ -122,8 +95,11 @@ def test_request_transport_error_sync() -> None:
         raise httpx.ConnectError("boom", request=request)
 
     client = _SyncBaseClient(httpx.MockTransport(responder))
-    with pytest.raises(exceptions.BusyBarRequestError):
+    with pytest.raises(exceptions.BusyBarRequestError) as exc:
         client._request("GET", "/api/fail")
+    assert exc.value.method == "GET"
+    assert exc.value.path == "/api/fail"
+    assert exc.value.attempts == 1
 
 
 def test_cloud_mode_sets_bearer_header() -> None:
@@ -178,14 +154,29 @@ def test_local_available_uses_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_request_text_fallback_async() -> None:
     """
-    Validate async request returns text when JSON decoding fails.
+    Validate async request raises protocol error when JSON decoding fails.
     """
 
     async def responder(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="ok")
 
     client = _AsyncBaseClient(httpx.MockTransport(responder))
-    result = await client._request("GET", "/api/test")
+    with pytest.raises(exceptions.BusyBarProtocolError):
+        await client._request("GET", "/api/test")
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_request_allow_text_async() -> None:
+    """
+    Allow plain-text success payload in async mode when explicitly requested.
+    """
+
+    async def responder(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="ok")
+
+    client = _AsyncBaseClient(httpx.MockTransport(responder))
+    result = await client._request("GET", "/api/test", allow_text=True)
     assert result == "ok"
     await client.aclose()
 

@@ -7,7 +7,7 @@ from urllib.parse import urlparse, urlunparse
 
 import websockets
 
-from .. import display, types
+from .. import display, exceptions, types
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -348,18 +348,29 @@ class AsyncDisplayMixin(AsyncClientBase):
         if token:
             ws_url += f"?x-api-token={token}"
 
-        async with websockets.connect(
-            ws_url,
-            max_size=None,
-            ping_interval=None,
-        ) as ws:
-            await ws.send(json.dumps({"display": target.index}))
-            async for message in ws:
-                if isinstance(message, bytes):
-                    decoded = _decode_frame_bytes(message, target.index, from_ws=True)
-                    yield decoded if decoded is not None else message
-                else:
-                    yield message
+        try:
+            async with websockets.connect(
+                ws_url,
+                max_size=None,
+                ping_interval=None,
+            ) as ws:
+                await ws.send(json.dumps({"display": target.index}))
+                async for message in ws:
+                    if isinstance(message, bytes):
+                        decoded = _decode_frame_bytes(
+                            message,
+                            target.index,
+                            from_ws=True,
+                        )
+                        yield decoded if decoded is not None else message
+                    else:
+                        yield message
+        except Exception as exc:
+            raise exceptions.BusyBarWebSocketError(
+                "WebSocket streaming failed",
+                path="/api/screen/ws",
+                original=exc,
+            ) from exc
 
     def _ws_headers(self, headers: dict[str, str]) -> dict[str, str]:
         """

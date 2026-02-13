@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from busylib import exceptions
 from busylib.converter import convert_for_storage
 
 
-def test_convert_for_storage_fallback_on_error(monkeypatch) -> None:
+def test_convert_for_storage_raises_domain_error_on_failure(monkeypatch) -> None:
     """
-    Ensure converter errors fall back to original path and data.
+    Ensure converter errors are exposed as domain conversion failures.
     """
 
     def _boom(_path: str, _data: bytes) -> tuple[str, bytes] | None:
@@ -17,9 +18,10 @@ def test_convert_for_storage_fallback_on_error(monkeypatch) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr("busylib.converter.audio.convert", _boom)
-    path, payload = convert_for_storage("sound.mp3", b"abc")
-    assert path == "sound.mp3"
-    assert payload == b"abc"
+    with pytest.raises(exceptions.BusyBarConversionError) as exc:
+        convert_for_storage("sound.mp3", b"abc")
+    assert exc.value.path == "sound.mp3"
+    assert isinstance(exc.value.__cause__, RuntimeError)
 
 
 def test_convert_for_storage_passthrough_unknown_ext() -> None:
@@ -33,7 +35,9 @@ def test_convert_for_storage_passthrough_unknown_ext() -> None:
 
 def test_convert_for_storage_rejects_video_formats() -> None:
     """
-    Ensure video formats raise NotImplementedError to block copy.
+    Ensure unsupported video formats raise a domain conversion error.
     """
-    with pytest.raises(NotImplementedError, match="Video/animation conversion"):
+    with pytest.raises(exceptions.BusyBarConversionError) as exc:
         convert_for_storage("clip.mp4", b"data")
+    assert exc.value.path == "clip.mp4"
+    assert isinstance(exc.value.__cause__, NotImplementedError)

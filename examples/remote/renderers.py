@@ -4,14 +4,13 @@ import logging
 import re
 import shutil
 import time
+import unicodedata
 
 from busylib import display
 from examples.remote.settings import settings
 from busylib.features import DeviceSnapshot
-from pydantic_extra_types.color import Color
 from examples.remote.keymap import KeyMap
 
-from examples.remote.constants import ICON_SETS
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,6 @@ class TerminalRenderer:
         pixel_char: str,
         icons: dict[str, str],
         frame_mode: str = "horizontal",
-        frame_color: str = "#00FF00",
         *,
         clear_screen,
     ) -> None:
@@ -62,14 +60,13 @@ class TerminalRenderer:
         self._size_info: tuple[int, int, int, int] = (0, 0, 0, 0)
         self._cleared = False
         self._frame_mode = frame_mode
-        self._frame_color = self._parse_frame_color(frame_color)
         frame_char = settings.frame_char
         self._frame_char = frame_char[0] if frame_char else "-"
         front_req = self._required_size(display.FRONT_DISPLAY)
         back_req = self._required_size(display.BACK_DISPLAY)
         self._alt_required = {"front": front_req, "back": back_req}
         self._terminal_size = (80, 24)
-        self._command_line: str | None = None
+        self._command_line = ""
         self._update_size(force=True)
         self._help_active = False
         self._help_keymap: KeyMap | None = None
@@ -82,6 +79,8 @@ class TerminalRenderer:
         self._update_available: bool | None = None
         self._last_frame: bytes | None = None
         self._command_line_cursor: int | None = None
+        self._log_lines: list[str] = []
+        self._max_log_lines = 200
 
     def _get_terminal_size(self) -> tuple[int, int]:
         """
@@ -96,17 +95,6 @@ class TerminalRenderer:
         self._terminal_size = (cols, rows)
         return cols, rows
 
-    def _emoji_extra_width(self, *parts: str) -> int:
-        """
-        Estimate extra width for emoji icons in the info bar.
-
-        Emoji icons often occupy two terminal columns.
-        """
-        if self.icons != ICON_SETS["emoji"]:
-            return 0
-        icon_values = [value for key, value in self.icons.items() if key != "pixel"]
-        return sum(part.count(icon) for part in parts for icon in icon_values)
-
     def _update_size(self, *, force: bool = False) -> None:
         """
         Refresh cached terminal size information when needed.
@@ -116,7 +104,7 @@ class TerminalRenderer:
         now = time.monotonic()
         if force or now >= self._next_size_check:
             cols, rows = self._get_terminal_size()
-            extra_rows = 1 if self._command_line is not None else 0
+            extra_rows = 1
             req_cols, req_rows = self._required_size(self.spec, extra_rows=extra_rows)
             self._size_info = (cols, rows, req_cols, req_rows)
             self._fits = cols >= req_cols and rows >= req_rows
@@ -159,19 +147,30 @@ class TerminalRenderer:
 
         lines: list[str] = []
         spacer_str = self.spacer or ""
+        if spacer_str and settings.black_pixel_mode == "space_bg":
+            spacer_str = "\x1b[48;2;0;0;0m \x1b[0m"
         for y in range(self.spec.height):
             row_parts: list[str] = []
             for x in range(self.spec.width):
                 idx = (y * self.spec.width + x) * 3
                 b, g, r = bgr_bytes[idx : idx + 3]
-                if b == g == r == 0:
+                original_black = b == g == r == 0
+                if settings.invert_colors:
+                    r, g, b = 255 - r, 255 - g, 255 - b
+                if original_black and settings.black_pixel_mode == "transparent":
                     cell = " "
+                elif original_black and settings.black_pixel_mode == "space_bg":
+                    cell = "\x1b[48;2;0;0;0m \x1b[0m"
+                elif settings.black_pixel_mode == "space_bg":
+                    cell = f"\x1b[48;2;0;0;0m\x1b[38;2;{r};{g};{b}m{self.pixel_char}\x1b[0m"
+                elif settings.background_mode == "match":
+                    cell = f"\x1b[48;2;{r};{g};{b}m{self.pixel_char}\x1b[0m"
                 else:
                     cell = f"\x1b[38;2;{r};{g};{b}m{self.pixel_char}\x1b[0m"
                 row_parts.append(cell)
             lines.append(spacer_str.join(row_parts))
 
-        frame_lines: list[str] = ["\x1b[H"]
+        frame_lines: list[str] = []
 
         header = self._format_info_line()
         if header:
@@ -179,14 +178,22 @@ class TerminalRenderer:
 
         frame_lines.extend(self._apply_frame(lines))
 
-        if self._command_line is not None:
-            frame_lines.append(
-                self._format_command_line(
-                    self._command_line, cursor=self._command_line_cursor
-                )
-            )
+        cols, rows = self._get_terminal_size()
+        command_line = self._format_command_line(
+            self._command_line,
+            cursor=self._command_line_cursor,
+        )
+        base_rows = len(frame_lines) + 1
+        log_rows = max(0, rows - base_rows)
+        logs = self._log_lines[-log_rows:] if log_rows else []
+        log_canvas = logs + [""] * max(0, log_rows - len(logs))
 
-        print("\n".join(frame_lines), end="", flush=True)
+        output_lines = [*frame_lines, *log_canvas, command_line]
+        if not output_lines:
+            output_lines = [command_line]
+
+        clear_prefixed = [f"\x1b[2K{line}" for line in output_lines]
+        print("\x1b[H" + "\n".join(clear_prefixed), end="", flush=True)
 
     def _render_size_warning(
         self, cols: int, rows: int, required_cols: int, required_rows: int
@@ -249,12 +256,35 @@ class TerminalRenderer:
 
         Passing None hides the command line and restores default sizing.
         """
-        self._command_line = text
+        self._command_line = text or ""
         self._command_line_cursor = cursor
         if text is None and self._last_frame and not self._help_active:
             self._cleared = False
             self._clear_screen("command_line_hide", home=True)
             self.render(self._last_frame)
+
+    def append_log(self, text: str) -> None:
+        """
+        Append log text to the renderer log pane.
+
+        Empty lines are ignored to keep logs dense and readable.
+        """
+        for raw in text.splitlines():
+            line = raw.rstrip("\r")
+            if not line:
+                continue
+            self._log_lines.append(line)
+        if len(self._log_lines) > self._max_log_lines:
+            self._log_lines = self._log_lines[-self._max_log_lines :]
+        if self._last_frame and not self._help_active:
+            self.render(self._last_frame)
+
+    def update_status_line(self, text: str | None) -> None:
+        """
+        Compatibility shim for older call sites that push status text.
+        """
+        if text:
+            self.append_log(text)
 
     def _format_command_line(self, text: str, *, cursor: int | None) -> str:
         """
@@ -310,7 +340,7 @@ class TerminalRenderer:
         """
         mode = self._frame_mode
         if mode == "full":
-            return 2, 2
+            return 4, 2
         if mode == "horizontal":
             return 0, 2
         return 0, 0
@@ -330,34 +360,27 @@ class TerminalRenderer:
             return [horiz, *lines, horiz]
 
         side = self._frame_string(self._frame_char)
-        top = self._frame_string(self._frame_char * (content_width + 2))
-        bottom = self._frame_string(self._frame_char * (content_width + 2))
+        top = self._frame_string(self._frame_char * (content_width + 4))
+        bottom = self._frame_string(self._frame_char * (content_width + 4))
         framed = [top]
         for line in lines:
-            framed.append(f"{side}{line}{side}")
+            framed.append(f"{side} {line} {side}")
         framed.append(bottom)
         return framed
+
+    def _has_footer_line(self) -> bool:
+        """
+        Return True when a footer line (command or status) is visible.
+
+        Used to compute extra rows and layout requirements.
+        """
+        return True
 
     def _frame_string(self, text: str) -> str:
         """
         Apply frame color to a string.
         """
-        if not self._frame_color:
-            return text
-        r, g, b = self._frame_color
-        return f"\x1b[38;2;{r};{g};{b}m{text}\x1b[0m"
-
-    @staticmethod
-    def _parse_frame_color(color: str) -> tuple[int, int, int] | None:
-        """
-        Parse a color string into RGB.
-        """
-        try:
-            col = Color(color)
-        except ValueError:
-            return None
-        r, g, b = col.as_rgb_tuple()
-        return r, g, b
+        return text
 
     def _build_columns(self, segments: list[str], width: int) -> list[list[str]]:
         """
@@ -500,9 +523,16 @@ class TerminalRenderer:
 
         Trims segments to fit the available width.
         """
-        left_part = " ".join(left)
-        center_part = " ".join(center)
-        right_part = " ".join(right)
+        left_segments = list(left)
+        center_segments = list(center)
+        right_segments = list(right)
+
+        def build_parts() -> tuple[str, str, str]:
+            return (
+                " ".join(left_segments),
+                " ".join(center_segments),
+                " ".join(right_segments),
+            )
 
         def length_with_gaps(lp: str, cp: str, rp: str) -> int:
             gaps = (
@@ -510,27 +540,48 @@ class TerminalRenderer:
                 + (1 if cp and rp else 0)
                 + (1 if lp and not cp and rp else 0)
             )
-            extra = self._emoji_extra_width(lp, cp, rp)
-            return len(lp) + len(cp) + len(rp) + gaps + extra
+            return (
+                self._visible_len(lp)
+                + self._visible_len(cp)
+                + self._visible_len(rp)
+                + gaps
+            )
 
-        # Trim until fits: center -> left (end) -> right (start)
+        def content_len(lp: str, cp: str, rp: str) -> int:
+            return self._visible_len(lp) + self._visible_len(cp) + self._visible_len(rp)
+
+        def segment_len(segment: str) -> int:
+            return self._visible_len(segment)
+
+        def drop_longest_segment() -> bool:
+            candidates: list[tuple[int, str, int]] = []
+            for name, segments in (
+                ("center", center_segments),
+                ("left", left_segments),
+                ("right", right_segments),
+            ):
+                for idx, segment in enumerate(segments):
+                    candidates.append((segment_len(segment), name, idx))
+            if not candidates:
+                return False
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            _length, bucket, index = candidates[0]
+            if bucket == "center":
+                center_segments.pop(index)
+            elif bucket == "left":
+                left_segments.pop(index)
+            else:
+                right_segments.pop(index)
+            return True
+
+        left_part, center_part, right_part = build_parts()
         while length_with_gaps(left_part, center_part, right_part) > width:
-            if center_part:
-                center_part = center_part[:-1]
-                continue
-            if left_part:
-                left_part = left_part[:-1]
-                continue
-            if right_part:
-                right_part = right_part[1:]
-                continue
-            break
+            if not drop_longest_segment():
+                break
+            left_part, center_part, right_part = build_parts()
 
         # After trimming, spread remaining space evenly to left/right around center
-        occupied = (
-            len(left_part) + len(center_part) + len(right_part)
-            # + sum(1 for x in left + center + right)
-        )
+        occupied = content_len(left_part, center_part, right_part)
         gaps_available = max(0, width - occupied)
         gap_left = gaps_available // 2
         gap_right = gaps_available - gap_left
@@ -700,7 +751,14 @@ class TerminalRenderer:
 
         This helps align colored text in the terminal.
         """
-        return len(TerminalRenderer._strip_ansi(text))
+        stripped = TerminalRenderer._strip_ansi(text)
+        width = 0
+        for char in stripped:
+            if unicodedata.east_asian_width(char) in ("W", "F"):
+                width += 2
+            else:
+                width += 1
+        return width
 
     @staticmethod
     def _strip_ansi(text: str) -> str:

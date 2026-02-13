@@ -87,6 +87,35 @@ def test_get_device_name_and_time():
     assert time_info.timestamp == "2024-01-01T10:00:00"
 
 
+def test_set_device_name() -> None:
+    """
+    Send device name update payload via POST /api/name.
+    """
+    seen: dict[str, object] = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["method"] = request.method
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    resp = client.set_device_name("Busy Desk")
+    assert resp.result == "OK"
+    assert seen["path"] == "/api/name"
+    assert seen["method"] == "POST"
+    assert seen["body"] == {"name": "Busy Desk"}
+
+
+def test_set_device_name_rejects_empty() -> None:
+    """
+    Reject empty device names before sending request.
+    """
+    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    with pytest.raises(ValueError):
+        client.set_device_name("")
+
+
 def test_get_account_info():
     """
     Parse linked account info from the client.
@@ -144,13 +173,39 @@ def test_error_response_raises_api_error():
     """
 
     def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, json={"error": "fail", "code": 500})
+        return httpx.Response(
+            500,
+            json={"error": "fail", "code": 500},
+            headers={"X-Request-ID": "req-500"},
+        )
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
         client.get_version()
     assert exc.value.code == 500
+    assert exc.value.status_code == 500
+    assert exc.value.method == "GET"
+    assert exc.value.path == "/api/version"
+    assert exc.value.request_id == "req-500"
+    assert exc.value.response_excerpt == '{"error":"fail","code":500}'
     assert "fail" in str(exc.value)
+
+
+def test_api_error_has_truncated_excerpt() -> None:
+    """
+    Keep response excerpt compact for diagnostic fields in API errors.
+    """
+
+    def responder(_request: httpx.Request) -> httpx.Response:
+        long_text = "x" * 400
+        return httpx.Response(503, text=long_text)
+
+    client = make_client(responder)
+    with pytest.raises(exceptions.BusyBarAPIError) as exc:
+        client.get_version()
+    assert exc.value.response_excerpt is not None
+    assert exc.value.response_excerpt.endswith("...")
+    assert len(exc.value.response_excerpt) <= 259
 
 
 def test_plain_text_error_response():
@@ -222,6 +277,41 @@ def test_retry_on_transport_error():
     resp = client.enable_wifi()
     assert resp.result == "OK"
     assert calls["count"] == 2
+
+
+def test_response_validation_error_is_wrapped() -> None:
+    """
+    Wrap model validation failures into BusyBarResponseValidationError.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/version"
+        return httpx.Response(
+            200,
+            json={"api_semver": "1.2.0", "build_date": {"invalid": True}},
+        )
+
+    client = make_client(responder, api_version="1.2.0")
+    with pytest.raises(exceptions.BusyBarResponseValidationError) as exc:
+        client.get_version()
+    assert exc.value.model == "VersionInfo"
+
+
+def test_all_library_errors_inherit_base_error() -> None:
+    """
+    Ensure all public exception types share a single base class.
+    """
+    assert issubclass(exceptions.BusyBarAPIError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarRequestError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarAPIVersionError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarUsbError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarProtocolError, exceptions.BusyBarError)
+    assert issubclass(
+        exceptions.BusyBarResponseValidationError,
+        exceptions.BusyBarError,
+    )
+    assert issubclass(exceptions.BusyBarConversionError, exceptions.BusyBarError)
+    assert issubclass(exceptions.BusyBarWebSocketError, exceptions.BusyBarError)
 
 
 def test_draw_on_display_sends_utf8_body():

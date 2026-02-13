@@ -19,10 +19,10 @@ ICON_SETS: dict[str, dict[str, str]] = {
         "usb_disconnected": "❌",
         "link_connected": "🔗",
         "link_disconnected": "⛓️‍💥",
-        "update_available": "⬆️",
+        "update_available": "⬆️ ",
     },
     "nerd": {
-        "pixel": "",
+        "pixel": "⬤",
         "device": "󰌢",
         "system": "",
         "storage": "󰋊",
@@ -39,10 +39,15 @@ ICON_SETS: dict[str, dict[str, str]] = {
         "usb_disconnected": "",
         "link_connected": "󰌷",
         "link_disconnected": "󰌸",
-        "update_available": "󰏔",
+        "update_available": "󰏔 ",
     },
     "text": {
-        "pixel": "*",
+        # to use with BUSYBAR_REMOTE_PIXEL_CHAR
+        # ● BLACK CIRCLE (U+25CF)
+        # ■ BLACK SQUARE (U+25A0)
+        # █ FULL BLOCK (U+2588)
+        # simple: # / @ / M / W
+        "pixel": "■",
         "device": "NAME",
         "system": "SYS",
         "storage": "DISK",
@@ -53,15 +58,22 @@ ICON_SETS: dict[str, dict[str, str]] = {
         "wifi_low": "WIFI1",
         "wifi_mid": "WIFI2",
         "wifi_high": "WIFI3",
-        "battery_full": "HB",
-        "battery_low": "LB!",
+        "battery_full": "B^",
+        "battery_low": "B!",
         "usb_connected": "USB",
         "usb_disconnected": "NOUSB",
         "link_connected": "LINK",
         "link_disconnected": "NOLINK",
-        "update_available": "UPDATE",
+        "update_available": "+",
     },
 }
+
+MATRIX_PIXELS_SMILES = "😀😃😄😁😆😅😂🤣😭😗😙😚😘😍🤩🥳🤗"
+MATRIX_PIXELS_ASCII = " .:-=+*#%@"
+MATRIX_PIXELS_UTF = "░▒▓█"
+MATRIX_PIXELS_ANIMALS = "🐶🐱🐭🐹🐰🦊🐻🐼🐻‍❄️🐨🐯🦁🐮🐷🐽"
+MATRIX_PIXELS_FOODS = "🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🍈🍒🍑🥭🍍🥥🥝"
+MATRIX_PIXELS_TRANSPORTS = "🚗🚕🚙🚌🚐🏎️🚓🚑🚒🚐🚜🛳️🛥️✈️🛩️"
 
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_TERMINAL_SIZE = (80, 24)
@@ -103,4 +115,3 @@ TEXT_ARG_LOG_FILE = "Log file path (disabled by default)"
 TEXT_ARG_NO_INPUT = "Disable forwarding terminal keys to /api/input"
 TEXT_ARG_KEYMAP = "Optional JSON keymap file"
 TEXT_ARG_FRAME = "Frame mode around display: full, horizontal, none"
-TEXT_ARG_FRAME_COLOR = "Frame color (hex or CSS-style color)"

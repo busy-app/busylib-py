@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar
+from busylib.client import assets as assets_client
 from busylib.client import display as display_client
 
 
@@ -46,6 +47,54 @@ def test_assets_upload_and_delete_sync() -> None:
     assert resp.result == "OK"
 
 
+def test_assets_upload_sync_uses_extended_timeout_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Ensure sync asset upload passes the mixin default upload timeout.
+    """
+    client = _make_sync_client(
+        lambda _request: httpx.Response(200, json={"result": "OK"})
+    )
+    captured: dict[str, object] = {}
+
+    def fake_request(*_args, **kwargs):
+        """
+        Capture timeout argument passed to the low-level request.
+        """
+        captured["timeout"] = kwargs.get("timeout")
+        return {"result": "OK"}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    resp = client.upload_asset("app", "file.bin", b"data")
+    assert resp.result == "OK"
+    assert captured["timeout"] == assets_client.ASSET_UPLOAD_TIMEOUT
+
+
+def test_assets_upload_sync_allows_timeout_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Ensure sync asset upload accepts an explicit timeout override.
+    """
+    client = _make_sync_client(
+        lambda _request: httpx.Response(200, json={"result": "OK"})
+    )
+    captured: dict[str, object] = {}
+
+    def fake_request(*_args, **kwargs):
+        """
+        Capture timeout argument passed to the low-level request.
+        """
+        captured["timeout"] = kwargs.get("timeout")
+        return {"result": "OK"}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    resp = client.upload_asset("app", "file.bin", b"data", timeout=7.5)
+    assert resp.result == "OK"
+    assert captured["timeout"] == 7.5
+
+
 @pytest.mark.asyncio
 async def test_assets_upload_and_delete_async() -> None:
     """
@@ -72,6 +121,58 @@ async def test_assets_upload_and_delete_async() -> None:
 
     resp = await client.delete_app_assets("app")
     assert resp.result == "OK"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_assets_upload_async_uses_extended_timeout_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Ensure async asset upload passes the mixin default upload timeout.
+    """
+    client = _make_async_client(
+        lambda _request: httpx.Response(200, json={"result": "OK"})
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_request(*_args, **kwargs):
+        """
+        Capture timeout argument passed to the low-level async request.
+        """
+        captured["timeout"] = kwargs.get("timeout")
+        return {"result": "OK"}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    resp = await client.upload_asset("app", "file.bin", b"data")
+    assert resp.result == "OK"
+    assert captured["timeout"] == assets_client.ASSET_UPLOAD_TIMEOUT
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_assets_upload_async_allows_timeout_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Ensure async asset upload accepts an explicit timeout override.
+    """
+    client = _make_async_client(
+        lambda _request: httpx.Response(200, json={"result": "OK"})
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_request(*_args, **kwargs):
+        """
+        Capture timeout argument passed to the low-level async request.
+        """
+        captured["timeout"] = kwargs.get("timeout")
+        return {"result": "OK"}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    resp = await client.upload_asset("app", "file.bin", b"data", timeout=9.5)
+    assert resp.result == "OK"
+    assert captured["timeout"] == 9.5
     await client.aclose()
 
 

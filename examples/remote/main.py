@@ -11,7 +11,6 @@ from examples.remote.constants import (
     TEXT_ARG_ADDR,
     TEXT_ARG_DESC,
     TEXT_ARG_FRAME,
-    TEXT_ARG_FRAME_COLOR,
     TEXT_ARG_HTTP,
     TEXT_ARG_KEYMAP,
     TEXT_ARG_LOG_FILE,
@@ -20,7 +19,7 @@ from examples.remote.constants import (
     TEXT_ARG_SPACER,
     TEXT_ARG_TOKEN,
 )
-from examples.remote.settings import settings
+from examples.remote.settings import RemoteSettings, settings
 from examples.remote.terminal_utils import (
     _clear_screen,
     _clear_terminal,
@@ -46,12 +45,31 @@ def _select_icon_set(mode: str) -> dict[str, str]:
 ICONS = _select_icon_set(settings.icon_mode)
 
 
+def _build_env_help_epilog() -> str:
+    """
+    Build `-h` epilog with supported env variables and default values.
+
+    The list is derived from `RemoteSettings` fields and env prefix.
+    """
+    env_prefix = str(RemoteSettings.model_config.get("env_prefix") or "")
+    lines = ["Environment variables (defaults from settings):"]
+    for name, field in RemoteSettings.model_fields.items():
+        env_name = f"{env_prefix}{name}".upper()
+        default_value = field.get_default(call_default_factory=True)
+        lines.append(f"  {env_name} (default: {default_value!r})")
+    return "\n".join(lines)
+
+
 def parse_args() -> argparse.Namespace:
     """
     Parse CLI arguments for streaming and input forwarding.
     Keep defaults aligned with file-only logging.
     """
-    parser = argparse.ArgumentParser(description=TEXT_ARG_DESC)
+    parser = argparse.ArgumentParser(
+        description=TEXT_ARG_DESC,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_build_env_help_epilog(),
+    )
     parser.add_argument("--addr", default=None, help=TEXT_ARG_ADDR)
     parser.add_argument("--token", default=None, help=TEXT_ARG_TOKEN)
     parser.add_argument(
@@ -92,11 +110,6 @@ def parse_args() -> argparse.Namespace:
         choices=["full", "horizontal", "none"],
         default=settings.frame_mode,
         help=TEXT_ARG_FRAME,
-    )
-    parser.add_argument(
-        "--frame-color",
-        default=settings.frame_color,
-        help=TEXT_ARG_FRAME_COLOR,
     )
     return parser.parse_args()
 

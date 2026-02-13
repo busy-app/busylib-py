@@ -42,20 +42,29 @@ _DISPLAY_BY_INDEX = {
 }
 
 
-def get_display_spec(display: DisplayName | int | str | None) -> DisplaySpec:
+def get_display_spec(
+    display: DisplaySpec | DisplayName | int | str | None,
+) -> DisplaySpec:
     """
-    Resolve display spec by enum, index, or string.
-    Defaults to FRONT display when None/unknown.
+    Resolve a display spec using explicit front/back selection.
+
+    `front` is used only when display is None. Any unsupported display value
+    raises ValueError to avoid silently rendering to the wrong screen.
     """
     if isinstance(display, DisplaySpec):
         return display
+    if display is None:
+        return FRONT_DISPLAY
     if isinstance(display, DisplayName):
-        return _DISPLAY_BY_NAME.get(display, FRONT_DISPLAY)
+        return _DISPLAY_BY_NAME[display]
     if isinstance(display, int):
-        return _DISPLAY_BY_INDEX.get(display, FRONT_DISPLAY)
+        if display in _DISPLAY_BY_INDEX:
+            return _DISPLAY_BY_INDEX[display]
+        raise ValueError(f"Unsupported display index: {display}")
     if isinstance(display, str):
-        display_lower = display.lower()
-        for spec in _DISPLAY_BY_NAME.values():
-            if spec.name.value == display_lower:
+        display_lower = display.strip().lower()
+        for name, spec in _DISPLAY_BY_NAME.items():
+            if name.value == display_lower:
                 return spec
-    return FRONT_DISPLAY
+        raise ValueError(f"Unsupported display name: {display}")
+    raise ValueError(f"Unsupported display value type: {type(display).__name__}")

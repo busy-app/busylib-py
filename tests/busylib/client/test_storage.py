@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable, Iterable
 
+import httpx
 import pytest
 
-from busylib import types
+from busylib import exceptions, types
 from busylib.client.base import JsonType
 from busylib.client.storage import AsyncStorageMixin, StorageMixin
 
@@ -30,7 +31,8 @@ class _DummyStorage(StorageMixin):
         json_payload: JsonType | None = None,
         data: bytes | Iterable[bytes] | None = None,
         expect_bytes: bool = False,
-        timeout: float | None = None,
+        allow_text: bool = False,
+        timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Record request arguments and return a success payload.
@@ -47,6 +49,7 @@ class _DummyStorage(StorageMixin):
                 "json_payload": json_payload,
                 "data": payload,
                 "expect_bytes": expect_bytes,
+                "allow_text": allow_text,
                 "timeout": timeout,
             }
         )
@@ -78,7 +81,8 @@ class _DummyAsyncStorage(AsyncStorageMixin):
         json_payload: JsonType | None = None,
         data: bytes | AsyncIterable[bytes] | None = None,
         expect_bytes: bool = False,
-        timeout: float | None = None,
+        allow_text: bool = False,
+        timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Record async request arguments and return a success payload.
@@ -98,6 +102,7 @@ class _DummyAsyncStorage(AsyncStorageMixin):
                 "json_payload": json_payload,
                 "data": payload,
                 "expect_bytes": expect_bytes,
+                "allow_text": allow_text,
                 "timeout": timeout,
             }
         )
@@ -220,3 +225,50 @@ async def test_read_list_remove_async() -> None:
     assert client.calls[1]["params"] == {"path": "/ext"}
     assert client.calls[2]["path"] == "/api/storage/remove"
     assert client.calls[2]["params"] == {"path": "/ext/a.txt"}
+
+
+def test_write_storage_file_sync_raises_conversion_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Propagate conversion failures as BusyBarConversionError in sync uploads.
+    """
+
+    def _boom(path: str, _data: bytes) -> tuple[str, bytes]:
+        """
+        Simulate conversion failure for storage upload.
+        """
+        raise exceptions.BusyBarConversionError(
+            "Failed to convert file for storage",
+            path=path,
+        )
+
+    monkeypatch.setattr("busylib.client.storage.convert_for_storage", _boom)
+    client = _DummyStorage()
+
+    with pytest.raises(exceptions.BusyBarConversionError):
+        client.write_storage_file("/ext/test.mp3", b"abc")
+
+
+@pytest.mark.asyncio
+async def test_write_storage_file_async_raises_conversion_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Propagate conversion failures as BusyBarConversionError in async uploads.
+    """
+
+    def _boom(path: str, _data: bytes) -> tuple[str, bytes]:
+        """
+        Simulate conversion failure for storage upload.
+        """
+        raise exceptions.BusyBarConversionError(
+            "Failed to convert file for storage",
+            path=path,
+        )
+
+    monkeypatch.setattr("busylib.client.storage.convert_for_storage", _boom)
+    client = _DummyAsyncStorage()
+
+    with pytest.raises(exceptions.BusyBarConversionError):
+        await client.write_storage_file("/ext/test.mp3", b"abc")
