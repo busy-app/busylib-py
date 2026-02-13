@@ -1,6 +1,8 @@
 .DS_Store
 .history
-.version.py
+_version.py
+plans/
+uv.lock
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
