@@ -60,6 +60,10 @@ extend-exclude = [
   "__pycache__",
   "build",
 ]
+extend-select = [
+  # https://docs.astral.sh/ruff/rules/#pyupgrade-up
+  "UP",
+]
 
 [tool.pytest]
 ini_options.addopts = "-q"
