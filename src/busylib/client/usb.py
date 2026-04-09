@@ -72,7 +72,7 @@ def _read_until_idle(
         sock.settimeout(remaining)
         try:
             data = sock.recv(chunk_size)
-        except socket.timeout:
+        except TimeoutError:
             break
 
         if not data:
