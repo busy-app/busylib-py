@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, AsyncIterator
+from typing import Any
+from collections.abc import AsyncIterator
 from urllib.parse import urlparse, urlunparse
 
 import websockets

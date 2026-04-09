@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Literal, Sequence
+from typing import Annotated, Any, Literal
+from collections.abc import Sequence
 
 from pydantic import (
     BaseModel as PydanticBaseModel,
