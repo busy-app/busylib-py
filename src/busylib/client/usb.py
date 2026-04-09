@@ -271,7 +271,7 @@ class UsbController:
             sock.sendall(b"\r\n")
             _read_until_idle(sock, self._banner_timeout)
 
-            sock.sendall(f"{full_cmd}\r\n".encode("utf-8"))
+            sock.sendall(f"{full_cmd}\r\n".encode())
             raw = _read_until_idle(sock, self._idle_timeout)
 
             cleaned = _strip_telnet_commands(raw).decode("utf-8", errors="replace")
