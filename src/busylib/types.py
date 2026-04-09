@@ -445,7 +445,7 @@ class TextElement(DisplayElementBase):
         if value is None:
             return None
 
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, list | tuple):
             if len(value) not in (3, 4):
                 raise ValueError(
                     "Color tuple/list must have 3 (RGB) or 4 (RGBA) elements"
