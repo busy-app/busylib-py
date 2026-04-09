@@ -38,7 +38,7 @@ class _DummyStorage(StorageMixin):
         Record request arguments and return a success payload.
         """
         payload = data
-        if data is not None and not isinstance(data, (bytes, bytearray)):
+        if data is not None and not isinstance(data, bytes | bytearray):
             payload = b"".join(data)
         self.calls.append(
             {
@@ -88,7 +88,7 @@ class _DummyAsyncStorage(AsyncStorageMixin):
         Record async request arguments and return a success payload.
         """
         payload = data
-        if data is not None and not isinstance(data, (bytes, bytearray)):
+        if data is not None and not isinstance(data, bytes | bytearray):
             chunks: list[bytes] = []
             async for chunk in data:
                 chunks.append(chunk)

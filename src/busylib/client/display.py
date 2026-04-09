@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, AsyncIterator
+from typing import Any
+from collections.abc import AsyncIterator
 from urllib.parse import urlparse, urlunparse
 
 import websockets
@@ -192,7 +193,7 @@ class DisplayMixin(SyncClientBase):
             params={"display": target.index},
             expect_bytes=True,
         )  # type: ignore[return-value]
-        if not isinstance(raw, (bytes, bytearray)):
+        if not isinstance(raw, bytes | bytearray):
             raise TypeError("Expected bytes response for screen frame")
         data = bytes(raw)
         decoded = _decode_frame_bytes(data, target.index, from_ws=False)
@@ -320,7 +321,7 @@ class AsyncDisplayMixin(AsyncClientBase):
             params={"display": target.index},
             expect_bytes=True,
         )  # type: ignore[return-value]
-        if not isinstance(raw, (bytes, bytearray)):
+        if not isinstance(raw, bytes | bytearray):
             raise TypeError("Expected bytes response for screen frame")
         data = bytes(raw)
         decoded = _decode_frame_bytes(data, target.index, from_ws=False)

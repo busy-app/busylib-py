@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Literal, Sequence
+from typing import Annotated, Any, Literal
+from collections.abc import Sequence
 
 from pydantic import (
     BaseModel as PydanticBaseModel,
@@ -445,7 +446,7 @@ class TextElement(DisplayElementBase):
         if value is None:
             return None
 
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, list | tuple):
             if len(value) not in (3, 4):
                 raise ValueError(
                     "Color tuple/list must have 3 (RGB) or 4 (RGBA) elements"

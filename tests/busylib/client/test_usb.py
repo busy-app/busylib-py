@@ -53,7 +53,7 @@ class FakeTelnetSocket:
         responses = self.responses_by_send.get(self._send_count, [])
         if responses:
             return responses.pop(0)
-        raise socket.timeout()
+        raise TimeoutError()
 
     def close(self) -> None:
         """

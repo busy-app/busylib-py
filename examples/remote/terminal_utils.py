@@ -100,7 +100,7 @@ def _format_error_message(exc: BaseException) -> tuple[str | None, str]:
     message = str(exc)
     if "timed out during opening handshake" in message:
         return "Error", f"{TEXT_ERR_TIMEOUT} (WebSocket)"
-    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+    if isinstance(exc, asyncio.TimeoutError | TimeoutError):
         return "Error", TEXT_ERR_TIMEOUT
     if isinstance(exc, httpx.RequestError):
         return "Error", TEXT_ERR_CONNECT.format(details=message)

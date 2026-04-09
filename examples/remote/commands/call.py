@@ -40,7 +40,7 @@ def _format_call_result(result: object) -> str:
         return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     if isinstance(result, bytes):
         return f"bytes:{len(result)}"
-    if isinstance(result, (dict, list, str, int, float, bool)):
+    if isinstance(result, dict | list | str | int | float | bool):
         return json.dumps(result, ensure_ascii=True, separators=(",", ":"))
     return repr(result)
 
