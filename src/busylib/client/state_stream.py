@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
-from typing import Any, AsyncIterator, cast
+from typing import Any, cast
+from collections.abc import AsyncIterator
 from urllib.parse import quote, urlparse, urlunparse
 
 from google.protobuf.json_format import MessageToDict
