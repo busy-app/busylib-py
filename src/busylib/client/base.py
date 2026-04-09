@@ -157,7 +157,7 @@ class SyncClientBase:
             return False
         return response.status_code < 400
 
-    def __enter__(self) -> "SyncClientBase":
+    def __enter__(self) -> SyncClientBase:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -394,7 +394,7 @@ class AsyncClientBase:
             return False
         return response.status_code < 400
 
-    async def __aenter__(self) -> "AsyncClientBase":
+    async def __aenter__(self) -> AsyncClientBase:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:

@@ -35,7 +35,7 @@ def copy_file(
     src_panel: Panel,
     dst_panel: Panel,
     status: list[str],
-    runner: "AsyncRunner",
+    runner: AsyncRunner,
     stdscr: curses.window,
     *,
     app_dir: str | None = None,
