@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, AsyncIterator
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 
 import websockets
 
@@ -11,6 +11,9 @@ from .. import display, exceptions, types
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
+_WS_MAX_SIZE = 4 * 1024 * 1024
+_WS_PING_INTERVAL_SECONDS = 20
+_WS_PING_TIMEOUT_SECONDS = 20
 
 
 def _http_to_ws(addr: str) -> str:
@@ -352,13 +355,14 @@ class AsyncDisplayMixin(AsyncClientBase):
         target = display.get_display_spec(display_id)
         ws_url = _http_to_ws(self.base_url).rstrip("/") + "/api/screen/ws"
         if token:
-            ws_url += f"?x-api-token={token}"
+            ws_url += f"?x-api-token={quote(token, safe='')}"
 
         try:
             async with websockets.connect(
                 ws_url,
-                max_size=None,
-                ping_interval=None,
+                max_size=_WS_MAX_SIZE,
+                ping_interval=_WS_PING_INTERVAL_SECONDS,
+                ping_timeout=_WS_PING_TIMEOUT_SECONDS,
             ) as ws:
                 await ws.send(json.dumps({"display": target.index}))
                 async for message in ws:

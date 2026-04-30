@@ -203,6 +203,23 @@ def test_apply_state_stream_update_keeps_existing_when_no_updates() -> None:
     assert updated.volume.volume == 44
 
 
+def test_apply_state_stream_update_sets_update_available_version() -> None:
+    """
+    Map update-check availability into dedicated snapshot field.
+
+    This keeps diagnostic field_errors reserved for collection failures.
+    """
+    start = DeviceSnapshot(name="Stable", field_errors={"volume": "x"})
+    payload = {
+        "updates": [
+            {"update_check": {"available": {"version": "1.2.3"}}},
+        ]
+    }
+    updated = apply_state_stream_update(start, payload)
+    assert updated.update_available_version == "1.2.3"
+    assert updated.field_errors == {"volume": "x"}
+
+
 def test_device_state_store_emits_diff_and_state_callbacks() -> None:
     """
     Emit callbacks with changed fields after applying state stream updates.

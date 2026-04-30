@@ -26,6 +26,7 @@ class DeviceSnapshot(BaseModel):
     volume: types.AudioVolumeInfo | None = None
     ble: types.BleStatus | None = None
     storage: types.StorageStatus | None = None
+    update_available_version: str | None = None
     field_errors: dict[str, str] = Field(default_factory=dict)
     raw_time: object | None = Field(default=None, exclude=True)
 
@@ -227,11 +228,14 @@ def apply_state_stream_update(
         update_check = update.get("update_check")
         if isinstance(update_check, dict):
             available = update_check.get("available")
-            next_snapshot.field_errors.pop("update_available", None)
             if isinstance(available, dict):
-                next_snapshot.field_errors["update_available"] = (
-                    f"available:{available.get('version', '')}"
-                )
+                version = available.get("version")
+                if isinstance(version, str) and version:
+                    next_snapshot.update_available_version = version
+                else:
+                    next_snapshot.update_available_version = ""
+            else:
+                next_snapshot.update_available_version = None
 
         ble = update.get("ble")
         if isinstance(ble, dict):

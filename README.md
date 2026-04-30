@@ -236,3 +236,14 @@ To run the tests:
 ```bash
 make test
 ```
+
+To regenerate protobuf models for `/api/status/ws`:
+
+```bash
+make proto-sync
+```
+
+This target pulls schemas from `https://github.com/flipperdevices/bsb-protobuf`
+into `.cache/bsb-protobuf` and regenerates Python protobuf modules in
+`src/busylib/state_stream_proto` using `uv run python -m grpc_tools.protoc`
+from dev dependencies.

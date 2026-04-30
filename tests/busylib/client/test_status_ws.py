@@ -89,6 +89,10 @@ async def test_stream_status_ws_decodes_protobuf(
     assert items[0]["timestamp"] == "123"
     assert items[0]["updates"][0]["device_name"]["name"] == "BUSY"
     assert "x-api-token=secret" in str(captured["url"])
+    assert isinstance(captured["kwargs"], dict)
+    assert captured["kwargs"]["max_size"] == 4 * 1024 * 1024
+    assert captured["kwargs"]["ping_interval"] == 20
+    assert captured["kwargs"]["ping_timeout"] == 20
     await client.aclose()
 
 
@@ -134,6 +138,18 @@ async def test_stream_status_ws_wraps_decode_error(
 
     client = AsyncBusyBar(addr="http://device.local")
     with pytest.raises(exceptions.BusyBarProtocolError):
+        async for _ in client.stream_status_ws():
+            pass
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stream_status_ws_cloud_not_supported() -> None:
+    """
+    Explicitly reject cloud mode for /api/status/ws streaming.
+    """
+    client = AsyncBusyBar(addr=None, token="secret")
+    with pytest.raises(NotImplementedError):
         async for _ in client.stream_status_ws():
             pass
     await client.aclose()
