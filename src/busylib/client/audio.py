@@ -57,8 +57,8 @@ class AudioMixin(SyncClientBase):
                 json_payload=request_payload,
             )
             return types.SuccessResponse.model_validate(data)
-        except exceptions.BusyBarAPIError:
-            if request_model.stock_path:
+        except exceptions.BusyBarAPIError as exc:
+            if request_model.stock_path or exc.status_code != 400:
                 raise
             data = self._request(
                 "POST",
@@ -148,8 +148,8 @@ class AsyncAudioMixin(AsyncClientBase):
                 json_payload=request_payload,
             )
             return types.SuccessResponse.model_validate(data)
-        except exceptions.BusyBarAPIError:
-            if request_model.stock_path:
+        except exceptions.BusyBarAPIError as exc:
+            if request_model.stock_path or exc.status_code != 400:
                 raise
             data = await self._request(
                 "POST",
