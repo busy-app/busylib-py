@@ -8,6 +8,7 @@ from busylib.client import AsyncBusyBar
 from busylib import types
 from busylib.features import (
     DeviceSnapshot,
+    DeviceStateStore,
     apply_state_stream_update,
     collect_device_snapshot,
 )
@@ -200,3 +201,70 @@ def test_apply_state_stream_update_keeps_existing_when_no_updates() -> None:
     assert updated.name == "Stable"
     assert updated.volume is not None
     assert updated.volume.volume == 44
+
+
+def test_device_state_store_emits_diff_and_state_callbacks() -> None:
+    """
+    Emit callbacks with changed fields after applying state stream updates.
+
+    The store should notify both channels exactly once per meaningful change.
+    """
+    store = DeviceStateStore(
+        DeviceSnapshot(
+            name="Old",
+            brightness=types.DisplayBrightnessInfo(front="10", back="15"),
+        )
+    )
+
+    seen_state: list[DeviceSnapshot] = []
+    seen_diff: list[tuple[set[str], DeviceSnapshot]] = []
+
+    store.on_state(lambda snapshot: seen_state.append(snapshot))
+    store.on_diff(lambda changed, snapshot: seen_diff.append((changed, snapshot)))
+
+    store.apply_stream_message(
+        {
+            "updates": [
+                {"device_name": {"name": "New"}},
+                {"brightness": {"actual_brightness": 22}},
+            ]
+        }
+    )
+
+    assert len(seen_state) == 1
+    assert len(seen_diff) == 1
+    changed, snapshot = seen_diff[0]
+    assert changed == {"name", "brightness"}
+    assert snapshot.name == "New"
+    assert snapshot.brightness is not None
+    assert snapshot.brightness.front == "22"
+    assert seen_state[0].name == "New"
+
+
+def test_device_state_store_unsubscribe_stops_callbacks() -> None:
+    """
+    Stop receiving notifications after unsubscribing from store callbacks.
+
+    This keeps callback lifecycle explicit and prevents stale listeners.
+    """
+    store = DeviceStateStore(DeviceSnapshot(name="Old"))
+    state_calls = 0
+    diff_calls = 0
+
+    def _on_state(_snapshot: DeviceSnapshot) -> None:
+        nonlocal state_calls
+        state_calls += 1
+
+    def _on_diff(_changed: set[str], _snapshot: DeviceSnapshot) -> None:
+        nonlocal diff_calls
+        diff_calls += 1
+
+    off_state = store.on_state(_on_state)
+    off_diff = store.on_diff(_on_diff)
+    off_state()
+    off_diff()
+
+    store.apply_stream_message({"updates": [{"device_name": {"name": "New"}}]})
+
+    assert state_calls == 0
+    assert diff_calls == 0

@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from busylib.client import AsyncBusyBar
 from busylib.features import (
     DeviceSnapshot,
-    apply_state_stream_update,
+    DeviceStateStore,
     collect_device_snapshot,
 )
 
@@ -43,13 +43,13 @@ async def stream_dashboard_state(
     The initial snapshot is collected via HTTP once. After that, only
     websocket state updates are applied.
     """
-    snapshot = initial_snapshot
-    renderer.update_info(snapshot=snapshot)
+    store = DeviceStateStore(initial_snapshot)
+    store.on_state(lambda snapshot: renderer.update_info(snapshot=snapshot))
+    renderer.update_info(snapshot=store.snapshot)
     async for message in client.stream_status_ws():
         if not isinstance(message, dict):
             continue
-        snapshot = apply_state_stream_update(snapshot, message)
-        renderer.update_info(snapshot=snapshot)
+        store.apply_stream_message(message)
 
 
 async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:

@@ -14,16 +14,41 @@ class AudioMixin(SyncClientBase):
     Audio playback and volume control helpers.
     """
 
-    def play_audio(self, application_name: str, path: str) -> types.SuccessResponse:
+    def play_audio(
+        self,
+        application_name: str | None = None,
+        path: str | None = None,
+        *,
+        stock_path: str | None = None,
+        payload: types.AudioPlayRequest | dict[str, Any] | None = None,
+    ) -> types.SuccessResponse:
+        """
+        Start audio playback via POST /api/audio/play.
+
+        Preferred payload format matches display draw-style resource
+        references (`stock_path` for shared assets or `application_name+path`
+        for user assets). For older firmware, user-assets payloads fallback to
+        legacy query params.
+        """
+        if payload is None:
+            request_model = types.AudioPlayRequest(
+                application_name=application_name,
+                path=path,
+                stock_path=stock_path,
+            )
+        else:
+            request_model = (
+                payload
+                if isinstance(payload, types.AudioPlayRequest)
+                else types.AudioPlayRequest.model_validate(payload)
+            )
+
+        request_payload = request_model.model_dump(exclude_none=True)
         logger.info(
-            "play_audio application_name=%s path=%s",
-            application_name,
-            path,
-        )
-        data = self._request(
-            "POST",
-            "/api/audio/play",
-            params={"application_name": application_name, "path": path},
+            "play_audio application_name=%s path=%s stock_path=%s",
+            request_model.application_name,
+            request_model.path,
+            request_model.stock_path,
         )
         try:
             data = self._request(
@@ -32,8 +57,8 @@ class AudioMixin(SyncClientBase):
                 json_payload=request_payload,
             )
             return types.SuccessResponse.model_validate(data)
-        except exceptions.BusyBarAPIError as exc:
-            if request_model.stock_path or exc.status_code != 400:
+        except exceptions.BusyBarAPIError:
+            if request_model.stock_path:
                 raise
             data = self._request(
                 "POST",
@@ -80,16 +105,41 @@ class AsyncAudioMixin(AsyncClientBase):
     Async audio playback and volume control helpers.
     """
 
-    async def play_audio(self, application_name: str, path: str) -> types.SuccessResponse:
+    async def play_audio(
+        self,
+        application_name: str | None = None,
+        path: str | None = None,
+        *,
+        stock_path: str | None = None,
+        payload: types.AudioPlayRequest | dict[str, Any] | None = None,
+    ) -> types.SuccessResponse:
+        """
+        Start audio playback via POST /api/audio/play.
+
+        Preferred payload format matches display draw-style resource
+        references (`stock_path` for shared assets or `application_name+path`
+        for user assets). For older firmware, user-assets payloads fallback to
+        legacy query params.
+        """
+        if payload is None:
+            request_model = types.AudioPlayRequest(
+                application_name=application_name,
+                path=path,
+                stock_path=stock_path,
+            )
+        else:
+            request_model = (
+                payload
+                if isinstance(payload, types.AudioPlayRequest)
+                else types.AudioPlayRequest.model_validate(payload)
+            )
+
+        request_payload = request_model.model_dump(exclude_none=True)
         logger.info(
-            "async play_audio application_name=%s path=%s",
-            application_name,
-            path,
-        )
-        data = await self._request(
-            "POST",
-            "/api/audio/play",
-            params={"application_name": application_name, "path": path},
+            "async play_audio application_name=%s path=%s stock_path=%s",
+            request_model.application_name,
+            request_model.path,
+            request_model.stock_path,
         )
         try:
             data = await self._request(
@@ -98,8 +148,8 @@ class AsyncAudioMixin(AsyncClientBase):
                 json_payload=request_payload,
             )
             return types.SuccessResponse.model_validate(data)
-        except exceptions.BusyBarAPIError as exc:
-            if request_model.stock_path or exc.status_code != 400:
+        except exceptions.BusyBarAPIError:
+            if request_model.stock_path:
                 raise
             data = await self._request(
                 "POST",

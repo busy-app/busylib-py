@@ -178,7 +178,7 @@ async def test_draw_on_display_utf8_async():
                 "type": "text",
                 "x": 0,
                 "y": 0,
-                "text": "Привет",
+                "text": "Café",
                 "font": "small",
                 "display": "front",
             }
