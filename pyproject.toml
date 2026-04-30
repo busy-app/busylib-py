@@ -27,6 +27,7 @@ dependencies = [
   "pydantic>=2.9",
   "pydantic-extra-types>=2.9",
   "pydantic-settings>=2.12",
+  "protobuf>=6.31.1",
   "websockets>=12",
 ]
 urls.Documentation = "https://busylib.readthedocs.io"
@@ -35,6 +36,10 @@ urls.Repository = "https://github.com/busy-app/busylib-py"
 
 [dependency-groups]
 dev = [
+  "grpcio-tools>=1.74",
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.28",
   "pre-commit>=3.8",
   "pyproject-fmt>=2.5.1",
   "pyright>=1.1.408",

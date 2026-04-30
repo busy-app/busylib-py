@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TypeVar
+from typing import TypeAlias, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -26,10 +26,15 @@ class DeviceSnapshot(BaseModel):
     volume: types.AudioVolumeInfo | None = None
     ble: types.BleStatus | None = None
     storage: types.StorageStatus | None = None
+    update_available_version: str | None = None
     field_errors: dict[str, str] = Field(default_factory=dict)
     raw_time: object | None = Field(default=None, exclude=True)
 
     model_config = {"extra": "ignore"}
+
+
+StateCallback: TypeAlias = Callable[[DeviceSnapshot], None]
+StateDiffCallback: TypeAlias = Callable[[set[str], DeviceSnapshot], None]
 
 
 async def _safe(
@@ -134,3 +139,209 @@ async def collect_device_snapshot(client: AsyncBusyBar) -> DeviceSnapshot:
         field_errors=field_errors,
         raw_time=raw_time,
     )
+
+
+def apply_state_stream_update(
+    snapshot: DeviceSnapshot,
+    state_message: dict[str, object],
+) -> DeviceSnapshot:
+    """
+    Apply one protobuf `/api/status/ws` state message to an existing snapshot.
+
+    The function updates only fields present in state updates and preserves
+    all previously known values for absent fields.
+    """
+    next_snapshot = snapshot.model_copy(deep=True)
+    updates = state_message.get("updates")
+    if not isinstance(updates, list):
+        return next_snapshot
+
+    for update in updates:
+        if not isinstance(update, dict):
+            continue
+
+        device_name = update.get("device_name")
+        if isinstance(device_name, dict):
+            name = device_name.get("name")
+            if isinstance(name, str) and name:
+                next_snapshot.name = name
+
+        power = update.get("power")
+        if isinstance(power, dict):
+            known = power.get("known")
+            if isinstance(known, dict):
+                battery_status = known.get("battery_status")
+                mapped_state = None
+                if battery_status == "CHARGING":
+                    mapped_state = types.PowerState.CHARGING
+                elif battery_status == "CHARGED":
+                    mapped_state = types.PowerState.CHARGED
+                elif battery_status == "DISCHARGING":
+                    mapped_state = types.PowerState.DISCHARGING
+                next_snapshot.power = types.StatusPower(
+                    state=mapped_state,
+                    battery_charge=known.get("battery_charge_percent"),
+                    battery_voltage=known.get("battery_voltage_mv"),
+                    battery_current=known.get("battery_current_ma"),
+                    usb_voltage=known.get("usb_voltage_mv"),
+                )
+
+        wifi = update.get("wifi")
+        if isinstance(wifi, dict):
+            connected = wifi.get("connected")
+            disconnected = wifi.get("disconnected")
+            if isinstance(connected, dict):
+                state_value = types.WifiState.CONNECTED
+                next_snapshot.wifi = types.StatusResponse(
+                    state=state_value,
+                    ssid=connected.get("ssid"),
+                    bssid=connected.get("bssid"),
+                    channel=connected.get("channel"),
+                    rssi=connected.get("rssi"),
+                )
+            elif disconnected is not None:
+                next_snapshot.wifi = types.StatusResponse(
+                    state=types.WifiState.DISCONNECTED
+                )
+
+        brightness = update.get("brightness")
+        if isinstance(brightness, dict):
+            actual = brightness.get("actual_brightness")
+            if actual is not None:
+                front = str(actual)
+                back = (
+                    None
+                    if next_snapshot.brightness is None
+                    else next_snapshot.brightness.back
+                )
+                next_snapshot.brightness = types.DisplayBrightnessInfo(
+                    front=front,
+                    back=back,
+                )
+
+        audio_volume = update.get("audio_volume")
+        if isinstance(audio_volume, dict):
+            volume = audio_volume.get("volume")
+            if volume is not None:
+                next_snapshot.volume = types.AudioVolumeInfo(volume=float(volume))
+
+        update_check = update.get("update_check")
+        if isinstance(update_check, dict):
+            available = update_check.get("available")
+            if isinstance(available, dict):
+                version = available.get("version")
+                if isinstance(version, str) and version:
+                    next_snapshot.update_available_version = version
+                else:
+                    next_snapshot.update_available_version = ""
+            else:
+                next_snapshot.update_available_version = None
+
+        ble = update.get("ble")
+        if isinstance(ble, dict):
+            status = ble.get("status")
+            if isinstance(status, str):
+                next_snapshot.ble = types.BleStatus(state=status.lower())
+
+        timezone = update.get("timezone")
+        if isinstance(timezone, dict):
+            # Keep latest timezone payload in raw_time for diagnostics.
+            next_snapshot.raw_time = timezone
+
+    return next_snapshot
+
+
+def _snapshot_changed_fields(
+    previous: DeviceSnapshot,
+    current: DeviceSnapshot,
+) -> set[str]:
+    """
+    Detect top-level snapshot fields changed between two states.
+
+    The helper is intentionally shallow for stable event contracts: listeners
+    receive names of changed snapshot sections and can inspect full state.
+    """
+    changed: set[str] = set()
+    for field_name in DeviceSnapshot.model_fields:
+        if field_name == "raw_time":
+            continue
+        if getattr(previous, field_name) != getattr(current, field_name):
+            changed.add(field_name)
+    return changed
+
+
+class DeviceStateStore:
+    """
+    Stateful store for snapshot updates driven by status websocket stream.
+
+    The store applies protobuf state deltas, updates current snapshot, and
+    notifies subscribers through two callback channels:
+    - `on_state`: receives full updated snapshot;
+    - `on_diff`: receives changed top-level fields and full snapshot.
+    """
+
+    def __init__(self, initial: DeviceSnapshot) -> None:
+        """
+        Create a state store with initial snapshot value.
+        """
+        self._snapshot = initial
+        self._state_callbacks: list[StateCallback] = []
+        self._diff_callbacks: list[StateDiffCallback] = []
+
+    @property
+    def snapshot(self) -> DeviceSnapshot:
+        """
+        Return current snapshot value.
+        """
+        return self._snapshot
+
+    def on_state(self, callback: StateCallback) -> Callable[[], None]:
+        """
+        Subscribe to full-state updates and return unsubscriber.
+        """
+        self._state_callbacks.append(callback)
+        return lambda: self._unsubscribe(self._state_callbacks, callback)
+
+    def on_diff(self, callback: StateDiffCallback) -> Callable[[], None]:
+        """
+        Subscribe to changed-fields updates and return unsubscriber.
+        """
+        self._diff_callbacks.append(callback)
+        return lambda: self._unsubscribe(self._diff_callbacks, callback)
+
+    def apply_stream_message(self, state_message: dict[str, object]) -> DeviceSnapshot:
+        """
+        Apply one stream message and emit callbacks when state changes.
+        """
+        next_snapshot = apply_state_stream_update(self._snapshot, state_message)
+        changed_fields = _snapshot_changed_fields(self._snapshot, next_snapshot)
+        self._snapshot = next_snapshot
+        if not changed_fields:
+            return self._snapshot
+
+        for callback in list(self._diff_callbacks):
+            try:
+                callback(changed_fields, self._snapshot)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("State diff callback failed: %s", exc)
+
+        for callback in list(self._state_callbacks):
+            try:
+                callback(self._snapshot)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("State callback failed: %s", exc)
+
+        return self._snapshot
+
+    @staticmethod
+    def _unsubscribe(
+        container: list[StateCallback] | list[StateDiffCallback],
+        callback: StateCallback | StateDiffCallback,
+    ) -> None:
+        """
+        Remove callback from subscription container if present.
+        """
+        try:
+            container.remove(callback)
+        except ValueError:
+            return

@@ -4,7 +4,11 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from busylib.client import AsyncBusyBar
-from busylib.features import collect_device_snapshot
+from busylib.features import (
+    DeviceSnapshot,
+    DeviceStateStore,
+    collect_device_snapshot,
+)
 
 from examples.remote.constants import (
     TEXT_LINK_FAIL,
@@ -25,6 +29,27 @@ async def dashboard(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
         renderer.update_info(snapshot=snapshot)
     except Exception as exc:
         logger.warning(TEXT_SNAPSHOT_FAIL, exc)
+
+
+async def stream_dashboard_state(
+    client: AsyncBusyBar,
+    renderer: TerminalRenderer,
+    *,
+    initial_snapshot: DeviceSnapshot,
+) -> None:
+    """
+    Keep dashboard info in sync from `/api/status/ws` protobuf updates.
+
+    The initial snapshot is collected via HTTP once. After that, only
+    websocket state updates are applied.
+    """
+    store = DeviceStateStore(initial_snapshot)
+    store.on_state(lambda snapshot: renderer.update_info(snapshot=snapshot))
+    renderer.update_info(snapshot=store.snapshot)
+    async for message in client.stream_status_ws():
+        if not isinstance(message, dict):
+            continue
+        store.apply_stream_message(message)
 
 
 async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:

@@ -50,12 +50,12 @@ def test_request_json_payload_requires_json_sync() -> None:
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.headers["content-type"].startswith("application/json")
         body = request.content.decode("utf-8")
-        assert "Привет" in body
+        assert "Café" in body
         return httpx.Response(200, text="ok", headers={"X-Request-ID": "rid-1"})
 
     client = _SyncBaseClient(httpx.MockTransport(responder))
     with pytest.raises(exceptions.BusyBarProtocolError) as exc:
-        client._request("POST", "/api/test", json_payload={"msg": "Привет"})
+        client._request("POST", "/api/test", json_payload={"msg": "Café"})
     assert exc.value.request_id == "rid-1"
     assert exc.value.response_excerpt == "ok"
 

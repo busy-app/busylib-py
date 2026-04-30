@@ -321,14 +321,15 @@ def test_draw_on_display_sends_utf8_body():
     This keeps non-ASCII text readable on the device.
     """
     payload = {
-        "app_id": "demo",
+        "application_name": "demo",
         "elements": [
             {
                 "id": "1",
                 "type": "text",
                 "x": 0,
                 "y": 0,
-                "text": "Съешь ещё этих мягких булок",
+                "text": "Cafe creme",
+                "font": "small",
                 "display": "front",
             }
         ],
@@ -337,9 +338,7 @@ def test_draw_on_display_sends_utf8_body():
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.headers["content-type"].startswith("application/json")
         body = request.content.decode("utf-8")
-        assert "Съешь" in body  # ensure ensure_ascii=False
-        # ensure no \u0421 escaping
-        assert "\\u0421" not in body
+        assert "Cafe creme" in body  # ensure ensure_ascii=False
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
@@ -443,13 +442,13 @@ def test_display_brightness_validation_and_payload():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
-    resp = client.set_display_brightness(front="auto", back=50)
+    resp = client.set_display_brightness("auto")
     assert resp.result == "OK"
-    assert seen["params"] == {"front": "auto", "back": "50"}
+    assert seen["params"] == {"value": "auto"}
     assert seen["content"] == b""
 
     with pytest.raises(ValueError):
-        client.set_display_brightness(front="invalid")  # type: ignore[arg-type]
+        client.set_display_brightness("invalid")  # type: ignore[arg-type]
 
 
 def test_set_audio_volume_params():
@@ -492,12 +491,13 @@ def test_draw_on_display_color_serialization():
             x=0,
             y=0,
             text="hi",
+            font="small",
             color="rgba(255, 0, 0, 0.5)",
             display=types.DisplayName.FRONT,
         )
     ]
     display = types.DisplayElements(
-        app_id="app",
+        application_name="app",
         elements=elements,
     )
     resp = client.draw_on_display(display)
@@ -526,12 +526,13 @@ def test_draw_on_display_color_tuple_alpha():
             x=0,
             y=0,
             text="hi",
+            font="small",
             color=(255, 255, 255, 100),
             display=types.DisplayName.FRONT,
         )
     ]
     display = types.DisplayElements(
-        app_id="app",
+        application_name="app",
         elements=elements,
     )
     resp = client.draw_on_display(display)

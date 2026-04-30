@@ -81,7 +81,7 @@ You can upload files (like images or sounds) to be used by your application on t
 with open("path/to/your/image.png", "rb") as f:
     file_bytes = f.read()
     response = bb.upload_asset(
-        app_id="my-app",
+        application_name="my-app",
         filename="logo.png",
         data=file_bytes,
     )
@@ -91,7 +91,7 @@ with open("path/to/your/image.png", "rb") as f:
 with open("path/to/your/sound.wav", "rb") as f:
     file_bytes = f.read()
     response = bb.upload_asset(
-        app_id="my-app",
+        application_name="my-app",
         filename="notification.wav",
         data=file_bytes,
     )
@@ -111,6 +111,7 @@ text_element = types.TextElement(
     x=10,
     y=20,
     text="Hello, World!",
+    font="small",
     display=types.DisplayName.FRONT,
 )
 
@@ -124,7 +125,7 @@ image_element = types.ImageElement(
 )
 
 display_data = types.DisplayElements(
-    app_id="my-app",
+    application_name="my-app",
     elements=[text_element, image_element]
 )
 
@@ -146,7 +147,7 @@ print(f"Clear result: {response.result}")
 Play an audio file that you have already uploaded.
 
 ```python
-response = bb.play_audio(app_id="my-app", path="notification.wav")
+response = bb.play_audio(application_name="my-app", path="notification.wav")
 print(f"Play result: {response.result}")
 ```
 
@@ -161,10 +162,10 @@ print(f"Stop result: {response.result}")
 
 ### Deleting All Assets for an App
 
-This will remove all files associated with a specific `app_id`.
+This will remove all files associated with a specific `application_name`.
 
 ```python
-response = bb.delete_app_assets(app_id="my-app")
+response = bb.delete_app_assets(application_name="my-app")
 print(f"Delete result: {response.result}")
 ```
 
@@ -235,3 +236,14 @@ To run the tests:
 ```bash
 make test
 ```
+
+To regenerate protobuf models for `/api/status/ws`:
+
+```bash
+make proto-sync
+```
+
+This target pulls schemas from `https://github.com/flipperdevices/bsb-protobuf`
+into `.cache/bsb-protobuf` and regenerates Python protobuf modules in
+`src/busylib/state_stream_proto` using `uv run python -m grpc_tools.protoc`
+from dev dependencies.

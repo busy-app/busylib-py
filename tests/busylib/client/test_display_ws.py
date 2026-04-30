@@ -99,8 +99,9 @@ async def test_stream_screen_ws_uses_query_token(
     assert isinstance(extra, dict)
     assert extra.get("compression") is None
     assert "user_agent_header" not in extra
-    assert extra.get("max_size") is None
-    assert extra.get("ping_interval") is None
+    assert extra.get("max_size") == 4 * 1024 * 1024
+    assert extra.get("ping_interval") == 20
+    assert extra.get("ping_timeout") == 20
 
 
 @pytest.mark.asyncio

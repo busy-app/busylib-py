@@ -121,7 +121,7 @@ class SyncClientBase:
     @property
     def is_cloud(self) -> bool:
         """
-        Check if the connection goes through the cloud.
+        Check whether connection uses cloud mode.
 
         Returns True for cloud connection_type.
         """
@@ -130,7 +130,7 @@ class SyncClientBase:
     @property
     def is_local(self) -> bool:
         """
-        Check if the connection goes through a local address.
+        Check whether connection uses local mode.
 
         Returns True for local connection_type.
         """
@@ -138,9 +138,9 @@ class SyncClientBase:
 
     def is_local_available(self) -> bool:
         """
-        Check availability of the local API at base_url.
+        Check local API reachability on base_url.
 
-        Returns True if /api/version responds without network errors.
+        Returns True when /api/version responds without network errors.
         """
         base_url = _normalize_addr(settings.base_url).rstrip("/")
         url = f"{base_url}/api/version"
@@ -358,7 +358,7 @@ class AsyncClientBase:
     @property
     def is_cloud(self) -> bool:
         """
-        Check if the connection goes through the cloud.
+        Check whether connection uses cloud mode.
 
         Returns True for cloud connection_type.
         """
@@ -367,7 +367,7 @@ class AsyncClientBase:
     @property
     def is_local(self) -> bool:
         """
-        Check if the connection goes through a local address.
+        Check whether connection uses local mode.
 
         Returns True for local connection_type.
         """
@@ -375,9 +375,9 @@ class AsyncClientBase:
 
     async def is_local_available(self) -> bool:
         """
-        Check availability of the local API at base_url.
+        Check local API reachability on base_url.
 
-        Returns True if /api/version responds without network errors.
+        Returns True when /api/version responds without network errors.
         """
         base_url = _normalize_addr(settings.base_url).rstrip("/")
         url = f"{base_url}/api/version"

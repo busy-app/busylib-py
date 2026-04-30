@@ -171,14 +171,15 @@ async def test_draw_on_display_utf8_async():
     Verifies non-ASCII text is not escaped.
     """
     payload = {
-        "app_id": "demo",
+        "application_name": "demo",
         "elements": [
             {
                 "id": "1",
                 "type": "text",
                 "x": 0,
                 "y": 0,
-                "text": "Привет",
+                "text": "Café",
+                "font": "small",
                 "display": "front",
             }
         ],
@@ -186,8 +187,8 @@ async def test_draw_on_display_utf8_async():
 
     async def responder(request: httpx.Request) -> httpx.Response:
         body = request.content.decode()
-        assert "Привет" in body
-        assert "\\u041f" not in body
+        assert "Café" in body
+        assert "\\u00e9" not in body
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
@@ -228,8 +229,8 @@ async def test_async_set_display_brightness_params():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
-    resp = await client.set_display_brightness(front="auto", back=25)
+    resp = await client.set_display_brightness("auto")
     assert resp.result == "OK"
-    assert seen["params"] == {"front": "auto", "back": "25"}
+    assert seen["params"] == {"value": "auto"}
     assert seen["content"] == b""
     await client.aclose()
