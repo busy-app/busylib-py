@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from busylib import AsyncBusyBar, BusyBar, types
+from busylib import AsyncBusyBar, BusyBar, exceptions, types
 
 
 def _make_sync_client(responder) -> BusyBar:
@@ -206,6 +206,34 @@ def test_audio_play_legacy_fallback_sync() -> None:
     ]
 
 
+def test_audio_play_no_fallback_for_non_400_sync() -> None:
+    """
+    Do not fallback to legacy params when JSON play fails with non-400 status.
+    """
+    seen: list[dict[str, object]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        item = {
+            "path": request.url.path,
+            "method": request.method,
+            "params": dict(request.url.params),
+            "json": (
+                None
+                if not request.content
+                else json.loads(request.content.decode("utf-8"))
+            ),
+        }
+        seen.append(item)
+        return httpx.Response(401, json={"error": "unauthorized", "code": 401})
+
+    client = _make_sync_client(responder)
+    with pytest.raises(exceptions.BusyBarAPIError):
+        client.play_audio("calendar", "sounds/reminder.snd")
+
+    assert len(seen) == 1
+    assert seen[0]["params"] == {}
+
+
 @pytest.mark.asyncio
 async def test_audio_play_legacy_fallback_async() -> None:
     """
@@ -252,3 +280,33 @@ async def test_audio_play_legacy_fallback_async() -> None:
             "json": None,
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_audio_play_no_fallback_for_non_400_async() -> None:
+    """
+    Do not fallback to legacy params in async mode for non-400 failures.
+    """
+    seen: list[dict[str, object]] = []
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        item = {
+            "path": request.url.path,
+            "method": request.method,
+            "params": dict(request.url.params),
+            "json": (
+                None
+                if not request.content
+                else json.loads(request.content.decode("utf-8"))
+            ),
+        }
+        seen.append(item)
+        return httpx.Response(503, json={"error": "service unavailable", "code": 503})
+
+    client = _make_async_client(responder)
+    with pytest.raises(exceptions.BusyBarAPIError):
+        await client.play_audio("calendar", "sounds/reminder.snd")
+    await client.aclose()
+
+    assert len(seen) == 1
+    assert seen[0]["params"] == {}
