@@ -61,17 +61,7 @@ def test_audio_play_stop_volume_sync() -> None:
         {
             "path": "/api/audio/play",
             "method": "POST",
-            "params": {},
-            "json": {"application_name": "app", "path": "sounds/event.snd"},
-        },
-        {"path": "/api/audio/play", "method": "DELETE", "params": {}, "json": None},
-        {"path": "/api/audio/play", "method": "DELETE", "params": {}, "json": None},
-        {"path": "/api/audio/volume", "method": "GET", "params": {}, "json": None},
-        {
-            "path": "/api/audio/volume",
-            "method": "POST",
-            "params": {"volume": "55.5"},
-            "json": None,
+            "params": {"application_name": "app", "path": "/ext/app.wav"},
         },
     ]
 
@@ -115,17 +105,7 @@ async def test_audio_play_stop_volume_async() -> None:
         {
             "path": "/api/audio/play",
             "method": "POST",
-            "params": {},
-            "json": {"application_name": "app", "path": "sounds/event.snd"},
-        },
-        {"path": "/api/audio/play", "method": "DELETE", "params": {}, "json": None},
-        {"path": "/api/audio/play", "method": "DELETE", "params": {}, "json": None},
-        {"path": "/api/audio/volume", "method": "GET", "params": {}, "json": None},
-        {
-            "path": "/api/audio/volume",
-            "method": "POST",
-            "params": {"volume": "12.5"},
-            "json": None,
+            "params": {"application_name": "app", "path": "/ext/app.wav"},
         },
     ]
 

@@ -13,9 +13,6 @@ from ..state_stream_proto import state_pb2
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
-_WS_MAX_SIZE = 4 * 1024 * 1024
-_WS_PING_INTERVAL_SECONDS = 20
-_WS_PING_TIMEOUT_SECONDS = 20
 
 
 def _http_to_ws(addr: str) -> str:
@@ -34,9 +31,12 @@ def _extract_token(headers: dict[str, str]) -> str | None:
     """
     Extract API token from configured HTTP headers.
 
-    Local clients use `X-API-Token`. Cloud status streaming is currently not
-    supported in this client.
+    Local clients use `X-API-Token`, cloud clients may use `Authorization`
+    bearer tokens.
     """
+    bearer = headers.get("Authorization")
+    if bearer and bearer.lower().startswith("bearer "):
+        return bearer.split(" ", 1)[1]
     return headers.get("x-api-token") or headers.get("X-API-Token")
 
 
@@ -82,11 +82,6 @@ class AsyncStateStreamMixin(AsyncClientBase):
         `BSB_State.State` protobuf schema from `bsb-protobuf` and converted into
         dictionaries with original proto field names.
         """
-        if self.is_cloud:
-            raise NotImplementedError(
-                "Cloud mode is not supported for /api/status/ws streaming."
-            )
-
         headers = self.client.headers
         token = _extract_token(headers)
 
@@ -97,9 +92,8 @@ class AsyncStateStreamMixin(AsyncClientBase):
         try:
             async with websockets.connect(
                 ws_url,
-                max_size=_WS_MAX_SIZE,
-                ping_interval=_WS_PING_INTERVAL_SECONDS,
-                ping_timeout=_WS_PING_TIMEOUT_SECONDS,
+                max_size=None,
+                ping_interval=None,
             ) as ws:
                 if enable:
                     await ws.send(json.dumps({"enable": True}))

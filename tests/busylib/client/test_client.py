@@ -328,7 +328,7 @@ def test_draw_on_display_sends_utf8_body():
                 "type": "text",
                 "x": 0,
                 "y": 0,
-                "text": "Cafe creme",
+                "text": "Съешь ещё этих мягких булок",
                 "font": "small",
                 "display": "front",
             }

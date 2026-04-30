@@ -1,0 +1,40 @@
+site_name: busylib
+site_description: Python library for Busy Bar API
+site_url: https://busylib.readthedocs.io
+repo_url: https://github.com/busy-app/busylib-py
+repo_name: busy-app/busylib-py
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+            - examples
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_source: false
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Repository Structure: repository-structure.md
+  - Quick Start: quick-start.md
+  - MCP:
+      - Contract (v1): mcp-contract.md
+  - Showcase:
+      - Now Playing: showcase/now-playing.md
+  - API Reference:
+      - Overview: api/index.md
+      - Core Client: api/core-client.md
+      - Now Playing Example: api/now-playing-example.md
