@@ -6,14 +6,6 @@
 
 A simple and intuitive Python client for interacting with the Busy Bar API. This library allows you to programmatically control the device's display, audio, and assets.
 
-## Repository Structure
-
-If you are using the monorepo layout, follow these boundaries:
-
-- `services/` contains only product services.
-- `shared/` contains reusable libraries and shared contracts.
-- `playground/` contains experiments and service simulators for trying ideas safely.
-
 ## Features
 
 -   Easy-to-use API for all major device functions.
