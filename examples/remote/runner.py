@@ -22,7 +22,6 @@ from examples.remote.commands import InputCapture, discover_commands
 from examples.remote.commands.call import build_call_handler
 from examples.remote.constants import (
     ICON_SETS,
-    SWITCH_DISPLAY_SEQUENCES,
     TEXT_HTTP_POLL,
     TEXT_INIT_CONNECTING,
     TEXT_INIT_HTTP,
@@ -58,13 +57,6 @@ PERIODIC_TASKS: dict[
     "link_check": (cloud_link, 10),
     "update_check": (update_check, 3600),
 }
-
-
-def _should_switch_display(chunk: bytes) -> bool:
-    """
-    Check whether the input chunk requests a display switch.
-    """
-    return any(seq in chunk for seq in SWITCH_DISPLAY_SEQUENCES)
 
 
 def _resolve_pixel_char(icons: dict[str, str]) -> str:
@@ -108,7 +100,6 @@ async def _forward_keys(
     status_message: Callable[[str], None] | None = None,
     command_queue: asyncio.Queue[Callable[[], Awaitable[None]]] | None = None,
     renderer: TerminalRenderer | None = None,
-    on_switch: Callable[[], None] | None = None,
     command_registry: CommandRegistry | None = None,
     command_input: CommandInput | None = None,
     input_capture: InputCapture | None = None,
@@ -135,10 +126,6 @@ async def _forward_keys(
                 continue
             if input_capture and input_capture.handle(chunk):
                 continue
-            if not command_active and on_switch and _should_switch_display(chunk):
-                on_switch()
-                stop_event.set()
-                return
             if (
                 not command_active
                 and renderer
@@ -490,224 +477,195 @@ async def _run(
 
     This manages streaming tasks and periodic polling.
     """
-    current_display = display.FRONT_DISPLAY
     keymap = load_keymap(args.keymap_file) if not args.no_send_input else None
     command_input = CommandInput()
     input_capture = InputCapture()
 
     had_error = False
     try:
-        while True:
-            switch_requested = False
+        spec = display.get_display_spec(display.FRONT_DISPLAY)
+        stop_event = asyncio.Event()
+        renderer: TerminalRenderer | None = None
+        status_history: list[str] = []
 
-            def _switch_display() -> None:
-                """
-                Toggle between front and back displays.
-                """
-                nonlocal current_display, switch_requested
-                switch_requested = True
-                current_display = (
-                    display.BACK_DISPLAY
-                    if current_display == display.FRONT_DISPLAY
-                    else display.FRONT_DISPLAY
-                )
-
-            spec = display.get_display_spec(current_display)
-            stop_event = asyncio.Event()
-            renderer: TerminalRenderer | None = None
-            status_history: list[str] = []
-
-            def _emit_status(message: str) -> None:
-                """
-                Emit a status message into logs and fallback stderr output.
-                """
-                status_history.append(message)
-                if renderer is not None:
-                    renderer.append_log(message)
-                    return
-                status_message(message)
-
-            _emit_status(TEXT_INIT_START)
-            client = AsyncBusyBar(addr=args.addr, token=args.token)
-            base_url = getattr(client, "base_url", None) or args.addr or "unknown"
-            _emit_status(TEXT_INIT_CONNECTING.format(addr=base_url))
-            command_registry = CommandRegistry()
-            for command in discover_commands(
-                client=client,
-                status_message=_emit_status,
-                stop_event=stop_event,
-                input_capture=input_capture,
-            ):
-                register_command(command_registry, command)
-            register_command(
-                command_registry,
-                "call",
-                build_call_handler(client, _emit_status),
-            )
-            register_command(
-                command_registry,
-                "api",
-                build_call_handler(client, _emit_status),
-            )
-            register_command(
-                command_registry,
-                "help",
-                _build_help_handler(command_registry, _emit_status),
-            )
-            command_queue: asyncio.Queue[Callable[[], Awaitable[None]]] = (
-                asyncio.Queue()
-            )
-            renderer = TerminalRenderer(
-                spec,
-                args.spacer,
-                _resolve_pixel_char(icons),
-                icons,
-                frame_mode=getattr(args, "frame", settings.frame_mode),
-                clear_screen=clear_screen,
-            )
-            for message in status_history:
+        def _emit_status(message: str) -> None:
+            """
+            Emit a status message into logs and fallback stderr output.
+            """
+            status_history.append(message)
+            if renderer is not None:
                 renderer.append_log(message)
-            poll_interval = args.http_poll_interval
-            if getattr(client, "is_cloud", False):
-                if poll_interval is None or poll_interval < 1.0:
-                    poll_interval = 1.0
-            parsed_addr = urlparse(base_url)
-            if poll_interval is not None and poll_interval > 0:
-                protocol = parsed_addr.scheme or "http"
-            else:
-                protocol = "wss" if parsed_addr.scheme == "https" else "ws"
-            renderer.update_info(
-                streaming_info=_format_streaming_info(base_url, protocol)
-            )
-            info_stop = asyncio.Event()
+                return
+            status_message(message)
 
-            tasks: list[asyncio.Task] = []
-            initial_snapshot = await collect_device_snapshot(client)
-            renderer.update_info(snapshot=initial_snapshot)
-            _emit_status(
-                "status/ws protobuf stream: frame updates currently contain front display only"
-            )
-            if keymap:
-                tasks.append(
-                    asyncio.create_task(
-                        _forward_keys(
-                            client=client,
-                            keymap=keymap,
-                            stop_event=stop_event,
-                            status_message=status_message,
-                            command_queue=command_queue,
-                            renderer=renderer,
-                            on_switch=_switch_display,
-                            command_registry=command_registry,
-                            command_input=command_input,
-                            input_capture=input_capture,
-                        )
-                    )
-                )
+        _emit_status(TEXT_INIT_START)
+        client = AsyncBusyBar(addr=args.addr, token=args.token)
+        base_url = getattr(client, "base_url", None) or args.addr or "unknown"
+        _emit_status(TEXT_INIT_CONNECTING.format(addr=base_url))
+        command_registry = CommandRegistry()
+        for command in discover_commands(
+            client=client,
+            status_message=_emit_status,
+            stop_event=stop_event,
+            input_capture=input_capture,
+        ):
+            register_command(command_registry, command)
+        register_command(
+            command_registry,
+            "call",
+            build_call_handler(client, _emit_status),
+        )
+        register_command(
+            command_registry,
+            "api",
+            build_call_handler(client, _emit_status),
+        )
+        register_command(
+            command_registry,
+            "help",
+            _build_help_handler(command_registry, _emit_status),
+        )
+        command_queue: asyncio.Queue[Callable[[], Awaitable[None]]] = asyncio.Queue()
+        renderer = TerminalRenderer(
+            spec,
+            args.spacer,
+            _resolve_pixel_char(icons),
+            icons,
+            frame_mode=getattr(args, "frame", settings.frame_mode),
+            clear_screen=clear_screen,
+        )
+        for message in status_history:
+            renderer.append_log(message)
+        poll_interval = args.http_poll_interval
+        if getattr(client, "is_cloud", False):
+            if poll_interval is None or poll_interval < 1.0:
+                poll_interval = 1.0
+        parsed_addr = urlparse(base_url)
+        if poll_interval is not None and poll_interval > 0:
+            protocol = parsed_addr.scheme or "http"
+        else:
+            protocol = "wss" if parsed_addr.scheme == "https" else "ws"
+        renderer.update_info(streaming_info=_format_streaming_info(base_url, protocol))
+        info_stop = asyncio.Event()
+
+        tasks: list[asyncio.Task] = []
+        initial_snapshot = await collect_device_snapshot(client)
+        renderer.update_info(snapshot=initial_snapshot)
+        _emit_status(
+            "status/ws protobuf stream: frame updates currently contain front display only"
+        )
+        if keymap:
             tasks.append(
                 asyncio.create_task(
-                    _run_command_queue(
-                        command_queue,
-                        stop_event=stop_event,
-                    )
-                )
-            )
-
-            async def _periodic_loop() -> None:
-                """
-                Periodically refresh renderer info tasks.
-
-                Uses the configured intervals to avoid excessive polling.
-                """
-                task_map = build_periodic_tasks(client, renderer, tasks=PERIODIC_TASKS)
-                last_run = {name: 0.0 for name in task_map}
-
-                while not stop_event.is_set() and not info_stop.is_set():
-                    now = time.monotonic()
-
-                    for name, (interval, task) in task_map.items():
-                        if now - last_run[name] >= interval:
-                            await command_queue.put(lambda task=task: task())
-                            last_run[name] = now
-
-                    await asyncio.sleep(settings.frame_sleep)
-
-            tasks.append(asyncio.create_task(_periodic_loop()))
-            tasks.append(
-                asyncio.create_task(
-                    stream_dashboard_state(
+                    _forward_keys(
                         client=client,
+                        keymap=keymap,
+                        stop_event=stop_event,
+                        status_message=status_message,
+                        command_queue=command_queue,
                         renderer=renderer,
-                        initial_snapshot=initial_snapshot,
+                        command_registry=command_registry,
+                        command_input=command_input,
+                        input_capture=input_capture,
+                    )
+                )
+            )
+        tasks.append(
+            asyncio.create_task(
+                _run_command_queue(
+                    command_queue,
+                    stop_event=stop_event,
+                )
+            )
+        )
+
+        async def _periodic_loop() -> None:
+            """
+            Periodically refresh renderer info tasks.
+
+            Uses the configured intervals to avoid excessive polling.
+            """
+            task_map = build_periodic_tasks(client, renderer, tasks=PERIODIC_TASKS)
+            last_run = {name: 0.0 for name in task_map}
+
+            while not stop_event.is_set() and not info_stop.is_set():
+                now = time.monotonic()
+
+                for name, (interval, task) in task_map.items():
+                    if now - last_run[name] >= interval:
+                        await command_queue.put(lambda task=task: task())
+                        last_run[name] = now
+
+                await asyncio.sleep(settings.frame_sleep)
+
+        tasks.append(asyncio.create_task(_periodic_loop()))
+        tasks.append(
+            asyncio.create_task(
+                stream_dashboard_state(
+                    client=client,
+                    renderer=renderer,
+                    initial_snapshot=initial_snapshot,
+                )
+            )
+        )
+
+        if poll_interval is not None and poll_interval > 0:
+            logger.info(
+                TEXT_HTTP_POLL.format(
+                    interval=poll_interval,
+                    addr=base_url,
+                )
+            )
+            tasks.append(
+                asyncio.create_task(
+                    _poll_http(
+                        client=client,
+                        spec=spec,
+                        interval=poll_interval,
+                        stop_event=stop_event,
+                        renderer=renderer,
+                        clear_screen=clear_screen,
+                        status_message=_emit_status,
+                    )
+                )
+            )
+        else:
+            logger.info(TEXT_WS_STREAM.format(addr=base_url))
+            tasks.append(
+                asyncio.create_task(
+                    _stream_ws(
+                        client=client,
+                        spec=spec,
+                        stop_event=stop_event,
+                        renderer=renderer,
+                        status_message=_emit_status,
                     )
                 )
             )
 
-            if poll_interval is not None and poll_interval > 0:
-                logger.info(
-                    TEXT_HTTP_POLL.format(
-                        interval=poll_interval,
-                        addr=base_url,
-                    )
-                )
-                tasks.append(
-                    asyncio.create_task(
-                        _poll_http(
-                            client=client,
-                            spec=spec,
-                            interval=poll_interval,
-                            stop_event=stop_event,
-                            renderer=renderer,
-                            clear_screen=clear_screen,
-                            status_message=_emit_status,
-                        )
-                    )
-                )
-            else:
-                logger.info(TEXT_WS_STREAM.format(addr=base_url))
-                tasks.append(
-                    asyncio.create_task(
-                        _stream_ws(
-                            client=client,
-                            spec=spec,
-                            stop_event=stop_event,
-                            renderer=renderer,
-                            status_message=_emit_status,
-                        )
-                    )
-                )
-
-            try:
-                done, pending = await asyncio.wait(
-                    tasks, return_when=asyncio.FIRST_COMPLETED
-                )
-                stop_event.set()
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-                results = await asyncio.gather(*done, return_exceptions=True)
-                for result in results:
-                    if isinstance(result, asyncio.CancelledError):
-                        continue
-                    if isinstance(result, BaseException):
-                        raise result
-            except KeyboardInterrupt:
-                stop_event.set()
-                info_stop.set()
-                for task in tasks:
-                    task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
-                print()
-                print(TEXT_STOPPED)
-                break
-            finally:
-                info_stop.set()
-                await client.aclose()
-
-            if switch_requested:
-                continue
-
-            break
+        try:
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            stop_event.set()
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            results = await asyncio.gather(*done, return_exceptions=True)
+            for result in results:
+                if isinstance(result, asyncio.CancelledError):
+                    continue
+                if isinstance(result, BaseException):
+                    raise result
+        except KeyboardInterrupt:
+            stop_event.set()
+            info_stop.set()
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            print()
+            print(TEXT_STOPPED)
+        finally:
+            info_stop.set()
+            await client.aclose()
     except BaseException:
         had_error = True
         raise

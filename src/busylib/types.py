@@ -10,6 +10,7 @@ from pydantic import (
     Field,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from pydantic_extra_types.color import Color
 
@@ -569,6 +570,37 @@ class AudioVolumeUpdate(BaseModel):
     volume: float = Field(ge=0, le=100)
 
     model_config = ConfigDict(extra="forbid")
+
+
+class AudioPlayRequest(BaseModel):
+    application_name: str | None = Field(default=None, min_length=1)
+    path: str | None = Field(default=None, min_length=1)
+    stock_path: str | None = Field(default=None, min_length=1)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_source(self) -> "AudioPlayRequest":
+        """
+        Ensure payload references exactly one audio source style.
+
+        Stock resources use `stock_path`; uploaded resources use
+        `application_name + path`.
+        """
+        if self.stock_path:
+            if self.path or self.application_name:
+                raise ValueError(
+                    "stock_path cannot be combined with application_name/path"
+                )
+            return self
+
+        if not self.path:
+            raise ValueError(
+                "path is required for user assets playback when stock_path is not set"
+            )
+        if not self.application_name:
+            raise ValueError("application_name is required when using path")
+        return self
 
 
 class WifiIpConfig(BaseModel):

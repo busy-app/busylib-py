@@ -210,12 +210,9 @@ class TerminalRenderer:
         if self.spacer:
             extra.append(' Try --spacer "" for compact output ')
         front_req = self._alt_required.get("front")
-        back_req = self._alt_required.get("back")
-        if front_req and back_req:
-            extra.append(
-                f" Front needs {front_req[0]}x{front_req[1]}; Back needs {back_req[0]}x{back_req[1]} "
-            )
-        extra.append(" Quit: Ctrl+Q | Help: h | Switch: Tab or Ctrl+R ")
+        if front_req:
+            extra.append(f" Front needs {front_req[0]}x{front_req[1]} ")
+        extra.append(" Quit: Ctrl+Q | Help: h ")
         return self._boxed([line1] + extra, top_pad_rows=rows, padding=2)
 
     def update_info(
@@ -606,7 +603,6 @@ class TerminalRenderer:
         """
         cols, _rows = self._get_terminal_size()
         program_actions: dict[str, list[str]] = {
-            "Switch display": ["Tab", "Ctrl+R"],
             "Quit": ["Ctrl+Q"],
             "Help toggle": ["h"],
         }

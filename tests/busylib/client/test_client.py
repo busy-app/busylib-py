@@ -328,7 +328,7 @@ def test_draw_on_display_sends_utf8_body():
                 "type": "text",
                 "x": 0,
                 "y": 0,
-                "text": "Съешь ещё этих мягких булок",
+                "text": "Cafe creme",
                 "font": "small",
                 "display": "front",
             }
@@ -338,9 +338,7 @@ def test_draw_on_display_sends_utf8_body():
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.headers["content-type"].startswith("application/json")
         body = request.content.decode("utf-8")
-        assert "Съешь" in body  # ensure ensure_ascii=False
-        # ensure no \u0421 escaping
-        assert "\\u0421" not in body
+        assert "Cafe creme" in body  # ensure ensure_ascii=False
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)

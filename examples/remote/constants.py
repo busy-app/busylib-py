@@ -87,7 +87,6 @@ TEXT_HTTP_POLL = "Polling /api/screen every {interval}s from {addr}"
 TEXT_WS_STREAM = "Streaming screen from {addr}"
 TEXT_WS_STREAM_VERBOSE = "Streaming via WebSocket from {base}/api/screen/ws"
 TEXT_STREAMING_INFO = "{protocol} {host}"
-SWITCH_DISPLAY_SEQUENCES = (b"\t", b"\x12")
 TEXT_INIT_START = "Initializing remote stream"
 TEXT_INIT_CONNECTING = "Connecting to bar at {addr}"
 TEXT_INIT_WS = "Opening WebSocket stream"

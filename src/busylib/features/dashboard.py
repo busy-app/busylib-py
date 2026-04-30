@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TypeVar
+from typing import TypeAlias, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,10 @@ class DeviceSnapshot(BaseModel):
     raw_time: object | None = Field(default=None, exclude=True)
 
     model_config = {"extra": "ignore"}
+
+
+StateCallback: TypeAlias = Callable[[DeviceSnapshot], None]
+StateDiffCallback: TypeAlias = Callable[[set[str], DeviceSnapshot], None]
 
 
 async def _safe(
@@ -241,3 +245,99 @@ def apply_state_stream_update(
             next_snapshot.raw_time = timezone
 
     return next_snapshot
+
+
+def _snapshot_changed_fields(
+    previous: DeviceSnapshot,
+    current: DeviceSnapshot,
+) -> set[str]:
+    """
+    Detect top-level snapshot fields changed between two states.
+
+    The helper is intentionally shallow for stable event contracts: listeners
+    receive names of changed snapshot sections and can inspect full state.
+    """
+    changed: set[str] = set()
+    for field_name in DeviceSnapshot.model_fields:
+        if field_name == "raw_time":
+            continue
+        if getattr(previous, field_name) != getattr(current, field_name):
+            changed.add(field_name)
+    return changed
+
+
+class DeviceStateStore:
+    """
+    Stateful store for snapshot updates driven by status websocket stream.
+
+    The store applies protobuf state deltas, updates current snapshot, and
+    notifies subscribers through two callback channels:
+    - `on_state`: receives full updated snapshot;
+    - `on_diff`: receives changed top-level fields and full snapshot.
+    """
+
+    def __init__(self, initial: DeviceSnapshot) -> None:
+        """
+        Create a state store with initial snapshot value.
+        """
+        self._snapshot = initial
+        self._state_callbacks: list[StateCallback] = []
+        self._diff_callbacks: list[StateDiffCallback] = []
+
+    @property
+    def snapshot(self) -> DeviceSnapshot:
+        """
+        Return current snapshot value.
+        """
+        return self._snapshot
+
+    def on_state(self, callback: StateCallback) -> Callable[[], None]:
+        """
+        Subscribe to full-state updates and return unsubscriber.
+        """
+        self._state_callbacks.append(callback)
+        return lambda: self._unsubscribe(self._state_callbacks, callback)
+
+    def on_diff(self, callback: StateDiffCallback) -> Callable[[], None]:
+        """
+        Subscribe to changed-fields updates and return unsubscriber.
+        """
+        self._diff_callbacks.append(callback)
+        return lambda: self._unsubscribe(self._diff_callbacks, callback)
+
+    def apply_stream_message(self, state_message: dict[str, object]) -> DeviceSnapshot:
+        """
+        Apply one stream message and emit callbacks when state changes.
+        """
+        next_snapshot = apply_state_stream_update(self._snapshot, state_message)
+        changed_fields = _snapshot_changed_fields(self._snapshot, next_snapshot)
+        self._snapshot = next_snapshot
+        if not changed_fields:
+            return self._snapshot
+
+        for callback in list(self._diff_callbacks):
+            try:
+                callback(changed_fields, self._snapshot)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("State diff callback failed: %s", exc)
+
+        for callback in list(self._state_callbacks):
+            try:
+                callback(self._snapshot)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("State callback failed: %s", exc)
+
+        return self._snapshot
+
+    @staticmethod
+    def _unsubscribe(
+        container: list[StateCallback] | list[StateDiffCallback],
+        callback: StateCallback | StateDiffCallback,
+    ) -> None:
+        """
+        Remove callback from subscription container if present.
+        """
+        try:
+            container.remove(callback)
+        except ValueError:
+            return

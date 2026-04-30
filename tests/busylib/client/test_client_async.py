@@ -178,7 +178,7 @@ async def test_draw_on_display_utf8_async():
                 "type": "text",
                 "x": 0,
                 "y": 0,
-                "text": "Привет",
+                "text": "Café",
                 "font": "small",
                 "display": "front",
             }
@@ -187,8 +187,8 @@ async def test_draw_on_display_utf8_async():
 
     async def responder(request: httpx.Request) -> httpx.Response:
         body = request.content.decode()
-        assert "Привет" in body
-        assert "\\u041f" not in body
+        assert "Café" in body
+        assert "\\u00e9" not in body
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
