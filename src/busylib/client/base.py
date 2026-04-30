@@ -121,26 +121,26 @@ class SyncClientBase:
     @property
     def is_cloud(self) -> bool:
         """
-        Проверить, что соединение идёт через облако.
+        Check if the connection goes through the cloud.
 
-        Возвращает True для cloud connection_type.
+        Returns True for cloud connection_type.
         """
         return self.connection_type == "cloud"
 
     @property
     def is_local(self) -> bool:
         """
-        Проверить, что соединение идёт через локальный адрес.
+        Check if the connection goes through a local address.
 
-        Возвращает True для local connection_type.
+        Returns True for local connection_type.
         """
         return self.connection_type == "local"
 
     def is_local_available(self) -> bool:
         """
-        Проверить доступность локального API на base_url.
+        Check availability of the local API at base_url.
 
-        Возвращает True, если /api/version отвечает без ошибок сети.
+        Returns True if /api/version responds without network errors.
         """
         base_url = _normalize_addr(settings.base_url).rstrip("/")
         url = f"{base_url}/api/version"
@@ -358,26 +358,26 @@ class AsyncClientBase:
     @property
     def is_cloud(self) -> bool:
         """
-        Проверить, что соединение идёт через облако.
+        Check if the connection goes through the cloud.
 
-        Возвращает True для cloud connection_type.
+        Returns True for cloud connection_type.
         """
         return self.connection_type == "cloud"
 
     @property
     def is_local(self) -> bool:
         """
-        Проверить, что соединение идёт через локальный адрес.
+        Check if the connection goes through a local address.
 
-        Возвращает True для local connection_type.
+        Returns True for local connection_type.
         """
         return self.connection_type == "local"
 
     async def is_local_available(self) -> bool:
         """
-        Проверить доступность локального API на base_url.
+        Check availability of the local API at base_url.
 
-        Возвращает True, если /api/version отвечает без ошибок сети.
+        Returns True if /api/version responds without network errors.
         """
         base_url = _normalize_addr(settings.base_url).rstrip("/")
         url = f"{base_url}/api/version"
