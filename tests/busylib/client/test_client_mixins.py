@@ -40,7 +40,7 @@ def test_assets_upload_and_delete_sync() -> None:
     resp = client.upload_asset("app", "file.bin", b"data")
     assert resp.result == "OK"
     assert seen["path"] == "/api/assets/upload"
-    assert seen["params"] == {"app_id": "app", "file": "file.bin"}
+    assert seen["params"] == {"application_name": "app", "file": "file.bin"}
     assert seen["body"] == b"data"
 
     resp = client.delete_app_assets("app")
@@ -116,7 +116,7 @@ async def test_assets_upload_and_delete_async() -> None:
     resp = await client.upload_asset("app", "file.bin", b"data")
     assert resp.result == "OK"
     assert seen[0]["path"] == "/api/assets/upload"
-    assert seen[0]["params"] == {"app_id": "app", "file": "file.bin"}
+    assert seen[0]["params"] == {"application_name": "app", "file": "file.bin"}
     assert seen[0]["body"] == b"data"
 
     resp = await client.delete_app_assets("app")

@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from busylib import display, exceptions
 from busylib.client import AsyncBusyBar
+from busylib.features import collect_device_snapshot
 from examples.remote.keymap import KeyDecoder, KeyMap, StdinReader, load_keymap
 from examples.remote.command_core import (
     CommandInput,
@@ -38,7 +39,12 @@ from examples.remote.constants import (
     TEXT_WS_STREAM,
     TEXT_WS_STREAM_VERBOSE,
 )
-from .periodic_tasks import build_periodic_tasks, cloud_link, dashboard, update_check
+from .periodic_tasks import (
+    build_periodic_tasks,
+    cloud_link,
+    stream_dashboard_state,
+    update_check,
+)
 from .renderers import TerminalRenderer
 from .settings import settings
 
@@ -49,7 +55,6 @@ PERIODIC_TASKS: dict[
     str,
     tuple[Callable[[AsyncBusyBar, TerminalRenderer], Awaitable[None]], float],
 ] = {
-    "info_update": (dashboard, 1),
     "link_check": (cloud_link, 10),
     "update_check": (update_check, 3600),
 }
@@ -424,7 +429,6 @@ async def _stream_ws(
         logger.warning("WebSocket stream error: %s", exc)
         raise
     finally:
-        await client.aclose()
         stop_event.set()
 
 
@@ -470,7 +474,6 @@ async def _poll_http(
                 renderer.render(frame_bytes)
             await asyncio.sleep(interval)
     finally:
-        await client.aclose()
         stop_event.set()
 
 
@@ -579,6 +582,11 @@ async def _run(
             info_stop = asyncio.Event()
 
             tasks: list[asyncio.Task] = []
+            initial_snapshot = await collect_device_snapshot(client)
+            renderer.update_info(snapshot=initial_snapshot)
+            _emit_status(
+                "status/ws protobuf stream: frame updates currently contain front display only"
+            )
             if keymap:
                 tasks.append(
                     asyncio.create_task(
@@ -625,6 +633,15 @@ async def _run(
                     await asyncio.sleep(settings.frame_sleep)
 
             tasks.append(asyncio.create_task(_periodic_loop()))
+            tasks.append(
+                asyncio.create_task(
+                    stream_dashboard_state(
+                        client=client,
+                        renderer=renderer,
+                        initial_snapshot=initial_snapshot,
+                    )
+                )
+            )
 
             if poll_interval is not None and poll_interval > 0:
                 logger.info(

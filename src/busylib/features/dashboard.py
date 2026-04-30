@@ -134,3 +134,110 @@ async def collect_device_snapshot(client: AsyncBusyBar) -> DeviceSnapshot:
         field_errors=field_errors,
         raw_time=raw_time,
     )
+
+
+def apply_state_stream_update(
+    snapshot: DeviceSnapshot,
+    state_message: dict[str, object],
+) -> DeviceSnapshot:
+    """
+    Apply one protobuf `/api/status/ws` state message to an existing snapshot.
+
+    The function updates only fields present in state updates and preserves
+    all previously known values for absent fields.
+    """
+    next_snapshot = snapshot.model_copy(deep=True)
+    updates = state_message.get("updates")
+    if not isinstance(updates, list):
+        return next_snapshot
+
+    for update in updates:
+        if not isinstance(update, dict):
+            continue
+
+        device_name = update.get("device_name")
+        if isinstance(device_name, dict):
+            name = device_name.get("name")
+            if isinstance(name, str) and name:
+                next_snapshot.name = name
+
+        power = update.get("power")
+        if isinstance(power, dict):
+            known = power.get("known")
+            if isinstance(known, dict):
+                battery_status = known.get("battery_status")
+                mapped_state = None
+                if battery_status == "CHARGING":
+                    mapped_state = types.PowerState.CHARGING
+                elif battery_status == "CHARGED":
+                    mapped_state = types.PowerState.CHARGED
+                elif battery_status == "DISCHARGING":
+                    mapped_state = types.PowerState.DISCHARGING
+                next_snapshot.power = types.StatusPower(
+                    state=mapped_state,
+                    battery_charge=known.get("battery_charge_percent"),
+                    battery_voltage=known.get("battery_voltage_mv"),
+                    battery_current=known.get("battery_current_ma"),
+                    usb_voltage=known.get("usb_voltage_mv"),
+                )
+
+        wifi = update.get("wifi")
+        if isinstance(wifi, dict):
+            connected = wifi.get("connected")
+            disconnected = wifi.get("disconnected")
+            if isinstance(connected, dict):
+                state_value = types.WifiState.CONNECTED
+                next_snapshot.wifi = types.StatusResponse(
+                    state=state_value,
+                    ssid=connected.get("ssid"),
+                    bssid=connected.get("bssid"),
+                    channel=connected.get("channel"),
+                    rssi=connected.get("rssi"),
+                )
+            elif disconnected is not None:
+                next_snapshot.wifi = types.StatusResponse(
+                    state=types.WifiState.DISCONNECTED
+                )
+
+        brightness = update.get("brightness")
+        if isinstance(brightness, dict):
+            actual = brightness.get("actual_brightness")
+            if actual is not None:
+                front = str(actual)
+                back = (
+                    None
+                    if next_snapshot.brightness is None
+                    else next_snapshot.brightness.back
+                )
+                next_snapshot.brightness = types.DisplayBrightnessInfo(
+                    front=front,
+                    back=back,
+                )
+
+        audio_volume = update.get("audio_volume")
+        if isinstance(audio_volume, dict):
+            volume = audio_volume.get("volume")
+            if volume is not None:
+                next_snapshot.volume = types.AudioVolumeInfo(volume=float(volume))
+
+        update_check = update.get("update_check")
+        if isinstance(update_check, dict):
+            available = update_check.get("available")
+            next_snapshot.field_errors.pop("update_available", None)
+            if isinstance(available, dict):
+                next_snapshot.field_errors["update_available"] = (
+                    f"available:{available.get('version', '')}"
+                )
+
+        ble = update.get("ble")
+        if isinstance(ble, dict):
+            status = ble.get("status")
+            if isinstance(status, str):
+                next_snapshot.ble = types.BleStatus(state=status.lower())
+
+        timezone = update.get("timezone")
+        if isinstance(timezone, dict):
+            # Keep latest timezone payload in raw_time for diagnostics.
+            next_snapshot.raw_time = timezone
+
+    return next_snapshot

@@ -1,0 +1,131 @@
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, AsyncIterator
+from urllib.parse import quote, urlparse, urlunparse
+
+from google.protobuf.json_format import MessageToDict
+import websockets
+
+from .. import exceptions
+from ..state_stream_proto import state_pb2
+from .base import AsyncClientBase, SyncClientBase
+
+logger = logging.getLogger(__name__)
+
+
+def _http_to_ws(addr: str) -> str:
+    """
+    Convert HTTP(S) base URL into a WebSocket base URL.
+
+    The helper preserves host, port, and path while swapping the scheme to
+    ws/wss.
+    """
+    parsed = urlparse(addr if "://" in addr else f"http://{addr}")
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    return urlunparse(parsed._replace(scheme=scheme))
+
+
+def _extract_token(headers: dict[str, str]) -> str | None:
+    """
+    Extract API token from configured HTTP headers.
+
+    Local clients use `X-API-Token`, cloud clients may use `Authorization`
+    bearer tokens.
+    """
+    bearer = headers.get("Authorization")
+    if bearer and bearer.lower().startswith("bearer "):
+        return bearer.split(" ", 1)[1]
+    return headers.get("x-api-token") or headers.get("X-API-Token")
+
+
+class StateStreamMixin(SyncClientBase):
+    """
+    Sync API for status streaming endpoints.
+
+    WebSocket status streaming is implemented in async mode only.
+    """
+
+    def stream_status_ws(self) -> None:
+        """
+        Stream device status updates via WebSocket /api/status/ws.
+
+        Sync iteration is not supported because websocket lifecycle and frame
+        handling are asynchronous in this client implementation.
+        """
+        raise NotImplementedError(
+            "Status WebSocket streaming is implemented only for async client."
+        )
+
+
+class AsyncStateStreamMixin(AsyncClientBase):
+    """
+    Async helpers for `/api/status/ws` protobuf state streaming.
+
+    The method opens WebSocket connection, sends `{"enable": true}` handshake,
+    then yields decoded protobuf state dictionaries or raw text messages.
+    Current firmware publishes frame updates for front display only on this
+    channel.
+    """
+
+    async def stream_status_ws(
+        self,
+        *,
+        enable: bool = True,
+        decode_protobuf: bool = True,
+    ) -> AsyncIterator[dict[str, Any] | bytes | str]:
+        """
+        Open `/api/status/ws` and yield status updates.
+
+        When `decode_protobuf=True`, binary frames are decoded using
+        `BSB_State.State` protobuf schema from `bsb-protobuf` and converted into
+        dictionaries with original proto field names.
+        """
+        headers = self.client.headers
+        token = _extract_token(headers)
+
+        ws_url = _http_to_ws(self.base_url).rstrip("/") + "/api/status/ws"
+        if token:
+            ws_url += f"?x-api-token={quote(token, safe='')}"
+
+        try:
+            async with websockets.connect(
+                ws_url,
+                max_size=None,
+                ping_interval=None,
+            ) as ws:
+                if enable:
+                    await ws.send(json.dumps({"enable": True}))
+
+                async for message in ws:
+                    if isinstance(message, str):
+                        yield message
+                        continue
+
+                    if not decode_protobuf:
+                        yield message
+                        continue
+
+                    try:
+                        state_message = state_pb2.State()
+                        state_message.ParseFromString(message)
+                        yield MessageToDict(
+                            state_message,
+                            preserving_proto_field_name=True,
+                        )
+                    except Exception as exc:
+                        raise exceptions.BusyBarProtocolError(
+                            "Failed to decode /api/status/ws protobuf message",
+                            method="GET",
+                            path="/api/status/ws",
+                            response_excerpt=str(exc),
+                        ) from exc
+        except exceptions.BusyBarProtocolError:
+            raise
+        except Exception as exc:
+            raise exceptions.BusyBarWebSocketError(
+                "Status WebSocket streaming failed",
+                path="/api/status/ws",
+                original=exc,
+            ) from exc

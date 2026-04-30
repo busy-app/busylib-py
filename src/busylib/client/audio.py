@@ -13,12 +13,16 @@ class AudioMixin(SyncClientBase):
     Audio playback and volume control helpers.
     """
 
-    def play_audio(self, app_id: str, path: str) -> types.SuccessResponse:
-        logger.info("play_audio app_id=%s path=%s", app_id, path)
+    def play_audio(self, application_name: str, path: str) -> types.SuccessResponse:
+        logger.info(
+            "play_audio application_name=%s path=%s",
+            application_name,
+            path,
+        )
         data = self._request(
             "POST",
             "/api/audio/play",
-            params={"app_id": app_id, "path": path},
+            params={"application_name": application_name, "path": path},
         )
         return types.SuccessResponse.model_validate(data)
 
@@ -57,12 +61,16 @@ class AsyncAudioMixin(AsyncClientBase):
     Async audio playback and volume control helpers.
     """
 
-    async def play_audio(self, app_id: str, path: str) -> types.SuccessResponse:
-        logger.info("async play_audio app_id=%s path=%s", app_id, path)
+    async def play_audio(self, application_name: str, path: str) -> types.SuccessResponse:
+        logger.info(
+            "async play_audio application_name=%s path=%s",
+            application_name,
+            path,
+        )
         data = await self._request(
             "POST",
             "/api/audio/play",
-            params={"app_id": app_id, "path": path},
+            params={"application_name": application_name, "path": path},
         )
         return types.SuccessResponse.model_validate(data)
 

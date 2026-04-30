@@ -107,6 +107,8 @@ class ElementType(StrEnum):
 class DisplayElementType(StrEnum):
     TEXT = "text"
     IMAGE = "image"
+    ANIMATION = "animation"
+    COUNTDOWN = "countdown"
 
 
 class DisplayName(StrEnum):
@@ -125,6 +127,19 @@ class InputKey(StrEnum):
     OFF = "off"
     APPS = "apps"
     SETTINGS = "settings"
+
+
+class InputEventState(StrEnum):
+    PRESS = "press"
+    RELEASE = "release"
+
+
+class InputEvent(BaseModel):
+    key: InputKey
+    state: InputEventState
+    timestamp_ms: int | None = None
+
+    model_config = ConfigDict(extra="ignore")
 
 
 class SuccessResponse(BaseModel):
@@ -409,7 +424,8 @@ class StorageStatus(BaseModel):
 
 class DisplayElementBase(BaseModel):
     id: str
-    timeout: int | None = Field(default=None, gt=0)
+    timeout: int | None = Field(default=None, ge=0)
+    display_until: str | None = None
     display: DisplayName | None = DisplayName.FRONT
 
     model_config = ConfigDict(extra="allow")
@@ -420,7 +436,7 @@ class TextElement(DisplayElementBase):
     x: int
     y: int
     text: str
-    font: Literal["small", "medium", "medium_condensed", "big"] | None = None
+    font: Literal["small", "medium", "medium_condensed", "big"]
     align: (
         Literal[
             "top_left",
@@ -482,17 +498,40 @@ class ImageElement(DisplayElementBase):
     type: Literal["image"] = "image"
     x: int
     y: int
-    path: str
+    path: str | None = None
+    stock_path: str | None = None
 
 
-DisplayElement = TextElement | ImageElement
+class AnimationElement(DisplayElementBase):
+    type: Literal["animation"] = "animation"
+    x: int
+    y: int
+    path: str | None = None
+    stock_path: str | None = None
+    loop: bool = False
+    await_previous_end: bool = False
+    section: str | None = None
+
+
+class CountdownElement(DisplayElementBase):
+    type: Literal["countdown"] = "countdown"
+    x: int
+    y: int
+    timestamp: str
+    color: str | Sequence[int | float] | None = None
+    direction: Literal["time_left", "time_since"]
+    show_hours: Literal["when_non_zero", "always"]
+
+
+DisplayElement = TextElement | ImageElement | AnimationElement | CountdownElement
 
 
 class DisplayElements(BaseModel):
-    app_id: str = Field(min_length=1)
+    application_name: str = Field(min_length=1, alias="app_id")
+    priority: int = Field(default=50, ge=1, le=100)
     elements: list[DisplayElement]
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
 
 class DisplayBrightnessInfo(BaseModel):
@@ -506,12 +545,11 @@ BrightnessValue = Annotated[int, Field(ge=0, le=100)] | Literal["auto"]
 
 
 class DisplayBrightnessUpdate(BaseModel):
-    front: BrightnessValue | None = None
-    back: BrightnessValue | None = None
+    value: BrightnessValue
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("front", "back")
+    @field_validator("value")
     @classmethod
     def _normalize_brightness(
         cls, value: BrightnessValue | None

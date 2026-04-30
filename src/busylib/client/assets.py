@@ -24,7 +24,7 @@ class AssetsMixin(SyncClientBase):
 
     def upload_asset(
         self,
-        app_id: str,
+        application_name: str,
         filename: str,
         data: bytes,
         *,
@@ -36,23 +36,26 @@ class AssetsMixin(SyncClientBase):
         Uses a longer default timeout to tolerate large payload uploads.
         """
         logger.info(
-            "upload_asset app_id=%s filename=%s size=%s", app_id, filename, len(data)
+            "upload_asset application_name=%s filename=%s size=%s",
+            application_name,
+            filename,
+            len(data),
         )
         payload = self._request(
             "POST",
             "/api/assets/upload",
-            params={"app_id": app_id, "file": filename},
+            params={"application_name": application_name, "file": filename},
             data=data,
             timeout=timeout,
         )
         return types.SuccessResponse.model_validate(payload)
 
-    def delete_app_assets(self, app_id: str) -> types.SuccessResponse:
-        logger.info("delete_app_assets app_id=%s", app_id)
+    def delete_app_assets(self, application_name: str) -> types.SuccessResponse:
+        logger.info("delete_app_assets application_name=%s", application_name)
         data = self._request(
             "DELETE",
             "/api/assets/upload",
-            params={"app_id": app_id},
+            params={"application_name": application_name},
         )
         return types.SuccessResponse.model_validate(data)
 
@@ -64,7 +67,7 @@ class AsyncAssetsMixin(AsyncClientBase):
 
     async def upload_asset(
         self,
-        app_id: str,
+        application_name: str,
         filename: str,
         data: bytes,
         *,
@@ -77,24 +80,24 @@ class AsyncAssetsMixin(AsyncClientBase):
         """
         logger.info(
             "async upload_asset app_id=%s filename=%s size=%s",
-            app_id,
+            application_name,
             filename,
             len(data),
         )
         payload = await self._request(
             "POST",
             "/api/assets/upload",
-            params={"app_id": app_id, "file": filename},
+            params={"application_name": application_name, "file": filename},
             data=data,
             timeout=timeout,
         )
         return types.SuccessResponse.model_validate(payload)
 
-    async def delete_app_assets(self, app_id: str) -> types.SuccessResponse:
-        logger.info("async delete_app_assets app_id=%s", app_id)
+    async def delete_app_assets(self, application_name: str) -> types.SuccessResponse:
+        logger.info("async delete_app_assets application_name=%s", application_name)
         data = await self._request(
             "DELETE",
             "/api/assets/upload",
-            params={"app_id": app_id},
+            params={"application_name": application_name},
         )
         return types.SuccessResponse.model_validate(data)

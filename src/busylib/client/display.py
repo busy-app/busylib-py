@@ -98,10 +98,10 @@ class DisplayMixin(SyncClientBase):
         display_data: types.DisplayElements | dict[str, Any],
     ) -> types.SuccessResponse:
         logger.info(
-            "draw_on_display app_id=%s",
-            display_data.app_id
+            "draw_on_display application_name=%s",
+            display_data.application_name
             if isinstance(display_data, types.DisplayElements)
-            else display_data.get("app_id"),
+            else display_data.get("application_name", display_data.get("app_id")),
         )
         model = (
             display_data
@@ -149,9 +149,13 @@ class DisplayMixin(SyncClientBase):
                     spec.width,
                 )
 
-    def clear_display(self) -> types.SuccessResponse:
-        logger.info("clear_display")
-        data = self._request("DELETE", "/api/display/draw")
+    def clear_display(
+        self,
+        application_name: str | None = None,
+    ) -> types.SuccessResponse:
+        logger.info("clear_display application_name=%s", application_name)
+        params = {"application_name": application_name} if application_name else None
+        data = self._request("DELETE", "/api/display/draw", params=params)
         return types.SuccessResponse.model_validate(data)
 
     def get_display_brightness(self) -> types.DisplayBrightnessInfo:
@@ -161,11 +165,10 @@ class DisplayMixin(SyncClientBase):
 
     def set_display_brightness(
         self,
-        front: types.BrightnessValue | None = None,
-        back: types.BrightnessValue | None = None,
+        value: types.BrightnessValue,
     ) -> types.SuccessResponse:
-        logger.info("set_display_brightness front=%s back=%s", front, back)
-        model = types.DisplayBrightnessUpdate(front=front, back=back)
+        logger.info("set_display_brightness value=%s", value)
+        model = types.DisplayBrightnessUpdate(value=value)
         payload = model.model_dump(exclude_none=True)
         data = self._request(
             "POST",
@@ -226,10 +229,10 @@ class AsyncDisplayMixin(AsyncClientBase):
         display_data: types.DisplayElements | dict[str, Any],
     ) -> types.SuccessResponse:
         logger.info(
-            "async draw_on_display app_id=%s",
-            display_data.app_id
+            "async draw_on_display application_name=%s",
+            display_data.application_name
             if isinstance(display_data, types.DisplayElements)
-            else display_data.get("app_id"),
+            else display_data.get("application_name", display_data.get("app_id")),
         )
         model = (
             display_data
@@ -277,9 +280,13 @@ class AsyncDisplayMixin(AsyncClientBase):
                     spec.width,
                 )
 
-    async def clear_display(self) -> types.SuccessResponse:
-        logger.info("async clear_display")
-        data = await self._request("DELETE", "/api/display/draw")
+    async def clear_display(
+        self,
+        application_name: str | None = None,
+    ) -> types.SuccessResponse:
+        logger.info("async clear_display application_name=%s", application_name)
+        params = {"application_name": application_name} if application_name else None
+        data = await self._request("DELETE", "/api/display/draw", params=params)
         return types.SuccessResponse.model_validate(data)
 
     async def get_display_brightness(self) -> types.DisplayBrightnessInfo:
@@ -289,11 +296,10 @@ class AsyncDisplayMixin(AsyncClientBase):
 
     async def set_display_brightness(
         self,
-        front: types.BrightnessValue | None = None,
-        back: types.BrightnessValue | None = None,
+        value: types.BrightnessValue,
     ) -> types.SuccessResponse:
-        logger.info("async set_display_brightness front=%s back=%s", front, back)
-        model = types.DisplayBrightnessUpdate(front=front, back=back)
+        logger.info("async set_display_brightness value=%s", value)
+        model = types.DisplayBrightnessUpdate(value=value)
         payload = model.model_dump(exclude_none=True)
         data = await self._request(
             "POST",

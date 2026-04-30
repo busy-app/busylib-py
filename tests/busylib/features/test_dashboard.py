@@ -6,7 +6,11 @@ import pytest
 
 from busylib.client import AsyncBusyBar
 from busylib import types
-from busylib.features import collect_device_snapshot
+from busylib.features import (
+    DeviceSnapshot,
+    apply_state_stream_update,
+    collect_device_snapshot,
+)
 
 
 class _OkClient:
@@ -127,3 +131,72 @@ async def test_collect_device_snapshot_keeps_partial_results_and_errors() -> Non
     assert snapshot.volume is None
     assert "volume" in snapshot.field_errors
     assert snapshot.field_errors["volume"].startswith("RuntimeError:")
+
+
+def test_apply_state_stream_update_updates_known_fields() -> None:
+    """
+    Apply protobuf state updates to an existing snapshot.
+
+    This verifies name, power, brightness, volume, and Wi-Fi fields are mapped
+    from streamed state payloads.
+    """
+    start = DeviceSnapshot(
+        name="Old",
+        brightness=types.DisplayBrightnessInfo(front="10", back="15"),
+    )
+    payload = {
+        "updates": [
+            {"device_name": {"name": "BUSY"}},
+            {
+                "power": {
+                    "known": {
+                        "battery_status": "CHARGING",
+                        "battery_charge_percent": 77,
+                        "battery_voltage_mv": 4100,
+                        "battery_current_ma": -120,
+                        "usb_voltage_mv": 5000,
+                    }
+                }
+            },
+            {"brightness": {"actual_brightness": 22}},
+            {"audio_volume": {"volume": 35}},
+            {
+                "wifi": {
+                    "connected": {
+                        "ssid": "Office",
+                        "bssid": "aa:bb:cc:dd:ee:ff",
+                        "channel": 6,
+                        "rssi": -55,
+                    }
+                }
+            },
+        ]
+    }
+
+    updated = apply_state_stream_update(start, payload)
+    assert updated.name == "BUSY"
+    assert updated.power is not None
+    assert updated.power.state is types.PowerState.CHARGING
+    assert updated.power.battery_charge == 77
+    assert updated.brightness is not None
+    assert updated.brightness.front == "22"
+    assert updated.brightness.back == "15"
+    assert updated.volume is not None
+    assert updated.volume.volume == 35.0
+    assert updated.wifi is not None
+    assert updated.wifi.state is types.WifiState.CONNECTED
+    assert updated.wifi.ssid == "Office"
+
+
+def test_apply_state_stream_update_keeps_existing_when_no_updates() -> None:
+    """
+    Keep snapshot intact when stream payload has no usable updates.
+    """
+    start = DeviceSnapshot(
+        name="Stable",
+        volume=types.AudioVolumeInfo(volume=44),
+    )
+    updated = apply_state_stream_update(start, {"updates": []})
+    assert updated.name == "Stable"
+    assert updated.volume is not None
+    assert updated.volume.volume == 44

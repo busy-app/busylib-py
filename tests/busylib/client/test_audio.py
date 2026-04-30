@@ -57,7 +57,7 @@ def test_audio_play_stop_volume_sync() -> None:
         {
             "path": "/api/audio/play",
             "method": "POST",
-            "params": {"app_id": "app", "path": "/ext/app.wav"},
+            "params": {"application_name": "app", "path": "/ext/app.wav"},
         },
         {"path": "/api/audio/play", "method": "DELETE", "params": {}},
         {"path": "/api/audio/play", "method": "DELETE", "params": {}},
@@ -103,7 +103,7 @@ async def test_audio_play_stop_volume_async() -> None:
         {
             "path": "/api/audio/play",
             "method": "POST",
-            "params": {"app_id": "app", "path": "/ext/app.wav"},
+            "params": {"application_name": "app", "path": "/ext/app.wav"},
         },
         {"path": "/api/audio/play", "method": "DELETE", "params": {}},
         {"path": "/api/audio/play", "method": "DELETE", "params": {}},

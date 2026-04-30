@@ -6,6 +6,14 @@
 
 A simple and intuitive Python client for interacting with the Busy Bar API. This library allows you to programmatically control the device's display, audio, and assets.
 
+## Repository Structure
+
+If you are using the monorepo layout, follow these boundaries:
+
+- `services/` contains only product services.
+- `shared/` contains reusable libraries and shared contracts.
+- `playground/` contains experiments and service simulators for trying ideas safely.
+
 ## Features
 
 -   Easy-to-use API for all major device functions.
@@ -81,7 +89,7 @@ You can upload files (like images or sounds) to be used by your application on t
 with open("path/to/your/image.png", "rb") as f:
     file_bytes = f.read()
     response = bb.upload_asset(
-        app_id="my-app",
+        application_name="my-app",
         filename="logo.png",
         data=file_bytes,
     )
@@ -91,7 +99,7 @@ with open("path/to/your/image.png", "rb") as f:
 with open("path/to/your/sound.wav", "rb") as f:
     file_bytes = f.read()
     response = bb.upload_asset(
-        app_id="my-app",
+        application_name="my-app",
         filename="notification.wav",
         data=file_bytes,
     )
@@ -111,6 +119,7 @@ text_element = types.TextElement(
     x=10,
     y=20,
     text="Hello, World!",
+    font="small",
     display=types.DisplayName.FRONT,
 )
 
@@ -124,7 +133,7 @@ image_element = types.ImageElement(
 )
 
 display_data = types.DisplayElements(
-    app_id="my-app",
+    application_name="my-app",
     elements=[text_element, image_element]
 )
 
@@ -161,10 +170,10 @@ print(f"Stop result: {response.result}")
 
 ### Deleting All Assets for an App
 
-This will remove all files associated with a specific `app_id`.
+This will remove all files associated with a specific `application_name`.
 
 ```python
-response = bb.delete_app_assets(app_id="my-app")
+response = bb.delete_app_assets(application_name="my-app")
 print(f"Delete result: {response.result}")
 ```
 
