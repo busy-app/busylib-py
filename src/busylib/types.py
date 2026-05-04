@@ -587,19 +587,12 @@ class AudioPlayRequest(BaseModel):
         Stock resources use `stock_path`; uploaded resources use
         `application_name + path`.
         """
-        if self.stock_path:
-            if self.path or self.application_name:
-                raise ValueError(
-                    "stock_path cannot be combined with application_name/path"
-                )
-            return self
-
-        if not self.path:
-            raise ValueError(
-                "path is required for user assets playback when stock_path is not set"
-            )
         if not self.application_name:
-            raise ValueError("application_name is required when using path")
+            raise ValueError("application_name is required")
+
+        if bool(self.path) == bool(self.stock_path):
+            raise ValueError("exactly one of path or stock_path must be provided")
+
         return self
 
 

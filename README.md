@@ -190,6 +190,29 @@ volume = bb.get_audio_volume()
 print(f"Volume: {volume.volume}")
 ```
 
+### Preparing and Executing Requests Separately
+
+You can prepare a low-level request first and execute it later, optionally
+with a different HTTP client/pool.
+
+```python
+from busylib import BusyBar
+
+bb = BusyBar("10.0.4.20")
+prepared = bb.prepare_request(
+    "POST",
+    "/api/audio/play",
+    json_payload={"application_name": "my-app", "path": "notification.snd"},
+)
+
+# execute now
+result = bb.execute_prepared_request(prepared)
+
+# or execute with an external client
+# with httpx.Client(base_url="http://10.0.4.20") as ext:
+#     result = bb.execute_prepared_request(prepared, client=ext)
+```
+
 ### Working with Storage
 
 You can manage files in the device's storage:
