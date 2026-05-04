@@ -4,6 +4,7 @@ import json
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from busylib import AsyncBusyBar, BusyBar, exceptions, types
 
@@ -148,16 +149,31 @@ def test_audio_play_stock_path_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    resp = client.play_audio(stock_path="shared/Calendar_event_starts.snd")
+    resp = client.play_audio(
+        application_name="calendar",
+        stock_path="shared/Calendar_event_starts.snd",
+    )
     assert resp.result == "OK"
     assert seen == [
         {
             "path": "/api/audio/play",
             "method": "POST",
             "params": {},
-            "json": {"stock_path": "shared/Calendar_event_starts.snd"},
+            "json": {
+                "application_name": "calendar",
+                "stock_path": "shared/Calendar_event_starts.snd",
+            },
         }
     ]
+
+
+def test_audio_play_stock_path_requires_application_name() -> None:
+    """
+    Reject stock-path playback payloads without application_name.
+    """
+    client = _make_sync_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    with pytest.raises(ValidationError):
+        client.play_audio(stock_path="shared/Calendar_event_starts.snd")
 
 
 def test_audio_play_legacy_fallback_sync() -> None:
