@@ -5,10 +5,10 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterable, Iterable
-from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
+from pydantic import BaseModel, ConfigDict
 
 from .. import exceptions, versioning
 from ..settings import settings
@@ -24,8 +24,7 @@ logger = logging.getLogger(__name__)
 MAX_ERROR_EXCERPT = 256
 
 
-@dataclass(slots=True)
-class PreparedRequest:
+class PreparedRequest(BaseModel):
     """
     Prepared low-level request ready for execution by HTTP clients.
 
@@ -43,6 +42,8 @@ class PreparedRequest:
     allow_text: bool
     timeout: httpx.Timeout
     json_payload: JsonType | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 def _json_bytes(payload: Any) -> bytes:
