@@ -202,7 +202,7 @@ bb = BusyBar("10.0.4.20")
 prepared = bb.prepare_request(
     "POST",
     "/api/audio/play",
-    params={"application_name": "my-app", "path": "notification.snd"},
+    json_payload={"application_name": "my-app", "path": "notification.snd"},
 )
 
 # execute now

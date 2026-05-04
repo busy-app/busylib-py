@@ -8,7 +8,7 @@ from collections.abc import AsyncIterable, Iterable
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .. import exceptions, versioning
 from ..settings import settings
@@ -30,20 +30,40 @@ class PreparedRequest(BaseModel):
 
     This object stores normalized request attributes after payload encoding.
     Callers can execute it with built-in client transport or pass fields to an
-    external request executor.
+    external request executor. Serialization is not guaranteed because timeout
+    and streaming content may contain runtime-only objects.
+
+    Streaming content based on iterables/generators is single-use and should
+    not be reused across multiple executions.
     """
 
     method: str
     path: str
     params: dict[str, Any] | None
-    headers: dict[str, str] | None
-    content: bytes | Iterable[bytes] | AsyncIterable[bytes] | None
+    headers: dict[str, str] | None = Field(default=None, repr=False)
+    content: bytes | Iterable[bytes] | AsyncIterable[bytes] | None = Field(
+        default=None,
+        repr=False,
+    )
     expect_bytes: bool
     allow_text: bool
     timeout: httpx.Timeout
     json_payload: JsonType | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+def _mask_headers(headers: dict[str, str] | None) -> dict[str, str] | None:
+    """
+    Return headers with sensitive auth values masked for safe logging.
+    """
+    if headers is None:
+        return None
+    hidden_keys = {"authorization", "x-api-token", "cookie"}
+    return {
+        key: ("***" if key.lower() in hidden_keys else value)
+        for key, value in headers.items()
+    }
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -129,7 +149,7 @@ def _prepare_request_payload(
         method,
         path,
         params,
-        headers_local or None,
+        _mask_headers(headers_local or None),
         None if serialized_json is None else serialized_json.decode("utf-8"),
         None if data is None else _data_length(data),
     )
@@ -399,6 +419,8 @@ class SyncClientBase:
 
         By default the current `httpx.Client` is used. Callers may inject a
         custom client (for example, from a pool) while preserving error mapping.
+        Prepared streaming content is single-use and should be regenerated for
+        repeated executions.
         """
         request_client = client or self.client
         last_exc: Exception | None = None
@@ -592,6 +614,7 @@ class AsyncClientBase:
 
         External integrations can inspect the prepared payload, route it to
         custom transports, or execute later via `execute_prepared_request`.
+        Prepared request should be executed with an async executor.
         """
         return _prepare_request_payload(
             method,
@@ -617,7 +640,8 @@ class AsyncClientBase:
 
         By default the current `httpx.AsyncClient` is used. Callers may inject
         a custom client (for example, from a pool) while preserving error
-        mapping.
+        mapping. Prepared streaming content is single-use and should be
+        regenerated for repeated executions.
         """
         request_client = client or self.client
         last_exc: Exception | None = None
