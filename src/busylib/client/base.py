@@ -92,6 +92,141 @@ def _truncate_text(value: str, limit: int = MAX_ERROR_EXCERPT) -> str:
     return f"{normalized[:limit]}..."
 
 
+def _prepare_request_payload(
+    method: str,
+    path: str,
+    *,
+    params: dict[str, Any] | None,
+    headers: dict[str, str] | None,
+    json_payload: JsonType | None,
+    data: bytes | Iterable[bytes] | AsyncIterable[bytes] | None,
+    expect_bytes: bool,
+    allow_text: bool,
+    timeout: float | httpx.Timeout | None,
+    async_mode: bool,
+) -> PreparedRequest:
+    """
+    Build a normalized PreparedRequest object from request parameters.
+
+    The helper centralizes payload encoding and header normalization used by
+    both sync and async clients.
+    """
+    headers_local: dict[str, str] = dict(headers or {})
+    content: bytes | Iterable[bytes] | AsyncIterable[bytes] | None = None
+    serialized_json: bytes | None = None
+
+    if json_payload is not None:
+        serialized_json = _json_bytes(json_payload)
+        content = serialized_json
+        headers_local["Content-Type"] = "application/json; charset=utf-8"
+    elif data is not None:
+        content = data
+
+    mode_label = "async " if async_mode else ""
+    logger.debug(
+        "Prepared %srequest %s %s params=%s headers=%s json_body=%s data_len=%s",
+        mode_label,
+        method,
+        path,
+        params,
+        headers_local or None,
+        None if serialized_json is None else serialized_json.decode("utf-8"),
+        None if data is None else _data_length(data),
+    )
+
+    return PreparedRequest(
+        method=method,
+        path=path,
+        params=params,
+        headers=headers_local or None,
+        content=content,
+        expect_bytes=expect_bytes,
+        allow_text=allow_text,
+        timeout=_as_timeout(timeout),
+        json_payload=json_payload,
+    )
+
+
+def _raise_api_error_from_response(response: httpx.Response, *, prepared: PreparedRequest) -> None:
+    """
+    Raise BusyBarAPIError built from an HTTP error response.
+
+    The helper preserves the existing exception payload contract for both sync
+    and async request execution paths.
+    """
+    payload = None
+    request_id = response.headers.get("X-Request-ID") or response.headers.get("x-request-id")
+    response_excerpt = _truncate_text(response.text)
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            error = payload.get("error") or payload.get("message")
+            code = payload.get("code")
+        else:
+            error = None
+            code = None
+    except ValueError:
+        error = f"HTTP {response.status_code}: {response.text}"
+        code = None
+
+    if not error:
+        error = response.text or f"HTTP {response.status_code} error"
+
+    raise exceptions.BusyBarAPIError(
+        error=error,
+        code=(code if isinstance(code, int) else response.status_code),
+        status_code=response.status_code,
+        method=prepared.method,
+        path=prepared.path,
+        payload=payload,
+        request_id=request_id,
+        response_excerpt=response_excerpt,
+    )
+
+
+def _decode_response_payload(response: httpx.Response, *, prepared: PreparedRequest) -> JsonType | bytes | str:
+    """
+    Decode successful HTTP response according to PreparedRequest flags.
+
+    Supports raw bytes mode and optional plain-text fallback when JSON is not
+    available.
+    """
+    if prepared.expect_bytes:
+        logger.debug(
+            "Response %s %s status=%s bytes=%s",
+            prepared.method,
+            prepared.path,
+            response.status_code,
+            len(response.content),
+        )
+        return response.content
+
+    try:
+        logger.debug(
+            "Response %s %s status=%s",
+            prepared.method,
+            prepared.path,
+            response.status_code,
+        )
+        return response.json()
+    except ValueError:
+        if not prepared.allow_text:
+            raise exceptions.BusyBarProtocolError(
+                "Expected JSON response body",
+                method=prepared.method,
+                path=prepared.path,
+                request_id=(response.headers.get("X-Request-ID") or response.headers.get("x-request-id")),
+                response_excerpt=_truncate_text(response.text),
+            )
+        logger.debug(
+            "Response %s %s status=%s (text fallback)",
+            prepared.method,
+            prepared.path,
+            response.status_code,
+        )
+        return response.text
+
+
 class SyncClientBase:
     """
     Sync foundation: connection setup, retries, and low-level HTTP requests.
@@ -240,36 +375,17 @@ class SyncClientBase:
         External integrations can inspect the prepared payload, route it to
         custom transports, or execute later via `execute_prepared_request`.
         """
-        headers_local: dict[str, str] = dict(headers or {})
-        content: bytes | Iterable[bytes] | None = None
-        serialized_json = None
-
-        if json_payload is not None:
-            serialized_json = _json_bytes(json_payload)
-            content = serialized_json
-            headers_local["Content-Type"] = "application/json; charset=utf-8"
-        elif data is not None:
-            content = data
-
-        logger.debug(
-            "Prepared request %s %s params=%s headers=%s json_body=%s data_len=%s",
+        return _prepare_request_payload(
             method,
             path,
-            params,
-            headers_local or None,
-            None if serialized_json is None else serialized_json.decode("utf-8"),
-            None if data is None else _data_length(data),
-        )
-        return PreparedRequest(
-            method=method,
-            path=path,
             params=params,
-            headers=headers_local or None,
-            content=content,
+            headers=headers,
+            json_payload=json_payload,
+            data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=_as_timeout(timeout),
-            json_payload=json_payload,
+            timeout=timeout,
+            async_mode=False,
         )
 
     def execute_prepared_request(
@@ -310,73 +426,8 @@ class SyncClientBase:
                 continue
 
             if response.status_code >= 400:
-                payload = None
-                request_id = response.headers.get(
-                    "X-Request-ID"
-                ) or response.headers.get("x-request-id")
-                response_excerpt = _truncate_text(response.text)
-                try:
-                    payload = response.json()
-                    if isinstance(payload, dict):
-                        error = payload.get("error") or payload.get("message")
-                        code = payload.get("code")
-                    else:
-                        error = None
-                        code = None
-                except ValueError:
-                    error = f"HTTP {response.status_code}: {response.text}"
-                    code = None
-                if not error:
-                    error = response.text or f"HTTP {response.status_code} error"
-                logger.error("API error %s: %s (body=%s)", code, error, response.text)
-                raise exceptions.BusyBarAPIError(
-                    error=error,
-                    code=(code if isinstance(code, int) else response.status_code),
-                    status_code=response.status_code,
-                    method=prepared.method,
-                    path=prepared.path,
-                    payload=payload,
-                    request_id=request_id,
-                    response_excerpt=response_excerpt,
-                )
-
-            if prepared.expect_bytes:
-                logger.debug(
-                    "Response %s %s status=%s bytes=%s",
-                    prepared.method,
-                    prepared.path,
-                    response.status_code,
-                    len(response.content),
-                )
-                return response.content
-
-            try:
-                logger.debug(
-                    "Response %s %s status=%s",
-                    prepared.method,
-                    prepared.path,
-                    response.status_code,
-                )
-                return response.json()
-            except ValueError:
-                if not prepared.allow_text:
-                    raise exceptions.BusyBarProtocolError(
-                        "Expected JSON response body",
-                        method=prepared.method,
-                        path=prepared.path,
-                        request_id=(
-                            response.headers.get("X-Request-ID")
-                            or response.headers.get("x-request-id")
-                        ),
-                        response_excerpt=_truncate_text(response.text),
-                    )
-                logger.debug(
-                    "Response %s %s status=%s (text fallback)",
-                    prepared.method,
-                    prepared.path,
-                    response.status_code,
-                )
-                return response.text
+                _raise_api_error_from_response(response, prepared=prepared)
+            return _decode_response_payload(response, prepared=prepared)
 
         if last_exc:
             raise exceptions.BusyBarRequestError(
@@ -542,36 +593,17 @@ class AsyncClientBase:
         External integrations can inspect the prepared payload, route it to
         custom transports, or execute later via `execute_prepared_request`.
         """
-        headers_local: dict[str, str] = dict(headers or {})
-        content: bytes | AsyncIterable[bytes] | None = None
-        serialized_json = None
-
-        if json_payload is not None:
-            serialized_json = _json_bytes(json_payload)
-            content = serialized_json
-            headers_local["Content-Type"] = "application/json; charset=utf-8"
-        elif data is not None:
-            content = data
-
-        logger.debug(
-            "Prepared async request %s %s params=%s headers=%s json_body=%s data_len=%s",
+        return _prepare_request_payload(
             method,
             path,
-            params,
-            headers_local or None,
-            None if serialized_json is None else serialized_json.decode("utf-8"),
-            None if data is None else _data_length(data),
-        )
-        return PreparedRequest(
-            method=method,
-            path=path,
             params=params,
-            headers=headers_local or None,
-            content=content,
+            headers=headers,
+            json_payload=json_payload,
+            data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=_as_timeout(timeout),
-            json_payload=json_payload,
+            timeout=timeout,
+            async_mode=True,
         )
 
     async def execute_prepared_request(
@@ -613,72 +645,8 @@ class AsyncClientBase:
                 continue
 
             if response.status_code >= 400:
-                payload = None
-                request_id = response.headers.get(
-                    "X-Request-ID"
-                ) or response.headers.get("x-request-id")
-                response_excerpt = _truncate_text(response.text)
-                try:
-                    payload = response.json()
-                    if isinstance(payload, dict):
-                        error = payload.get("error") or payload.get("message")
-                        code = payload.get("code")
-                    else:
-                        error = None
-                        code = None
-                except ValueError:
-                    error = f"HTTP {response.status_code}: {response.text}"
-                    code = None
-                if not error:
-                    error = response.text or f"HTTP {response.status_code} error"
-                raise exceptions.BusyBarAPIError(
-                    error=error,
-                    code=(code if isinstance(code, int) else response.status_code),
-                    status_code=response.status_code,
-                    method=prepared.method,
-                    path=prepared.path,
-                    payload=payload,
-                    request_id=request_id,
-                    response_excerpt=response_excerpt,
-                )
-
-            if prepared.expect_bytes:
-                logger.debug(
-                    "Response %s %s status=%s bytes=%s",
-                    prepared.method,
-                    prepared.path,
-                    response.status_code,
-                    len(response.content),
-                )
-                return response.content
-
-            try:
-                logger.debug(
-                    "Response %s %s status=%s",
-                    prepared.method,
-                    prepared.path,
-                    response.status_code,
-                )
-                return response.json()
-            except ValueError:
-                if not prepared.allow_text:
-                    raise exceptions.BusyBarProtocolError(
-                        "Expected JSON response body",
-                        method=prepared.method,
-                        path=prepared.path,
-                        request_id=(
-                            response.headers.get("X-Request-ID")
-                            or response.headers.get("x-request-id")
-                        ),
-                        response_excerpt=_truncate_text(response.text),
-                    )
-                logger.debug(
-                    "Response %s %s status=%s (text fallback)",
-                    prepared.method,
-                    prepared.path,
-                    response.status_code,
-                )
-                return response.text
+                _raise_api_error_from_response(response, prepared=prepared)
+            return _decode_response_payload(response, prepared=prepared)
 
         if last_exc:
             raise exceptions.BusyBarRequestError(
