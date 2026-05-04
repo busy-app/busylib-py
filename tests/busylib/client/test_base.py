@@ -60,6 +60,63 @@ def test_request_json_payload_requires_json_sync() -> None:
     assert exc.value.response_excerpt == "ok"
 
 
+def test_prepare_request_sync_returns_serialized_payload() -> None:
+    """
+    Build a prepared request with encoded JSON body and headers.
+
+    This verifies request preparation can be used independently from execution.
+    """
+    client = _SyncBaseClient(
+        httpx.MockTransport(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    )
+    prepared = client.prepare_request(
+        "POST",
+        "/api/test",
+        params={"x": "1"},
+        json_payload={"msg": "Café"},
+    )
+    assert prepared.method == "POST"
+    assert prepared.path == "/api/test"
+    assert prepared.params == {"x": "1"}
+    assert prepared.headers is not None
+    assert prepared.headers["Content-Type"].startswith("application/json")
+    assert isinstance(prepared.content, bytes)
+    assert b"Caf" in prepared.content
+    client.close()
+
+
+def test_execute_prepared_request_with_external_sync_client() -> None:
+    """
+    Execute a prepared request using an injected external HTTPX client.
+
+    This supports call-sites where request execution is delegated to pools.
+    """
+    seen: dict[str, object] = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = request.content.decode("utf-8")
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _SyncBaseClient(
+        httpx.MockTransport(lambda _request: httpx.Response(500, text="unused"))
+    )
+    prepared = client.prepare_request(
+        "POST",
+        "/api/test",
+        json_payload={"value": 7},
+    )
+    with httpx.Client(
+        base_url="http://external.local",
+        transport=httpx.MockTransport(responder),
+    ) as external_client:
+        result = client.execute_prepared_request(prepared, client=external_client)
+    assert result == {"result": "OK"}
+    assert seen["url"] == "http://external.local/api/test"
+    assert seen["body"] == '{"value":7}'
+    client.close()
+
+
 def test_request_json_payload_allow_text_sync() -> None:
     """
     Allow plain-text success payload when explicitly requested.
@@ -163,6 +220,65 @@ async def test_request_text_fallback_async() -> None:
     client = _AsyncBaseClient(httpx.MockTransport(responder))
     with pytest.raises(exceptions.BusyBarProtocolError):
         await client._request("GET", "/api/test")
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_prepare_request_async_returns_serialized_payload() -> None:
+    """
+    Build an async prepared request with encoded JSON body and headers.
+
+    This verifies async request preparation works without network execution.
+    """
+    client = _AsyncBaseClient(
+        httpx.MockTransport(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    )
+    prepared = client.prepare_request(
+        "POST",
+        "/api/test",
+        params={"x": "1"},
+        json_payload={"msg": "Café"},
+    )
+    assert prepared.method == "POST"
+    assert prepared.path == "/api/test"
+    assert prepared.params == {"x": "1"}
+    assert prepared.headers is not None
+    assert prepared.headers["Content-Type"].startswith("application/json")
+    assert isinstance(prepared.content, bytes)
+    assert b"Caf" in prepared.content
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_execute_prepared_request_with_external_async_client() -> None:
+    """
+    Execute a prepared async request using an injected external HTTPX client.
+
+    This supports async call-sites where execution is delegated to pools.
+    """
+    seen: dict[str, object] = {}
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = request.content.decode("utf-8")
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _AsyncBaseClient(
+        httpx.MockTransport(lambda _request: httpx.Response(500, text="unused"))
+    )
+    prepared = client.prepare_request(
+        "POST",
+        "/api/test",
+        json_payload={"value": 7},
+    )
+    async with httpx.AsyncClient(
+        base_url="http://external.local",
+        transport=httpx.MockTransport(responder),
+    ) as external_client:
+        result = await client.execute_prepared_request(prepared, client=external_client)
+    assert result == {"result": "OK"}
+    assert seen["url"] == "http://external.local/api/test"
+    assert seen["body"] == '{"value":7}'
     await client.aclose()
 
 

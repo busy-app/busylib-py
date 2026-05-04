@@ -5,6 +5,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterable, Iterable
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
@@ -21,6 +22,27 @@ LOCAL_CHECK_TIMEOUT = httpx.Timeout(1.5, connect=0.5, read=1.0, write=1.0, pool=
 
 logger = logging.getLogger(__name__)
 MAX_ERROR_EXCERPT = 256
+
+
+@dataclass(slots=True)
+class PreparedRequest:
+    """
+    Prepared low-level request ready for execution by HTTP clients.
+
+    This object stores normalized request attributes after payload encoding.
+    Callers can execute it with built-in client transport or pass fields to an
+    external request executor.
+    """
+
+    method: str
+    path: str
+    params: dict[str, Any] | None
+    headers: dict[str, str] | None
+    content: bytes | Iterable[bytes] | AsyncIterable[bytes] | None
+    expect_bytes: bool
+    allow_text: bool
+    timeout: httpx.Timeout
+    json_payload: JsonType | None = None
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -179,6 +201,44 @@ class SyncClientBase:
         allow_text: bool = False,
         timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
+        """
+        Prepare and execute one synchronous HTTP request.
+
+        This convenience wrapper preserves existing behavior while delegating
+        preparation and execution to dedicated methods.
+        """
+        prepared = self.prepare_request(
+            method,
+            path,
+            params=params,
+            headers=headers,
+            json_payload=json_payload,
+            data=data,
+            expect_bytes=expect_bytes,
+            allow_text=allow_text,
+            timeout=timeout,
+        )
+        return self.execute_prepared_request(prepared)
+
+    def prepare_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        json_payload: JsonType | None = None,
+        data: bytes | Iterable[bytes] | None = None,
+        expect_bytes: bool = False,
+        allow_text: bool = False,
+        timeout: float | httpx.Timeout | None = None,
+    ) -> PreparedRequest:
+        """
+        Build a prepared request without executing network I/O.
+
+        External integrations can inspect the prepared payload, route it to
+        custom transports, or execute later via `execute_prepared_request`.
+        """
         headers_local: dict[str, str] = dict(headers or {})
         content: bytes | Iterable[bytes] | None = None
         serialized_json = None
@@ -191,7 +251,7 @@ class SyncClientBase:
             content = data
 
         logger.debug(
-            "Sending request %s %s params=%s headers=%s json_body=%s data_len=%s",
+            "Prepared request %s %s params=%s headers=%s json_body=%s data_len=%s",
             method,
             path,
             params,
@@ -199,25 +259,49 @@ class SyncClientBase:
             None if serialized_json is None else serialized_json.decode("utf-8"),
             None if data is None else _data_length(data),
         )
+        return PreparedRequest(
+            method=method,
+            path=path,
+            params=params,
+            headers=headers_local or None,
+            content=content,
+            expect_bytes=expect_bytes,
+            allow_text=allow_text,
+            timeout=_as_timeout(timeout),
+            json_payload=json_payload,
+        )
 
+    def execute_prepared_request(
+        self,
+        prepared: PreparedRequest,
+        *,
+        client: httpx.Client | None = None,
+    ) -> JsonType | bytes | str:
+        """
+        Execute a previously prepared request.
+
+        By default the current `httpx.Client` is used. Callers may inject a
+        custom client (for example, from a pool) while preserving error mapping.
+        """
+        request_client = client or self.client
         last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                response = self.client.request(
-                    method,
-                    path,
-                    params=params,
-                    content=content,
-                    headers=headers_local or None,
-                    timeout=_as_timeout(timeout),
+                response = request_client.request(
+                    prepared.method,
+                    prepared.path,
+                    params=prepared.params,
+                    content=prepared.content,
+                    headers=prepared.headers,
+                    timeout=prepared.timeout,
                 )
             except httpx.RequestError as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise exceptions.BusyBarRequestError(
                         str(exc),
-                        method=method,
-                        path=path,
+                        method=prepared.method,
+                        path=prepared.path,
                         attempts=attempt + 1,
                         original=exc,
                     ) from exc
@@ -248,18 +332,18 @@ class SyncClientBase:
                     error=error,
                     code=(code if isinstance(code, int) else response.status_code),
                     status_code=response.status_code,
-                    method=method,
-                    path=path,
+                    method=prepared.method,
+                    path=prepared.path,
                     payload=payload,
                     request_id=request_id,
                     response_excerpt=response_excerpt,
                 )
 
-            if expect_bytes:
+            if prepared.expect_bytes:
                 logger.debug(
                     "Response %s %s status=%s bytes=%s",
-                    method,
-                    path,
+                    prepared.method,
+                    prepared.path,
                     response.status_code,
                     len(response.content),
                 )
@@ -267,15 +351,18 @@ class SyncClientBase:
 
             try:
                 logger.debug(
-                    "Response %s %s status=%s", method, path, response.status_code
+                    "Response %s %s status=%s",
+                    prepared.method,
+                    prepared.path,
+                    response.status_code,
                 )
                 return response.json()
             except ValueError:
-                if not allow_text:
+                if not prepared.allow_text:
                     raise exceptions.BusyBarProtocolError(
                         "Expected JSON response body",
-                        method=method,
-                        path=path,
+                        method=prepared.method,
+                        path=prepared.path,
                         request_id=(
                             response.headers.get("X-Request-ID")
                             or response.headers.get("x-request-id")
@@ -284,8 +371,8 @@ class SyncClientBase:
                     )
                 logger.debug(
                     "Response %s %s status=%s (text fallback)",
-                    method,
-                    path,
+                    prepared.method,
+                    prepared.path,
                     response.status_code,
                 )
                 return response.text
@@ -293,15 +380,15 @@ class SyncClientBase:
         if last_exc:
             raise exceptions.BusyBarRequestError(
                 str(last_exc),
-                method=method,
-                path=path,
+                method=prepared.method,
+                path=prepared.path,
                 attempts=self.max_retries + 1,
                 original=last_exc,
             ) from last_exc
         raise exceptions.BusyBarRequestError(
             "Unknown request error",
-            method=method,
-            path=path,
+            method=prepared.method,
+            path=prepared.path,
             attempts=self.max_retries + 1,
         )
 
@@ -416,6 +503,44 @@ class AsyncClientBase:
         allow_text: bool = False,
         timeout: float | httpx.Timeout | None = None,
     ) -> JsonType | bytes | str:
+        """
+        Prepare and execute one asynchronous HTTP request.
+
+        This convenience wrapper preserves existing behavior while delegating
+        preparation and execution to dedicated methods.
+        """
+        prepared = self.prepare_request(
+            method,
+            path,
+            params=params,
+            headers=headers,
+            json_payload=json_payload,
+            data=data,
+            expect_bytes=expect_bytes,
+            allow_text=allow_text,
+            timeout=timeout,
+        )
+        return await self.execute_prepared_request(prepared)
+
+    def prepare_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        json_payload: JsonType | None = None,
+        data: bytes | AsyncIterable[bytes] | None = None,
+        expect_bytes: bool = False,
+        allow_text: bool = False,
+        timeout: float | httpx.Timeout | None = None,
+    ) -> PreparedRequest:
+        """
+        Build a prepared async request without executing network I/O.
+
+        External integrations can inspect the prepared payload, route it to
+        custom transports, or execute later via `execute_prepared_request`.
+        """
         headers_local: dict[str, str] = dict(headers or {})
         content: bytes | AsyncIterable[bytes] | None = None
         serialized_json = None
@@ -428,7 +553,7 @@ class AsyncClientBase:
             content = data
 
         logger.debug(
-            "Sending async request %s %s params=%s headers=%s json_body=%s data_len=%s",
+            "Prepared async request %s %s params=%s headers=%s json_body=%s data_len=%s",
             method,
             path,
             params,
@@ -436,25 +561,50 @@ class AsyncClientBase:
             None if serialized_json is None else serialized_json.decode("utf-8"),
             None if data is None else _data_length(data),
         )
+        return PreparedRequest(
+            method=method,
+            path=path,
+            params=params,
+            headers=headers_local or None,
+            content=content,
+            expect_bytes=expect_bytes,
+            allow_text=allow_text,
+            timeout=_as_timeout(timeout),
+            json_payload=json_payload,
+        )
 
+    async def execute_prepared_request(
+        self,
+        prepared: PreparedRequest,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> JsonType | bytes | str:
+        """
+        Execute a previously prepared async request.
+
+        By default the current `httpx.AsyncClient` is used. Callers may inject
+        a custom client (for example, from a pool) while preserving error
+        mapping.
+        """
+        request_client = client or self.client
         last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                response = await self.client.request(
-                    method,
-                    path,
-                    params=params,
-                    content=content,
-                    headers=headers_local or None,
-                    timeout=_as_timeout(timeout),
+                response = await request_client.request(
+                    prepared.method,
+                    prepared.path,
+                    params=prepared.params,
+                    content=prepared.content,
+                    headers=prepared.headers,
+                    timeout=prepared.timeout,
                 )
             except httpx.RequestError as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise exceptions.BusyBarRequestError(
                         str(exc),
-                        method=method,
-                        path=path,
+                        method=prepared.method,
+                        path=prepared.path,
                         attempts=attempt + 1,
                         original=exc,
                     ) from exc
@@ -484,18 +634,18 @@ class AsyncClientBase:
                     error=error,
                     code=(code if isinstance(code, int) else response.status_code),
                     status_code=response.status_code,
-                    method=method,
-                    path=path,
+                    method=prepared.method,
+                    path=prepared.path,
                     payload=payload,
                     request_id=request_id,
                     response_excerpt=response_excerpt,
                 )
 
-            if expect_bytes:
+            if prepared.expect_bytes:
                 logger.debug(
                     "Response %s %s status=%s bytes=%s",
-                    method,
-                    path,
+                    prepared.method,
+                    prepared.path,
                     response.status_code,
                     len(response.content),
                 )
@@ -503,15 +653,18 @@ class AsyncClientBase:
 
             try:
                 logger.debug(
-                    "Response %s %s status=%s", method, path, response.status_code
+                    "Response %s %s status=%s",
+                    prepared.method,
+                    prepared.path,
+                    response.status_code,
                 )
                 return response.json()
             except ValueError:
-                if not allow_text:
+                if not prepared.allow_text:
                     raise exceptions.BusyBarProtocolError(
                         "Expected JSON response body",
-                        method=method,
-                        path=path,
+                        method=prepared.method,
+                        path=prepared.path,
                         request_id=(
                             response.headers.get("X-Request-ID")
                             or response.headers.get("x-request-id")
@@ -520,8 +673,8 @@ class AsyncClientBase:
                     )
                 logger.debug(
                     "Response %s %s status=%s (text fallback)",
-                    method,
-                    path,
+                    prepared.method,
+                    prepared.path,
                     response.status_code,
                 )
                 return response.text
@@ -529,14 +682,14 @@ class AsyncClientBase:
         if last_exc:
             raise exceptions.BusyBarRequestError(
                 str(last_exc),
-                method=method,
-                path=path,
+                method=prepared.method,
+                path=prepared.path,
                 attempts=self.max_retries + 1,
                 original=last_exc,
             ) from last_exc
         raise exceptions.BusyBarRequestError(
             "Unknown request error",
-            method=method,
-            path=path,
+            method=prepared.method,
+            path=prepared.path,
             attempts=self.max_retries + 1,
         )
