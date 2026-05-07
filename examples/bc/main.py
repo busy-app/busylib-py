@@ -52,7 +52,7 @@ def run_client(client: AsyncBusyBar, runner: AsyncRunner, *, app: str) -> None:
     Ensures the client is closed and runner stopped on exit.
     """
     runner.start(client)
-    runner.run(client.list_storage_files("/ext"))
+    runner.run(client.storage_list("/ext"))
     app_dir = ensure_app_directory(runner, app)
     try:
         curses.wrapper(run_ui, client, runner, app_dir=app_dir)

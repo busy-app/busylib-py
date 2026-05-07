@@ -1,4 +1,5 @@
 import json
+from typing import Any, cast
 
 import pytest
 
@@ -60,7 +61,8 @@ async def test_stream_status_ws_decodes_protobuf(
     """
     Decode binary protobuf payloads from /api/status/ws into dictionaries.
     """
-    message = state_pb2.State(timestamp=123)
+    state_schema = cast(Any, state_pb2)
+    message = state_schema.State(timestamp=123)
     update = message.updates.add()
     update.device_name.name = "BUSY"
     payload = message.SerializeToString()
@@ -86,8 +88,9 @@ async def test_stream_status_ws_decodes_protobuf(
 
     assert ws.sent == [json.dumps({"enable": True})]
     assert isinstance(items[0], dict)
-    assert items[0]["timestamp"] == "123"
-    assert items[0]["updates"][0]["device_name"]["name"] == "BUSY"
+    decoded = cast(dict[str, Any], items[0])
+    assert decoded["timestamp"] == "123"
+    assert decoded["updates"][0]["device_name"]["name"] == "BUSY"
     assert "x-api-token=secret" in str(captured["url"])
     assert isinstance(captured["kwargs"], dict)
     assert captured["kwargs"]["max_size"] == 4 * 1024 * 1024

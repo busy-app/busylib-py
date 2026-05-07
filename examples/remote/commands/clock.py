@@ -46,8 +46,8 @@ class ClockCommand(CommandBase):
         Trigger the clock app sequence.
         """
         logger.info("command:clock")
-        await self._client.send_input_key(types.InputKey.APPS)
+        await self._client.input(types.InputKey.APPS)
         await asyncio.sleep(0.2)
-        await self._client.send_input_key(types.InputKey.OK)
+        await self._client.input(types.InputKey.OK)
         await asyncio.sleep(0.2)
-        await self._client.send_input_key(types.InputKey.OK)
+        await self._client.input(types.InputKey.OK)

@@ -13,8 +13,8 @@ class InputMixin(SyncClientBase):
     Input key events.
     """
 
-    def send_input_key(self, key: types.InputKey) -> types.SuccessResponse:
-        logger.info("send_input_key key=%s", key.value)
+    def input(self, key: types.InputKey) -> types.SuccessResponse:
+        logger.info("input key=%s", key.value)
         data = self._request(
             "POST",
             "/api/input",
@@ -28,8 +28,8 @@ class AsyncInputMixin(AsyncClientBase):
     Async input key events.
     """
 
-    async def send_input_key(self, key: types.InputKey) -> types.SuccessResponse:
-        logger.info("async send_input_key key=%s", key.value)
+    async def input(self, key: types.InputKey) -> types.SuccessResponse:
+        logger.info("async input key=%s", key.value)
         data = await self._request(
             "POST",
             "/api/input",

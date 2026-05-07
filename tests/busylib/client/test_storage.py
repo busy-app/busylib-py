@@ -28,6 +28,8 @@ class _DummyStorage(StorageMixin):
         *,
         params: dict[str, object] | None = None,
         headers: dict[str, str] | None = None,
+        session_id: str | None = None,
+        application_name: str | None = None,
         json_payload: JsonType | None = None,
         data: bytes | Iterable[bytes] | None = None,
         expect_bytes: bool = False,
@@ -46,6 +48,8 @@ class _DummyStorage(StorageMixin):
                 "path": path,
                 "params": params,
                 "headers": headers,
+                "session_id": session_id,
+                "application_name": application_name,
                 "json_payload": json_payload,
                 "data": payload,
                 "expect_bytes": expect_bytes,
@@ -78,6 +82,8 @@ class _DummyAsyncStorage(AsyncStorageMixin):
         *,
         params: dict[str, object] | None = None,
         headers: dict[str, str] | None = None,
+        session_id: str | None = None,
+        application_name: str | None = None,
         json_payload: JsonType | None = None,
         data: bytes | AsyncIterable[bytes] | None = None,
         expect_bytes: bool = False,
@@ -99,6 +105,8 @@ class _DummyAsyncStorage(AsyncStorageMixin):
                 "path": path,
                 "params": params,
                 "headers": headers,
+                "session_id": session_id,
+                "application_name": application_name,
                 "json_payload": json_payload,
                 "data": payload,
                 "expect_bytes": expect_bytes,
@@ -113,7 +121,7 @@ class _DummyAsyncStorage(AsyncStorageMixin):
         return {"result": "ok"}
 
 
-def test_write_storage_file_sync_progress(monkeypatch) -> None:
+def test_storage_write_sync_progress(monkeypatch) -> None:
     """
     Verify sync write uses converted path and reports progress.
     """
@@ -134,7 +142,7 @@ def test_write_storage_file_sync_progress(monkeypatch) -> None:
     monkeypatch.setattr("busylib.client.storage.convert_for_storage", _fake_convert)
     client = _DummyStorage()
 
-    resp = client.write_storage_file(
+    resp = client.storage_write(
         "/ext/test.txt",
         b"abc",
         progress_callback=_on_progress,
@@ -152,7 +160,7 @@ def test_write_storage_file_sync_progress(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_write_storage_file_async_progress(monkeypatch) -> None:
+async def test_storage_write_async_progress(monkeypatch) -> None:
     """
     Verify async write uses converted path and reports progress.
     """
@@ -173,7 +181,7 @@ async def test_write_storage_file_async_progress(monkeypatch) -> None:
     monkeypatch.setattr("busylib.client.storage.convert_for_storage", _fake_convert)
     client = _DummyAsyncStorage()
 
-    resp = await client.write_storage_file(
+    resp = await client.storage_write(
         "/ext/test.txt",
         b"abc",
         progress_callback=_on_progress,
@@ -195,9 +203,9 @@ def test_read_list_remove_sync() -> None:
     Ensure sync storage read/list/remove wire the right requests.
     """
     client = _DummyStorage()
-    client.read_storage_file("/ext/a.txt")
-    client.list_storage_files("/ext")
-    client.remove_storage_file("/ext/a.txt")
+    client.storage_read("/ext/a.txt")
+    client.storage_list("/ext")
+    client.storage_remove("/ext/a.txt")
 
     assert client.calls[0]["path"] == "/api/storage/read"
     assert client.calls[0]["params"] == {"path": "/ext/a.txt"}
@@ -214,9 +222,9 @@ async def test_read_list_remove_async() -> None:
     Ensure async storage read/list/remove wire the right requests.
     """
     client = _DummyAsyncStorage()
-    await client.read_storage_file("/ext/a.txt")
-    await client.list_storage_files("/ext")
-    await client.remove_storage_file("/ext/a.txt")
+    await client.storage_read("/ext/a.txt")
+    await client.storage_list("/ext")
+    await client.storage_remove("/ext/a.txt")
 
     assert client.calls[0]["path"] == "/api/storage/read"
     assert client.calls[0]["params"] == {"path": "/ext/a.txt"}
@@ -227,7 +235,7 @@ async def test_read_list_remove_async() -> None:
     assert client.calls[2]["params"] == {"path": "/ext/a.txt"}
 
 
-def test_write_storage_file_sync_raises_conversion_error(
+def test_storage_write_sync_raises_conversion_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
@@ -247,11 +255,11 @@ def test_write_storage_file_sync_raises_conversion_error(
     client = _DummyStorage()
 
     with pytest.raises(exceptions.BusyBarConversionError):
-        client.write_storage_file("/ext/test.mp3", b"abc")
+        client.storage_write("/ext/test.mp3", b"abc")
 
 
 @pytest.mark.asyncio
-async def test_write_storage_file_async_raises_conversion_error(
+async def test_storage_write_async_raises_conversion_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
@@ -271,4 +279,4 @@ async def test_write_storage_file_async_raises_conversion_error(
     client = _DummyAsyncStorage()
 
     with pytest.raises(exceptions.BusyBarConversionError):
-        await client.write_storage_file("/ext/test.mp3", b"abc")
+        await client.storage_write("/ext/test.mp3", b"abc")

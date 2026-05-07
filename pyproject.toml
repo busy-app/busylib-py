@@ -24,10 +24,11 @@ dynamic = [ "version" ]
 dependencies = [
   "httpx>=0.28.1",
   "pillow>=12",
+  "protobuf>=6.31.1",
   "pydantic>=2.9",
   "pydantic-extra-types>=2.9",
   "pydantic-settings>=2.12",
-  "protobuf>=6.31.1",
+  "typing-extensions>=4.6",
   "websockets>=12",
 ]
 urls.Documentation = "https://busylib.readthedocs.io"

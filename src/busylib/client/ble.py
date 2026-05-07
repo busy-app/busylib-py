@@ -28,8 +28,8 @@ class BleMixin(SyncClientBase):
         data = self._request("GET", "/api/ble/status")
         return types.BleStatus.model_validate(data)
 
-    def ble_forget_pairing(self) -> types.SuccessResponse:
-        logger.info("ble_forget_pairing")
+    def ble_pairing_forget(self) -> types.SuccessResponse:
+        logger.info("ble_pairing_forget")
         data = self._request("DELETE", "/api/ble/pairing")
         return types.SuccessResponse.model_validate(data)
 
@@ -54,7 +54,7 @@ class AsyncBleMixin(AsyncClientBase):
         data = await self._request("GET", "/api/ble/status")
         return types.BleStatus.model_validate(data)
 
-    async def ble_forget_pairing(self) -> types.SuccessResponse:
-        logger.info("async ble_forget_pairing")
+    async def ble_pairing_forget(self) -> types.SuccessResponse:
+        logger.info("async ble_pairing_forget")
         data = await self._request("DELETE", "/api/ble/pairing")
         return types.SuccessResponse.model_validate(data)

@@ -528,7 +528,7 @@ DisplayElement = TextElement | ImageElement | AnimationElement | CountdownElemen
 
 
 class DisplayElements(BaseModel):
-    application_name: str = Field(min_length=1, alias="app_id")
+    application_name: str = Field(min_length=1)
     priority: int = Field(default=50, ge=1, le=100)
     elements: list[DisplayElement]
 
@@ -573,7 +573,6 @@ class AudioVolumeUpdate(BaseModel):
 
 
 class AudioPlayRequest(BaseModel):
-    application_name: str | None = Field(default=None, min_length=1)
     path: str | None = Field(default=None, min_length=1)
     stock_path: str | None = Field(default=None, min_length=1)
 
@@ -584,12 +583,9 @@ class AudioPlayRequest(BaseModel):
         """
         Ensure payload references exactly one audio source style.
 
-        Stock resources use `stock_path`; uploaded resources use
-        `application_name + path`.
+        Stock resources use `stock_path`; uploaded resources use `path`.
+        Application context is supplied by request kwargs in client methods.
         """
-        if not self.application_name:
-            raise ValueError("application_name is required")
-
         if bool(self.path) == bool(self.stock_path):
             raise ValueError("exactly one of path or stock_path must be provided")
 

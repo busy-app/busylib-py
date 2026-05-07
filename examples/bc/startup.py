@@ -15,10 +15,10 @@ def ensure_app_directory(runner: AsyncRunner, app: str) -> str:
     assets_path = app_assets_dir(app)
     client = runner.require_client()
     try:
-        runner.run(client.list_storage_files(assets_path))
+        runner.run(client.storage_list(assets_path))
     except BusyBarAPIError as exc:
         if exc.code in {400, 404}:
-            runner.run(client.create_storage_directory(assets_path))
+            runner.run(client.storage_mkdir(assets_path))
         else:
             raise
     return assets_path

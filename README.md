@@ -37,7 +37,7 @@ from busylib import BusyBar
 
 bb = BusyBar("10.0.4.20")
 
-version_info = bb.get_version()
+version_info = bb.version()
 print(f"Device version: {version_info.version}")
 ```
 
@@ -47,7 +47,7 @@ You can also use context manager.
 from busylib import BusyBar
 
 with BusyBar("10.0.4.20") as bb:
-    version_info = bb.get_version()
+    version_info = bb.version()
     print(f"Device version: {version_info.version}")
 ```
 
@@ -61,7 +61,7 @@ from busylib import AsyncBusyBar
 
 async def main() -> None:
     async with AsyncBusyBar("10.0.4.20") as bb:
-        version_info = await bb.get_version()
+        version_info = await bb.version()
         print(f"Device version: {version_info.version}")
 
 
@@ -73,6 +73,11 @@ if __name__ == "__main__":
 
 Here are some examples of how to use the library to control your Busy Bar device.
 
+Client method names follow Busy Bar API path segments instead of generic
+`get_*`/`set_*` prefixes. For example, `/api/display/draw` maps to
+`display_draw`, `/api/audio/play` maps to `audio_play`, and
+`/api/storage/remove` maps to `storage_remove`.
+
 ### Uploading an Asset
 
 You can upload files (like images or sounds) to be used by your application on the device.
@@ -80,7 +85,7 @@ You can upload files (like images or sounds) to be used by your application on t
 ```python
 with open("path/to/your/image.png", "rb") as f:
     file_bytes = f.read()
-    response = bb.upload_asset(
+    response = bb.assets_upload(
         application_name="my-app",
         filename="logo.png",
         data=file_bytes,
@@ -90,7 +95,7 @@ with open("path/to/your/image.png", "rb") as f:
 
 with open("path/to/your/sound.wav", "rb") as f:
     file_bytes = f.read()
-    response = bb.upload_asset(
+    response = bb.assets_upload(
         application_name="my-app",
         filename="notification.wav",
         data=file_bytes,
@@ -99,7 +104,7 @@ with open("path/to/your/sound.wav", "rb") as f:
 
 ### Drawing on the Display
 
-Draw text or images on the device's screen. The `draw_on_display` method accepts a `DisplayElements` object containing a list of elements to render.
+Draw text or images on the device's screen. The `display_draw` method accepts a `DisplayElements` object containing a list of elements to render.
 
 ```python
 from busylib import types
@@ -129,7 +134,7 @@ display_data = types.DisplayElements(
     elements=[text_element, image_element]
 )
 
-response = bb.draw_on_display(display_data)
+response = bb.display_draw(display_data)
 print(f"Draw result: {response.result}")
 ```
 
@@ -138,7 +143,7 @@ print(f"Draw result: {response.result}")
 To clear everything from the screen:
 
 ```python
-response = bb.clear_display()
+response = bb.display_clear()
 print(f"Clear result: {response.result}")
 ```
 
@@ -147,7 +152,7 @@ print(f"Clear result: {response.result}")
 Play an audio file that you have already uploaded.
 
 ```python
-response = bb.play_audio(application_name="my-app", path="notification.wav")
+response = bb.audio_play(application_name="my-app", path="notification.wav")
 print(f"Play result: {response.result}")
 ```
 
@@ -156,7 +161,7 @@ print(f"Play result: {response.result}")
 To stop any audio that is currently playing:
 
 ```python
-response = bb.stop_audio()
+response = bb.audio_stop()
 print(f"Stop result: {response.result}")
 ```
 
@@ -165,7 +170,7 @@ print(f"Stop result: {response.result}")
 This will remove all files associated with a specific `application_name`.
 
 ```python
-response = bb.delete_app_assets(application_name="my-app")
+response = bb.assets_delete(application_name="my-app")
 print(f"Delete result: {response.result}")
 ```
 
@@ -174,19 +179,19 @@ print(f"Delete result: {response.result}")
 You can get various status information from the device:
 
 ```python
-version = bb.get_version()
+version = bb.version()
 print(f"Version: {version.version}, Branch: {version.branch}")
 
-status = bb.get_status()
+status = bb.status()
 if status.system:
     print(f"Uptime: {status.system.uptime}")
 if status.power:
     print(f"Battery: {status.power.battery_charge}%")
 
-brightness = bb.get_display_brightness()
+brightness = bb.display_brightness()
 print(f"Front brightness: {brightness.front}, Back brightness: {brightness.back}")
 
-volume = bb.get_audio_volume()
+volume = bb.audio_volume()
 print(f"Volume: {volume.volume}")
 ```
 
@@ -219,21 +224,21 @@ You can manage files in the device's storage:
 
 ```python
 file_data = b"Hello, world!"
-response = bb.write_storage_file(path="/my-app/data.txt", data=file_data)
+response = bb.storage_write(path="/my-app/data.txt", data=file_data)
 
-file_content = bb.read_storage_file(path="/my-app/data.txt")
+file_content = bb.storage_read(path="/my-app/data.txt")
 print(file_content.decode('utf-8'))
 
-storage_list = bb.list_storage_files(path="/my-app")
+storage_list = bb.storage_list(path="/my-app")
 for item in storage_list.list:
     if item.type == "file":
         print(f"File: {item.name} ({item.size} bytes)")
     else:
         print(f"Directory: {item.name}")
 
-response = bb.create_storage_directory(path="/my-app/subdirectory")
+response = bb.storage_mkdir(path="/my-app/subdirectory")
 
-response = bb.remove_storage_file(path="/my-app/data.txt")
+response = bb.storage_remove(path="/my-app/data.txt")
 ```
 
 ## Links

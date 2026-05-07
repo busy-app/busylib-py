@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, AsyncIterator
+from collections.abc import Mapping
+from typing import Any, AsyncIterator, cast
 from urllib.parse import quote, urlparse, urlunparse
 
 from google.protobuf.json_format import MessageToDict
@@ -30,7 +31,7 @@ def _http_to_ws(addr: str) -> str:
     return urlunparse(parsed._replace(scheme=scheme))
 
 
-def _extract_token(headers: dict[str, str]) -> str | None:
+def _extract_token(headers: Mapping[str, str]) -> str | None:
     """
     Extract API token from configured HTTP headers.
 
@@ -114,7 +115,8 @@ class AsyncStateStreamMixin(AsyncClientBase):
                         continue
 
                     try:
-                        state_message = state_pb2.State()
+                        state_schema = cast(Any, state_pb2)
+                        state_message = state_schema.State()
                         state_message.ParseFromString(message)
                         yield MessageToDict(
                             state_message,

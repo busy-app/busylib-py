@@ -57,7 +57,7 @@ async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
     Refresh cloud link status and update the renderer.
     """
     try:
-        info = await client.get_account_info()
+        info = await client.account_info()
         if info.linked:
             renderer.update_info(
                 link_connected=True,
@@ -65,7 +65,7 @@ async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
                 link_email=info.email,
             )
             return
-        link_info = await client.link_account()
+        link_info = await client.account_link()
         renderer.update_info(
             link_connected=False,
             link_key=link_info.code,
@@ -79,8 +79,8 @@ async def update_check(client: AsyncBusyBar, renderer: TerminalRenderer) -> None
     Request a firmware update check and update the renderer.
     """
     try:
-        await client.check_firmware_update()
-        status = await client.get_update_status()
+        await client.update_check()
+        status = await client.update_status()
         available = False
         if status.check and status.check.available_version:
             available = True

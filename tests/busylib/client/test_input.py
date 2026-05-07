@@ -22,7 +22,7 @@ def _make_async_client(responder) -> AsyncBusyBar:
     return AsyncBusyBar(addr="http://device.local", transport=transport)
 
 
-def test_send_input_key_sync() -> None:
+def test_input_sync() -> None:
     """
     Ensure sync input key events send the correct key parameter.
     """
@@ -39,13 +39,13 @@ def test_send_input_key_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    resp = client.send_input_key(types.InputKey.OK)
+    resp = client.input(types.InputKey.OK)
     assert resp.result == "OK"
     assert seen == [{"path": "/api/input", "params": {"key": "ok"}, "method": "POST"}]
 
 
 @pytest.mark.asyncio
-async def test_send_input_key_async() -> None:
+async def test_input_async() -> None:
     """
     Ensure async input key events send the correct key parameter.
     """
@@ -62,7 +62,7 @@ async def test_send_input_key_async() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
-    resp = await client.send_input_key(types.InputKey.OK)
+    resp = await client.input(types.InputKey.OK)
     assert resp.result == "OK"
     await client.aclose()
     assert seen == [{"path": "/api/input", "params": {"key": "ok"}, "method": "POST"}]

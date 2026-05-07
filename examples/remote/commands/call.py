@@ -9,20 +9,26 @@ from busylib.client import AsyncBusyBar
 
 logger = logging.getLogger(__name__)
 
-DANGEROUS_PREFIXES = (
-    "set_",
-    "delete_",
-    "update_",
-    "upload_",
-    "write_",
-    "install_",
-    "abort_",
-    "unlink_",
+DANGEROUS_METHOD_PARTS = (
+    "_abort",
+    "_clear",
+    "_connect",
+    "_delete",
+    "_disable",
+    "_enable",
+    "_forget",
+    "_install",
+    "_mkdir",
+    "_remove",
+    "_set",
+    "_stop",
+    "_unlink",
+    "_upload",
+    "_write",
     "reboot",
     "reset",
     "usb_",
     "format_",
-    "clear_",
 )
 BLACKLISTED_METHODS = {
     "aclose",
@@ -95,7 +101,7 @@ def build_call_handler(
                 return
             kwargs[key] = value
 
-        if method_name.startswith(DANGEROUS_PREFIXES) and not force:
+        if any(part in method_name for part in DANGEROUS_METHOD_PARTS) and not force:
             logger.warning("call: method %s requires --force", method_name)
             status_message(f"call {method_name}: requires --force")
             return

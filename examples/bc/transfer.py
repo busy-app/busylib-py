@@ -77,7 +77,7 @@ def copy_file(
         if isinstance(dst_panel, RemotePanel):
             client = dst_panel.runner.require_client()
             listing = dst_panel.runner.run(
-                client.list_storage_files(directory or dst_panel.cwd)
+                client.storage_list(directory or dst_panel.cwd)
             )  # type: ignore[attr-defined]
             names = {e.name for e in listing.list if e.type == "file"}
             name = Path(path).name
@@ -150,7 +150,7 @@ def copy_file(
                 )
 
             runner.run(
-                client.write_storage_file(
+                client.storage_write(
                     new_path,
                     payload,
                     progress_callback=_progress,
@@ -164,7 +164,7 @@ def copy_file(
                     return
                 dst_path = str(Path(dst_panel.cwd) / choice)
             client = src_panel.runner.require_client()
-            data = runner.run(client.read_storage_file(src_path))
+            data = runner.run(client.storage_read(src_path))
             draw_progress_modal(stdscr, f"Copying {entry.name}", 0.5)
             Path(dst_path).write_bytes(data)
             dst_panel.refresh()

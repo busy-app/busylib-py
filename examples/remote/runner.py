@@ -147,7 +147,7 @@ async def _forward_keys(
                     if key_event is None:
                         continue
                     try:
-                        await client.send_input_key(key_event)
+                        await client.input(key_event)
                     except Exception as exc:  # noqa: BLE001 pragma: no cover - network dependent
                         logger.debug("Failed to send key %s: %s", key_event.value, exc)
                 return False
@@ -389,8 +389,8 @@ async def _stream_ws(
     status_message(TEXT_INIT_WAIT_FRAME)
     first_frame = True
     try:
-        # stream_screen_ws yields bytes | str
-        async for message in client.stream_screen_ws(spec):
+        # screen_ws yields bytes | str
+        async for message in client.screen_ws(spec):
             if stop_event.is_set():
                 break
             if not message:
@@ -440,7 +440,7 @@ async def _poll_http(
     try:
         while not stop_event.is_set():
             try:
-                frame_bytes = await client.get_screen_frame(spec)
+                frame_bytes = await client.screen(spec)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(TEXT_POLL_FAIL, exc)
                 await asyncio.sleep(interval)
@@ -644,7 +644,9 @@ async def _run(
             )
 
         try:
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
+            )
             stop_event.set()
             for task in pending:
                 task.cancel()
