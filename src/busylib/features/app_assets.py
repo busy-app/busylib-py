@@ -12,13 +12,13 @@ class AssetsClient(Protocol):
     Protocol describing the async client surface used by asset sync.
     """
 
-    async def list_storage_files(self, path: str) -> types.StorageList:
+    async def storage_list(self, path: str) -> types.StorageList:
         """
         Return a listing of files in the given storage path.
         """
         ...
 
-    async def write_storage_file(self, path: str, data: bytes) -> types.SuccessResponse:
+    async def storage_write(self, path: str, data: bytes) -> types.SuccessResponse:
         """
         Upload a file to device storage.
         """
@@ -30,20 +30,20 @@ logger = logging.getLogger(__name__)
 
 async def sync_app_assets(
     client: AssetsClient,
-    app_id: str,
+    application_name: str,
     assets_dir: str | Path,
 ) -> list[str]:
     """
-    Sync local assets with device storage for the given app id.
+    Sync local assets with device storage for the given application name.
     Uploads files that are missing or have different sizes.
     """
     assets_path = Path(assets_dir)
     if not assets_path.is_dir():
         return []
 
-    remote_dir = f"/ext/assets/{app_id}"
+    remote_dir = f"/ext/assets/{application_name}"
     try:
-        listing = await client.list_storage_files(remote_dir)
+        listing = await client.storage_list(remote_dir)
     except Exception as exc:  # noqa: BLE001
         logger.debug("Failed to list remote assets: %s", exc)
         listing = types.StorageList(list=[])
@@ -62,7 +62,7 @@ async def sync_app_assets(
         if remote_sizes.get(local_path.name) == local_size:
             continue
         data = local_path.read_bytes()
-        await client.write_storage_file(f"{remote_dir}/{local_path.name}", data)
+        await client.storage_write(f"{remote_dir}/{local_path.name}", data)
         uploaded.append(local_path.name)
 
     return uploaded

@@ -64,14 +64,71 @@ class BusyBarRequestError(BusyBarError):
         *,
         method: str | None = None,
         path: str | None = None,
+        request_id: str | None = None,
         attempts: int | None = None,
         original: Exception | None = None,
     ) -> None:
+        self.message = message
         self.method = method
         self.path = path
+        self.request_id = request_id
         self.attempts = attempts
         self.original = original
-        super().__init__(message)
+        details = [message]
+        if method and path:
+            details.append(f"{method} {path}")
+        if request_id:
+            details.append(f"request_id={request_id}")
+        if attempts is not None:
+            details.append(f"attempts={attempts}")
+        super().__init__(" | ".join(details))
+
+
+def is_retryable_delivery_error(error: BusyBarError) -> bool:
+    """
+    Classify Busy Bar delivery failures for caller retry decisions.
+
+    Treats request/transport failures and explicitly transient HTTP statuses
+    as retryable. Other 4xx responses are caller or authorization problems and
+    should not be retried as-is.
+    """
+
+    if isinstance(error, BusyBarAPIError):
+        return error.status_code in {408, 429, 500, 502, 503, 504}
+    return isinstance(error, BusyBarRequestError)
+
+
+def format_delivery_error(error: BusyBarError) -> str:
+    """
+    Format Busy Bar delivery failure into a compact diagnostic string.
+
+    Keeps enough HTTP context and response body excerpt for service logs without
+    duplicating full response-formatting logic in each integration.
+    """
+
+    if isinstance(error, BusyBarAPIError):
+        details = [
+            f"HTTP {error.status_code}" if error.status_code else "API error",
+            f"{error.method} {error.path}" if error.method and error.path else "",
+            error.error,
+        ]
+        if error.request_id:
+            details.append(f"request_id={error.request_id}")
+        if error.response_excerpt:
+            details.append(f"body={error.response_excerpt}")
+        return " | ".join(detail for detail in details if detail)
+
+    if isinstance(error, BusyBarRequestError):
+        details = [
+            "request error",
+            f"{error.method} {error.path}" if error.method and error.path else "",
+            f"request_id={error.request_id}" if error.request_id else "",
+            f"attempts={error.attempts}" if error.attempts else "",
+            error.message,
+        ]
+        return " | ".join(detail for detail in details if detail)
+
+    return str(error)
 
 
 class BusyBarAPIVersionError(BusyBarError):

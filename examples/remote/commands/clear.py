@@ -45,4 +45,4 @@ class ClearCommand(CommandBase):
         Clear the remote display.
         """
         logger.info("command:clear")
-        await self._client.clear_display()
+        await self._client.display_clear()

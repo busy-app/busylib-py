@@ -13,19 +13,19 @@ class BusyMixin(SyncClientBase):
     Busy snapshot helpers.
     """
 
-    def get_busy_snapshot(self) -> types.BusySnapshot:
+    def busy_snapshot(self) -> types.BusySnapshot:
         """
         Fetch busy snapshot via GET /api/busy/snapshot.
         """
-        logger.info("get_busy_snapshot")
+        logger.info("busy_snapshot")
         data = self._request("GET", "/api/busy/snapshot")
         return types.BusySnapshot.model_validate(data)
 
-    def set_busy_snapshot(self, snapshot: types.BusySnapshot) -> types.SuccessResponse:
+    def busy_snapshot_set(self, snapshot: types.BusySnapshot) -> types.SuccessResponse:
         """
         Set busy snapshot via PUT /api/busy/snapshot.
         """
-        logger.info("set_busy_snapshot")
+        logger.info("busy_snapshot_set")
         payload = snapshot.model_dump(mode="json")
         data = self._request(
             "PUT",
@@ -40,21 +40,21 @@ class AsyncBusyMixin(AsyncClientBase):
     Async busy snapshot helpers.
     """
 
-    async def get_busy_snapshot(self) -> types.BusySnapshot:
+    async def busy_snapshot(self) -> types.BusySnapshot:
         """
         Fetch busy snapshot via GET /api/busy/snapshot.
         """
-        logger.info("async get_busy_snapshot")
+        logger.info("async busy_snapshot")
         data = await self._request("GET", "/api/busy/snapshot")
         return types.BusySnapshot.model_validate(data)
 
-    async def set_busy_snapshot(
+    async def busy_snapshot_set(
         self, snapshot: types.BusySnapshot
     ) -> types.SuccessResponse:
         """
         Set busy snapshot via PUT /api/busy/snapshot.
         """
-        logger.info("async set_busy_snapshot")
+        logger.info("async busy_snapshot_set")
         payload = snapshot.model_dump(mode="json")
         data = await self._request(
             "PUT",

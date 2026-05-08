@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import uuid
+
 import httpx
 import pytest
 
@@ -128,6 +131,165 @@ def test_request_json_payload_allow_text_sync() -> None:
     client = _SyncBaseClient(httpx.MockTransport(responder))
     result = client._request("GET", "/api/test", allow_text=True)
     assert result == "ok"
+
+
+def test_api_request_uses_client_session_sync() -> None:
+    """
+    Exposes raw API requests through the same client session.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/custom"
+        assert request.headers["x-session-id"] == "bar-1"
+        assert json.loads(request.content) == {
+            "value": 1,
+            "application_name": "app",
+        }
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    result = client.api_request(
+        "POST",
+        "/api/custom",
+        session_id="bar-1",
+        application_name="app",
+        json_payload={"value": 1},
+    )
+    assert result == {"result": "OK"}
+
+
+def test_request_applies_common_session_and_application_name_sync() -> None:
+    """
+    Adds shared request context as session header and application query param.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.headers["x-session-id"] == "bar-1"
+        assert dict(request.url.params) == {"application_name": "app"}
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    result = client._request(
+        "GET",
+        "/api/test",
+        session_id="bar-1",
+        application_name="app",
+    )
+    assert result == {"result": "OK"}
+
+
+def test_request_generates_request_id_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Adds X-Request-ID when caller did not provide one.
+    """
+
+    monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID(int=1))
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.headers["x-request-id"] == uuid.UUID(int=1).hex
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    result = client._request("GET", "/api/test")
+    assert result == {"result": "OK"}
+
+
+def test_request_preserves_caller_request_id_sync() -> None:
+    """
+    Keeps caller-provided X-Request-ID instead of generating a new value.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.headers["x-request-id"] == "caller-rid"
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    result = client._request(
+        "GET",
+        "/api/test",
+        headers={"X-Request-ID": "caller-rid"},
+    )
+    assert result == {"result": "OK"}
+
+
+def test_request_uses_generated_request_id_in_api_error_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Stores generated request id in API error when response has no own id.
+    """
+
+    monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID(int=2))
+
+    def responder(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "bad request"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    with pytest.raises(exceptions.BusyBarAPIError) as exc:
+        client._request("POST", "/api/test", json_payload={"x": 1})
+    assert exc.value.request_id == uuid.UUID(int=2).hex
+
+
+def test_request_uses_generated_request_id_in_transport_error_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Stores generated request id in transport errors without a response.
+    """
+
+    monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID(int=3))
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom", request=request)
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    with pytest.raises(exceptions.BusyBarRequestError) as exc:
+        client._request("GET", "/api/fail")
+    assert exc.value.request_id == uuid.UUID(int=3).hex
+
+
+def test_request_applies_application_name_to_json_sync() -> None:
+    """
+    Adds application_name to JSON payload for mutating object requests.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content) == {
+            "path": "/ext/app.wav",
+            "application_name": "app",
+        }
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    result = client._request(
+        "POST",
+        "/api/test",
+        json_payload={"path": "/ext/app.wav"},
+        application_name="app",
+    )
+    assert result == {"result": "OK"}
+
+
+def test_request_keeps_application_name_in_params_for_binary_post_sync() -> None:
+    """
+    Adds application_name to query params when POST has no object JSON body.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert dict(request.url.params) == {"application_name": "app"}
+        assert request.content == b"payload"
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _SyncBaseClient(httpx.MockTransport(responder))
+    result = client._request(
+        "POST",
+        "/api/test",
+        data=b"payload",
+        application_name="app",
+    )
+    assert result == {"result": "OK"}
 
 
 def test_request_expect_bytes_sync() -> None:
@@ -294,6 +456,33 @@ async def test_request_allow_text_async() -> None:
     client = _AsyncBaseClient(httpx.MockTransport(responder))
     result = await client._request("GET", "/api/test", allow_text=True)
     assert result == "ok"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_api_request_uses_client_session_async() -> None:
+    """
+    Exposes raw async API requests through the same client session.
+    """
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/custom"
+        assert request.headers["x-session-id"] == "bar-2"
+        assert json.loads(request.content) == {
+            "value": 2,
+            "application_name": "app",
+        }
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _AsyncBaseClient(httpx.MockTransport(responder))
+    result = await client.api_request(
+        "POST",
+        "/api/custom",
+        session_id="bar-2",
+        application_name="app",
+        json_payload={"value": 2},
+    )
+    assert result == {"result": "OK"}
     await client.aclose()
 
 

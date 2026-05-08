@@ -179,7 +179,7 @@ class TimezoneSetCommand(CommandBase):
 
         self._status_message(f"timezone_set: setting {timezone}")
         try:
-            await self._client.set_time_timezone(timezone)
+            await self._client.time_timezone(timezone)
         except Exception as exc:  # noqa: BLE001
             logger.exception("command:timezone_set failed")
             self._status_message(f"timezone_set: error {exc}")

@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TypeAlias, TypeVar
+from typing import TypeAlias, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
@@ -77,19 +77,19 @@ async def collect_device_snapshot(client: AsyncBusyBar) -> DeviceSnapshot:
     reported in `field_errors` without aborting the whole snapshot.
     """
     tasks = {
-        "name": asyncio.create_task(_safe("name", client.get_device_name())),
-        "version": asyncio.create_task(_safe("version", client.get_version())),
-        "status": asyncio.create_task(_safe("status", client.get_status())),
-        "system": asyncio.create_task(_safe("system", client.get_system_status())),
-        "power": asyncio.create_task(_safe("power", client.get_power_status())),
-        "time": asyncio.create_task(_safe("time", client.get_device_time())),
-        "wifi": asyncio.create_task(_safe("wifi", client.get_wifi_status())),
+        "name": asyncio.create_task(_safe("name", client.name())),
+        "version": asyncio.create_task(_safe("version", client.version())),
+        "status": asyncio.create_task(_safe("status", client.status())),
+        "system": asyncio.create_task(_safe("system", client.status_system())),
+        "power": asyncio.create_task(_safe("power", client.status_power())),
+        "time": asyncio.create_task(_safe("time", client.time())),
+        "wifi": asyncio.create_task(_safe("wifi", client.wifi_status())),
         "brightness": asyncio.create_task(
-            _safe("brightness", client.get_display_brightness())
+            _safe("brightness", client.display_brightness())
         ),
-        "volume": asyncio.create_task(_safe("volume", client.get_audio_volume())),
+        "volume": asyncio.create_task(_safe("volume", client.audio_volume())),
         "ble": asyncio.create_task(_safe("ble", client.ble_status())),
-        "storage": asyncio.create_task(_safe("storage", client.get_storage_status())),
+        "storage": asyncio.create_task(_safe("storage", client.storage_status())),
     }
 
     results: dict[str, object | None] = {}
@@ -342,6 +342,6 @@ class DeviceStateStore:
         Remove callback from subscription container if present.
         """
         try:
-            container.remove(callback)
+            cast(list[object], container).remove(callback)
         except ValueError:
             return

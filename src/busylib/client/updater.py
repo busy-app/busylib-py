@@ -13,14 +13,14 @@ class UpdaterMixin(SyncClientBase):
     Firmware update helpers for the updater API.
     """
 
-    def update_firmware(
+    def update(
         self,
         firmware_data: bytes,
     ) -> types.SuccessResponse:
         """
         Upload firmware update TAR and initiate update.
         """
-        logger.info("update_firmware size=%s", len(firmware_data))
+        logger.info("update size=%s", len(firmware_data))
         data = self._request(
             "POST",
             "/api/update",
@@ -28,27 +28,27 @@ class UpdaterMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    def check_firmware_update(self) -> types.SuccessResponse:
+    def update_check(self) -> types.SuccessResponse:
         """
         Start asynchronous firmware update check.
         """
-        logger.info("check_firmware_update")
+        logger.info("update_check")
         data = self._request("POST", "/api/update/check")
         return types.SuccessResponse.model_validate(data)
 
-    def get_update_status(self) -> types.UpdateStatus:
+    def update_status(self) -> types.UpdateStatus:
         """
         Get firmware update status with progress information.
         """
-        logger.info("get_update_status")
+        logger.info("update_status")
         data = self._request("GET", "/api/update/status")
         return types.UpdateStatus.model_validate(data)
 
-    def get_update_changelog(self, version: str) -> types.UpdateChangelogResponse:
+    def update_changelog(self, version: str) -> types.UpdateChangelogResponse:
         """
         Fetch update changelog for a specific version.
         """
-        logger.info("get_update_changelog version=%s", version)
+        logger.info("update_changelog version=%s", version)
         data = self._request(
             "GET",
             "/api/update/changelog",
@@ -56,11 +56,11 @@ class UpdaterMixin(SyncClientBase):
         )
         return types.UpdateChangelogResponse.model_validate(data)
 
-    def install_firmware_update(self, version: str) -> types.SuccessResponse:
+    def update_install(self, version: str) -> types.SuccessResponse:
         """
         Start firmware update installation by version.
         """
-        logger.info("install_firmware_update version=%s", version)
+        logger.info("update_install version=%s", version)
         data = self._request(
             "POST",
             "/api/update/install",
@@ -68,11 +68,11 @@ class UpdaterMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    def abort_firmware_download(self) -> types.SuccessResponse:
+    def update_abort_download(self) -> types.SuccessResponse:
         """
         Abort an ongoing firmware download.
         """
-        logger.info("abort_firmware_download")
+        logger.info("update_abort_download")
         data = self._request("POST", "/api/update/abort_download")
         return types.SuccessResponse.model_validate(data)
 
@@ -82,14 +82,14 @@ class AsyncUpdaterMixin(AsyncClientBase):
     Async firmware update helpers for the updater API.
     """
 
-    async def update_firmware(
+    async def update(
         self,
         firmware_data: bytes,
     ) -> types.SuccessResponse:
         """
         Upload firmware update TAR and initiate update.
         """
-        logger.info("async update_firmware size=%s", len(firmware_data))
+        logger.info("async update size=%s", len(firmware_data))
         data = await self._request(
             "POST",
             "/api/update",
@@ -97,27 +97,27 @@ class AsyncUpdaterMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    async def check_firmware_update(self) -> types.SuccessResponse:
+    async def update_check(self) -> types.SuccessResponse:
         """
         Start asynchronous firmware update check.
         """
-        logger.info("async check_firmware_update")
+        logger.info("async update_check")
         data = await self._request("POST", "/api/update/check")
         return types.SuccessResponse.model_validate(data)
 
-    async def get_update_status(self) -> types.UpdateStatus:
+    async def update_status(self) -> types.UpdateStatus:
         """
         Get firmware update status with progress information.
         """
-        logger.info("async get_update_status")
+        logger.info("async update_status")
         data = await self._request("GET", "/api/update/status")
         return types.UpdateStatus.model_validate(data)
 
-    async def get_update_changelog(self, version: str) -> types.UpdateChangelogResponse:
+    async def update_changelog(self, version: str) -> types.UpdateChangelogResponse:
         """
         Fetch update changelog for a specific version.
         """
-        logger.info("async get_update_changelog version=%s", version)
+        logger.info("async update_changelog version=%s", version)
         data = await self._request(
             "GET",
             "/api/update/changelog",
@@ -125,11 +125,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         )
         return types.UpdateChangelogResponse.model_validate(data)
 
-    async def install_firmware_update(self, version: str) -> types.SuccessResponse:
+    async def update_install(self, version: str) -> types.SuccessResponse:
         """
         Start firmware update installation by version.
         """
-        logger.info("async install_firmware_update version=%s", version)
+        logger.info("async update_install version=%s", version)
         data = await self._request(
             "POST",
             "/api/update/install",
@@ -137,10 +137,10 @@ class AsyncUpdaterMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    async def abort_firmware_download(self) -> types.SuccessResponse:
+    async def update_abort_download(self) -> types.SuccessResponse:
         """
         Abort an ongoing firmware download.
         """
-        logger.info("async abort_firmware_download")
+        logger.info("async update_abort_download")
         data = await self._request("POST", "/api/update/abort_download")
         return types.SuccessResponse.model_validate(data)

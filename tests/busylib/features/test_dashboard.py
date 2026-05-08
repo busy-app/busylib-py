@@ -21,55 +21,55 @@ class _OkClient:
     The stub returns minimal payloads compatible with target response models.
     """
 
-    async def get_device_name(self) -> types.DeviceNameResponse:
+    async def name(self) -> types.DeviceNameResponse:
         """
         Return a valid device name payload.
         """
         return types.DeviceNameResponse(name="Busy")
 
-    async def get_version(self) -> types.VersionInfo:
+    async def version(self) -> types.VersionInfo:
         """
         Return a valid version payload.
         """
         return types.VersionInfo(api_semver="1.0.0")
 
-    async def get_status(self) -> types.Status:
+    async def status(self) -> types.Status:
         """
         Return a valid status payload.
         """
         return types.Status()
 
-    async def get_system_status(self) -> types.StatusSystem:
+    async def status_system(self) -> types.StatusSystem:
         """
         Return a valid system status payload.
         """
         return types.StatusSystem()
 
-    async def get_power_status(self) -> types.StatusPower:
+    async def status_power(self) -> types.StatusPower:
         """
         Return a valid power status payload.
         """
         return types.StatusPower()
 
-    async def get_device_time(self) -> types.DeviceTimeResponse:
+    async def time(self) -> types.DeviceTimeResponse:
         """
         Return a valid ISO timestamp payload.
         """
         return types.DeviceTimeResponse(timestamp="2024-01-01T10:00:00")
 
-    async def get_wifi_status(self) -> types.StatusResponse:
+    async def wifi_status(self) -> types.StatusResponse:
         """
         Return a valid Wi-Fi status payload.
         """
         return types.StatusResponse(state=types.WifiState.CONNECTED)
 
-    async def get_display_brightness(self) -> types.DisplayBrightnessInfo:
+    async def display_brightness(self) -> types.DisplayBrightnessInfo:
         """
         Return a valid display brightness payload.
         """
         return types.DisplayBrightnessInfo(front="10", back="10")
 
-    async def get_audio_volume(self) -> types.AudioVolumeInfo:
+    async def audio_volume(self) -> types.AudioVolumeInfo:
         """
         Return a valid audio volume payload.
         """
@@ -81,7 +81,7 @@ class _OkClient:
         """
         return types.BleStatus(state="on")
 
-    async def get_storage_status(self) -> types.StorageStatus:
+    async def storage_status(self) -> types.StorageStatus:
         """
         Return a valid storage payload.
         """
@@ -92,10 +92,10 @@ class _VolumeFailClient(_OkClient):
     """
     Async client stub with a single failing field for diagnostics coverage.
 
-    All fields succeed except `get_audio_volume`.
+    All fields succeed except `audio_volume`.
     """
 
-    async def get_audio_volume(self) -> types.AudioVolumeInfo:
+    async def audio_volume(self) -> types.AudioVolumeInfo:
         """
         Raise a deterministic error for field-level failure checks.
         """
@@ -145,7 +145,7 @@ def test_apply_state_stream_update_updates_known_fields() -> None:
         name="Old",
         brightness=types.DisplayBrightnessInfo(front="10", back="15"),
     )
-    payload = {
+    payload: dict[str, object] = {
         "updates": [
             {"device_name": {"name": "BUSY"}},
             {
@@ -210,7 +210,7 @@ def test_apply_state_stream_update_sets_update_available_version() -> None:
     This keeps diagnostic field_errors reserved for collection failures.
     """
     start = DeviceSnapshot(name="Stable", field_errors={"volume": "x"})
-    payload = {
+    payload: dict[str, object] = {
         "updates": [
             {"update_check": {"available": {"version": "1.2.3"}}},
         ]

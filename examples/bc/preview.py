@@ -38,7 +38,7 @@ class FilePreviewer(Protocol):
         runner: "AsyncRunner",
         status: list[str],
         *,
-        app_id: str,
+        application_name: str,
         rel_path: str,
     ) -> None:
         """
@@ -84,7 +84,7 @@ class WavPreviewer:
         runner: "AsyncRunner",
         status: list[str],
         *,
-        app_id: str,
+        application_name: str,
         rel_path: str,
     ) -> None:
         """
@@ -93,7 +93,9 @@ class WavPreviewer:
         Adds a status message on success or failure.
         """
         try:
-            runner.run(client.play_audio(app_id, rel_path))
+            runner.run(
+                client.audio_play(application_name=application_name, path=rel_path)
+            )
             status.append(f"Playing {entry.name} (press space to stop)")
         except Exception as exc:  # noqa: BLE001
             status.append(f"Audio play failed: {exc}")
@@ -121,7 +123,7 @@ class TxtPreviewer:
         runner: "AsyncRunner",
         status: list[str],
         *,
-        app_id: str,
+        application_name: str,
         rel_path: str,
     ) -> None:
         """
@@ -130,11 +132,11 @@ class TxtPreviewer:
         Shows text on the front display using the small font.
         """
         try:
-            data = runner.run(client.read_storage_file(entry.path or entry.name))
+            data = runner.run(client.storage_read(entry.path or entry.name))
             text = data.decode("utf-8", errors="ignore")
             first_line = text.splitlines()[0] if text else ""
             payload = types.DisplayElements(
-                app_id=app_id,
+                application_name=application_name,
                 elements=[
                     types.TextElement(
                         id="text-preview",
@@ -146,7 +148,7 @@ class TxtPreviewer:
                     )
                 ],
             )
-            runner.run(client.draw_on_display(payload))
+            runner.run(client.display_draw(payload))
             status.append(f"Preview: {first_line[:60]}")
         except Exception as exc:  # noqa: BLE001
             status.append(f"Text preview failed: {exc}")
@@ -174,7 +176,7 @@ class PngPreviewer:
         runner: "AsyncRunner",
         status: list[str],
         *,
-        app_id: str,
+        application_name: str,
         rel_path: str,
     ) -> None:
         """
@@ -184,7 +186,7 @@ class PngPreviewer:
         """
         try:
             payload = types.DisplayElements(
-                app_id=app_id,
+                application_name=application_name,
                 elements=[
                     types.ImageElement(
                         id="png-preview",
@@ -195,7 +197,7 @@ class PngPreviewer:
                     )
                 ],
             )
-            runner.run(client.draw_on_display(payload))
+            runner.run(client.display_draw(payload))
             status.append(f"Shown {entry.name} on display")
         except Exception as exc:  # noqa: BLE001
             status.append(f"PNG preview failed: {exc}")
@@ -223,7 +225,7 @@ class DefaultPreviewer:
         runner: "AsyncRunner",
         status: list[str],
         *,
-        app_id: str,
+        application_name: str,
         rel_path: str,
     ) -> None:
         """
@@ -245,7 +247,7 @@ _preview_cancel = threading.Event()
 
 
 def start_text_preview_thread(
-    app_id: str,
+    application_name: str,
     rel_path: str,
     client: AsyncBusyBar,
     runner: "AsyncRunner",
@@ -272,13 +274,13 @@ def start_text_preview_thread(
             spec = display.get_display_spec(display.DisplayName.FRONT)
             width = spec.width
             height = spec.height
-            runner.run(client.clear_display())
+            runner.run(client.display_clear())
             center_y = height // 4
             for line in lines:
                 if _preview_cancel.is_set():
                     break
                 payload = types.DisplayElements(
-                    app_id=app_id,
+                    application_name=application_name,
                     elements=[
                         types.TextElement(
                             id="text-preview",
@@ -292,12 +294,12 @@ def start_text_preview_thread(
                         )
                     ],
                 )
-                runner.run(client.draw_on_display(payload))
+                runner.run(client.display_draw(payload))
                 for _ in range(5):
                     if _preview_cancel.is_set():
                         break
                     time.sleep(0.5)
-            runner.run(client.clear_display())
+            runner.run(client.display_clear())
         except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).debug("Preview thread failed: %s", exc)
         finally:
@@ -371,16 +373,16 @@ def preview_remote(
     if not parts or not parts[0]:
         status.append("Select app folder under /ext/assets")
         return PreviewMode.NONE
-    app_id = parts[0]
+    application_name = parts[0]
     rel_path = parts[1] if len(parts) > 1 else entry.name
     if entry.name.lower().endswith(
         (".txt", ".log", ".cfg", ".ini", ".json", ".yaml", ".yml", ".toml")
     ):
         try:
-            data = runner.run(client.read_storage_file(entry.path))  # type: ignore[arg-type]
+            data = runner.run(client.storage_read(entry.path))  # type: ignore[arg-type]
             text = data.decode("utf-8", errors="ignore").splitlines()
             start_text_preview_thread(
-                app_id,
+                application_name,
                 rel_path,
                 client,
                 runner,
@@ -398,7 +400,7 @@ def preview_remote(
                 entry,
                 runner,
                 status,
-                app_id=app_id,
+                application_name=application_name,
                 rel_path=rel_path,
             )  # type: ignore[arg-type]
             return preview_mode_for_entry(entry)

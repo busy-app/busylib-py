@@ -61,7 +61,7 @@ class DummyWebSocket:
 
 
 @pytest.mark.asyncio
-async def test_stream_screen_ws_uses_query_token(
+async def test_screen_ws_uses_query_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
@@ -86,7 +86,7 @@ async def test_stream_screen_ws_uses_query_token(
 
     client = AsyncBusyBar(addr="http://device.local", token="secret")
     client.client.headers["Connection"] = "keep-alive"
-    async for _frame in client.stream_screen_ws(0):
+    async for _frame in client.screen_ws(0):
         pass
     await client.aclose()
 
@@ -105,7 +105,7 @@ async def test_stream_screen_ws_uses_query_token(
 
 
 @pytest.mark.asyncio
-async def test_stream_screen_ws_wraps_connection_errors(
+async def test_screen_ws_wraps_connection_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
@@ -119,7 +119,7 @@ async def test_stream_screen_ws_wraps_connection_errors(
 
     client = AsyncBusyBar(addr="http://device.local", token="secret")
     with pytest.raises(exceptions.BusyBarWebSocketError) as exc:
-        async for _frame in client.stream_screen_ws(0):
+        async for _frame in client.screen_ws(0):
             pass
     await client.aclose()
 

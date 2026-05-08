@@ -41,7 +41,7 @@ def test_init_token_sets_cloud_base_and_header():
     assert client.client.headers["authorization"] == "Bearer secret"
 
 
-def test_get_version_success():
+def test_version_success():
     """
     Validate successful parsing of version information.
 
@@ -60,13 +60,13 @@ def test_get_version_success():
         )
 
     client = make_client(responder, api_version="1.2.0")
-    result = client.get_version()
+    result = client.version()
     assert isinstance(result, types.VersionInfo)
     assert result.api_semver == "1.2.0"
     assert result.branch == "main"
 
 
-def test_get_device_name_and_time():
+def test_name_and_time():
     """
     Fetch device name and time from their respective endpoints.
 
@@ -81,13 +81,13 @@ def test_get_device_name_and_time():
         return httpx.Response(404, json={"error": "missing", "code": 404})
 
     client = make_client(responder)
-    name = client.get_device_name()
+    name = client.name()
     assert name.name == "BusyBar"
-    time_info = client.get_device_time()
+    time_info = client.time()
     assert time_info.timestamp == "2024-01-01T10:00:00"
 
 
-def test_set_device_name() -> None:
+def test_name_set() -> None:
     """
     Send device name update payload via POST /api/name.
     """
@@ -100,23 +100,23 @@ def test_set_device_name() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
-    resp = client.set_device_name("Busy Desk")
+    resp = client.name_set("Busy Desk")
     assert resp.result == "OK"
     assert seen["path"] == "/api/name"
     assert seen["method"] == "POST"
     assert seen["body"] == {"name": "Busy Desk"}
 
 
-def test_set_device_name_rejects_empty() -> None:
+def test_name_set_rejects_empty() -> None:
     """
     Reject empty device names before sending request.
     """
     client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
     with pytest.raises(ValueError):
-        client.set_device_name("")
+        client.name_set("")
 
 
-def test_get_account_info():
+def test_account_info():
     """
     Parse linked account info from the client.
     """
@@ -126,12 +126,12 @@ def test_get_account_info():
         return httpx.Response(200, json={"linked": True, "email": "name@example.com"})
 
     client = make_client(responder)
-    result = client.get_account_info()
+    result = client.account_info()
     assert result.linked is True
     assert result.email == "name@example.com"
 
 
-def test_set_account_profile() -> None:
+def test_account_profile_set() -> None:
     """
     Ensure account profile updates are sent as query params.
     """
@@ -142,7 +142,7 @@ def test_set_account_profile() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
-    resp = client.set_account_profile("custom", custom_url="mqtts://mqtt.example.com")
+    resp = client.account_profile_set("custom", custom_url="mqtts://mqtt.example.com")
     assert resp.result == "OK"
     assert seen["params"] == {
         "profile": "custom",
@@ -150,7 +150,7 @@ def test_set_account_profile() -> None:
     }
 
 
-def test_link_account():
+def test_account_link():
     """
     Parse account link response from the client.
     """
@@ -160,7 +160,7 @@ def test_link_account():
         return httpx.Response(200, json={"code": "ABCD", "expires_at": 1700000000})
 
     client = make_client(responder)
-    result = client.link_account()
+    result = client.account_link()
     assert result.code == "ABCD"
     assert result.expires_at == 1700000000
 
@@ -181,7 +181,7 @@ def test_error_response_raises_api_error():
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
-        client.get_version()
+        client.version()
     assert exc.value.code == 500
     assert exc.value.status_code == 500
     assert exc.value.method == "GET"
@@ -202,7 +202,7 @@ def test_api_error_has_truncated_excerpt() -> None:
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
-        client.get_version()
+        client.version()
     assert exc.value.response_excerpt is not None
     assert exc.value.response_excerpt.endswith("...")
     assert len(exc.value.response_excerpt) <= 259
@@ -220,12 +220,12 @@ def test_plain_text_error_response():
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
-        client.get_version()
+        client.version()
     assert exc.value.code == 404
     assert "HTTP 404" in str(exc.value)
 
 
-def test_get_version_incompatible_requires_device_update():
+def test_version_incompatible_requires_device_update():
     """
     Reject incompatible firmware API versions.
 
@@ -237,7 +237,7 @@ def test_get_version_incompatible_requires_device_update():
 
     client = make_client(responder, api_version="1.0.0")
     with pytest.raises(exceptions.BusyBarAPIVersionError) as exc:
-        client.get_version()
+        client.version()
     assert "update firmware" in str(exc.value)
 
 
@@ -254,7 +254,7 @@ def test_request_carries_api_version_header():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder, api_version="1.1.0")
-    resp = client.enable_wifi()
+    resp = client.wifi_enable()
     assert resp.result == "OK"
     assert seen["header"] == "1.1.0"
 
@@ -274,7 +274,7 @@ def test_retry_on_transport_error():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder, max_retries=1, backoff=0.0)
-    resp = client.enable_wifi()
+    resp = client.wifi_enable()
     assert resp.result == "OK"
     assert calls["count"] == 2
 
@@ -293,7 +293,7 @@ def test_response_validation_error_is_wrapped() -> None:
 
     client = make_client(responder, api_version="1.2.0")
     with pytest.raises(exceptions.BusyBarResponseValidationError) as exc:
-        client.get_version()
+        client.version()
     assert exc.value.model == "VersionInfo"
 
 
@@ -314,7 +314,47 @@ def test_all_library_errors_inherit_base_error() -> None:
     assert issubclass(exceptions.BusyBarWebSocketError, exceptions.BusyBarError)
 
 
-def test_draw_on_display_sends_utf8_body():
+def test_delivery_error_helpers_format_and_classify_errors() -> None:
+    """
+    Validate delivery error diagnostics and retryability helpers.
+    """
+
+    bad_request = exceptions.BusyBarAPIError(
+        "invalid payload",
+        status_code=400,
+        method="POST",
+        path="/api/display/draw",
+        request_id="req-1",
+        response_excerpt='{"error":"invalid payload"}',
+    )
+    server_error = exceptions.BusyBarAPIError(
+        "proxy unavailable",
+        status_code=503,
+        method="POST",
+        path="/api/display/draw",
+    )
+    request_error = exceptions.BusyBarRequestError(
+        "connection failed",
+        method="POST",
+        path="/api/audio/play",
+        attempts=2,
+    )
+
+    assert not exceptions.is_retryable_delivery_error(bad_request)
+    assert exceptions.is_retryable_delivery_error(server_error)
+    assert exceptions.is_retryable_delivery_error(request_error)
+    assert (
+        exceptions.format_delivery_error(bad_request)
+        == "HTTP 400 | POST /api/display/draw | invalid payload | "
+        'request_id=req-1 | body={"error":"invalid payload"}'
+    )
+    assert (
+        exceptions.format_delivery_error(request_error)
+        == "request error | POST /api/audio/play | attempts=2 | connection failed"
+    )
+
+
+def test_display_draw_sends_utf8_body():
     """
     Ensure JSON payloads are encoded as UTF-8 without ASCII escaping.
 
@@ -342,11 +382,191 @@ def test_draw_on_display_sends_utf8_body():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
-    resp = client.draw_on_display(payload)
+    resp = client.display_draw(payload)
     assert resp.result == "OK"
 
 
-def test_get_screen_frame_returns_bytes():
+def test_display_draw_and_clear_params() -> None:
+    """
+    Validate display_draw and display_clear request params and session header.
+    """
+
+    seen: list[dict[str, object]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            {
+                "path": request.url.path,
+                "method": request.method,
+                "params": dict(request.url.params),
+                "session": request.headers.get("x-session-id"),
+            }
+        )
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    payload = {
+        "application_name": "demo",
+        "elements": [
+            {"id": "1", "type": "text", "x": 0, "y": 0, "text": "A", "font": "small"}
+        ],
+    }
+    draw_resp = client.display_draw(payload, session_id="bar-1")
+    clear_resp = client.display_clear(
+        application_name="demo",
+        session_id="bar-1",
+    )
+    assert draw_resp.result == "OK"
+    assert clear_resp.result == "OK"
+    assert seen[0]["path"] == "/api/display/draw"
+    assert seen[0]["method"] == "POST"
+    assert seen[0]["session"] == "bar-1"
+    assert seen[1]["path"] == "/api/display/draw"
+    assert seen[1]["method"] == "DELETE"
+    assert seen[1]["params"] == {"application_name": "demo"}
+    assert seen[1]["session"] == "bar-1"
+
+
+def test_display_draw_can_clear_before_draw() -> None:
+    """
+    Validate clear_before_draw in display_draw.
+    """
+
+    seen: list[tuple[str, str, dict[str, str]]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, dict(request.url.params)))
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    payload = {
+        "application_name": "demo",
+        "elements": [
+            {"id": "1", "type": "text", "x": 0, "y": 0, "text": "A", "font": "small"}
+        ],
+    }
+    resp = client.display_draw(payload, clear_before_draw=True)
+    assert resp.result == "OK"
+    assert seen[0] == (
+        "DELETE",
+        "/api/display/draw",
+        {"application_name": "demo"},
+    )
+    assert seen[1][0] == "POST"
+
+
+def test_display_can_clear_draw_and_audio_play() -> None:
+    """
+    Validate high-level display flow: clear, draw, and audio_play.
+    """
+
+    seen: list[dict[str, object]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "params": dict(request.url.params),
+                "body": json.loads(request.content) if request.content else None,
+                "session": request.headers.get("x-session-id"),
+            }
+        )
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    payload = {
+        "application_name": "demo",
+        "elements": [
+            {"id": "1", "type": "text", "x": 0, "y": 0, "text": "A", "font": "small"}
+        ],
+    }
+    normalized_payload = {
+        "application_name": "demo",
+        "priority": 50,
+        "elements": [
+            {
+                "id": "1",
+                "display": "front",
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "text": "A",
+                "font": "small",
+            }
+        ],
+    }
+    resp = client.display(
+        payload,
+        session_id="bar-1",
+        clear_before_draw=True,
+        audio_payload={"stock_path": "shared/sfx.snd"},
+    )
+    assert resp.result == "OK"
+    assert seen == [
+        {
+            "method": "DELETE",
+            "path": "/api/display/draw",
+            "params": {"application_name": "demo"},
+            "body": None,
+            "session": "bar-1",
+        },
+        {
+            "method": "POST",
+            "path": "/api/display/draw",
+            "params": {},
+            "body": normalized_payload,
+            "session": "bar-1",
+        },
+        {
+            "method": "POST",
+            "path": "/api/audio/play",
+            "params": {},
+            "body": {"stock_path": "shared/sfx.snd"},
+            "session": "bar-1",
+        },
+    ]
+
+
+def test_display_draw_can_sanitize_text_payload(caplog) -> None:
+    """
+    Validate sanitize_text for sync display_draw.
+    """
+
+    seen: dict[str, str] = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        body = request.content.decode("utf-8")
+        seen["body"] = body
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    caplog.set_level("WARNING", logger="busylib.client.display")
+    payload = {
+        "application_name": "demo",
+        "elements": [
+            {
+                "id": "1",
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "text": "Demo 🚀\nmeeting",
+                "display": "front",
+                "font": "small",
+            }
+        ],
+    }
+    resp = client.display_draw(payload, sanitize_text=True)
+    assert resp.result == "OK"
+    assert "Demo meeting" in seen["body"]
+    assert "🚀" not in seen["body"]
+    assert (
+        "Sanitized display text element_id=1 display=front "
+        "text_before='Demo 🚀\\nmeeting' text_after='Demo meeting'"
+    ) in caplog.text
+
+
+def test_screen_returns_bytes():
     """
     Return raw bytes for screen frame requests.
 
@@ -360,25 +580,25 @@ def test_get_screen_frame_returns_bytes():
         return httpx.Response(200, content=expected)
 
     client = make_client(responder)
-    data = client.get_screen_frame(1)
+    data = client.screen(1)
     assert data == expected
 
 
 @pytest.mark.parametrize(
     "method,path",
     [
-        ("play_audio", "/api/audio/play"),
-        ("stop_audio", "/api/audio/play"),
-        ("clear_display", "/api/display/draw"),
-        ("remove_storage_file", "/api/storage/remove"),
-        ("create_storage_directory", "/api/storage/mkdir"),
-        ("delete_app_assets", "/api/assets/upload"),
-        ("enable_wifi", "/api/wifi/enable"),
-        ("disable_wifi", "/api/wifi/disable"),
-        ("disconnect_wifi", "/api/wifi/disconnect"),
+        ("audio_play", "/api/audio/play"),
+        ("audio_stop", "/api/audio/play"),
+        ("display_clear", "/api/display/draw"),
+        ("storage_remove", "/api/storage/remove"),
+        ("storage_mkdir", "/api/storage/mkdir"),
+        ("assets_delete", "/api/assets/upload"),
+        ("wifi_enable", "/api/wifi/enable"),
+        ("wifi_disable", "/api/wifi/disable"),
+        ("wifi_disconnect", "/api/wifi/disconnect"),
         ("ble_enable", "/api/ble/enable"),
         ("ble_disable", "/api/ble/disable"),
-        ("ble_forget_pairing", "/api/ble/pairing"),
+        ("ble_pairing_forget", "/api/ble/pairing"),
     ],
 )
 def test_simple_success_methods(method: str, path: str):
@@ -395,20 +615,20 @@ def test_simple_success_methods(method: str, path: str):
     client = make_client(responder)
     func = getattr(client, method)
     # supply required args when needed
-    if method == "play_audio":
-        resp = func("app", "file")
-    elif method in {"remove_storage_file", "create_storage_directory"}:
+    if method == "audio_play":
+        resp = func(path="file")
+    elif method in {"storage_remove", "storage_mkdir"}:
         resp = func("/tmp")
-    elif method == "delete_app_assets":
+    elif method == "assets_delete":
         resp = func("app")
-    elif method == "disconnect_wifi":
+    elif method == "wifi_disconnect":
         resp = func()
     else:
         resp = func()
     assert resp.result == "OK"
 
 
-def test_connect_wifi_serialization():
+def test_wifi_connect_serialization():
     """
     Serialize Wi-Fi configuration into JSON payload.
 
@@ -422,7 +642,7 @@ def test_connect_wifi_serialization():
 
     cfg = {"ssid": "TestNetwork", "password": "secret", "security": "WPA2"}
     client = make_client(responder)
-    resp = client.connect_wifi(cfg)
+    resp = client.wifi_connect(cfg)
     assert resp.result == "OK"
     assert seen["body"]["ssid"] == "TestNetwork"
     assert seen["body"]["security"] == "WPA2"
@@ -442,16 +662,16 @@ def test_display_brightness_validation_and_payload():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
-    resp = client.set_display_brightness("auto")
+    resp = client.display_brightness_set("auto")
     assert resp.result == "OK"
     assert seen["params"] == {"value": "auto"}
     assert seen["content"] == b""
 
     with pytest.raises(ValueError):
-        client.set_display_brightness("invalid")  # type: ignore[arg-type]
+        client.display_brightness_set("invalid")  # type: ignore[arg-type]
 
 
-def test_set_audio_volume_params():
+def test_audio_volume_set_params():
     """
     Validate audio volume query parameters.
 
@@ -465,13 +685,13 @@ def test_set_audio_volume_params():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
-    resp = client.set_audio_volume(42.5)
+    resp = client.audio_volume_set(42.5)
     assert resp.result == "OK"
     assert seen["params"] == {"volume": "42.5"}
     assert seen["content"] == b""
 
 
-def test_draw_on_display_color_serialization():
+def test_display_draw_color_serialization():
     """
     Serialize color strings into hex RGBA values.
 
@@ -500,13 +720,13 @@ def test_draw_on_display_color_serialization():
         application_name="app",
         elements=elements,
     )
-    resp = client.draw_on_display(display)
+    resp = client.display_draw(display)
     assert resp.result == "OK"
     color = seen["body"]["elements"][0]["color"]
     assert color == "#FF000080"
 
 
-def test_draw_on_display_color_tuple_alpha():
+def test_display_draw_color_tuple_alpha():
     """
     Serialize color tuples with alpha into hex RGBA values.
 
@@ -535,7 +755,7 @@ def test_draw_on_display_color_tuple_alpha():
         application_name="app",
         elements=elements,
     )
-    resp = client.draw_on_display(display)
+    resp = client.display_draw(display)
     assert resp.result == "OK"
     color = seen["body"]["elements"][0]["color"]
     assert color == "#FFFFFF64"
