@@ -450,7 +450,7 @@ def test_display_draw_can_clear_before_draw() -> None:
     assert seen[0] == (
         "DELETE",
         "/api/display/draw",
-        {"application_name": "demo"},
+        {},
     )
     assert seen[1][0] == "POST"
 
@@ -507,7 +507,7 @@ def test_display_can_clear_draw_and_audio_play() -> None:
         {
             "method": "DELETE",
             "path": "/api/display/draw",
-            "params": {"application_name": "demo"},
+            "params": {},
             "body": None,
             "session": "bar-1",
         },
