@@ -159,9 +159,9 @@ def run_ui(
                 if preview_mode is not PreviewMode.NONE:
                     try:
                         stop_preview_thread(timeout=0.1)
-                        runner.run(client.stop_sound())
+                        runner.run(client.audio_stop())
                         right_client = right.runner.require_client()
-                        runner.run(right_client.clear_display())  # type: ignore[attr-defined]
+                        runner.run(right_client.display_clear())  # type: ignore[attr-defined]
                         status.append("Preview cleared")
                     except Exception as exc:  # noqa: BLE001
                         status.append(f"Failed to clear preview: {exc}")
@@ -177,8 +177,8 @@ def run_ui(
         try:
             if preview_mode is not PreviewMode.NONE:
                 stop_preview_thread(timeout=0.2)
-                runner.run(client.stop_sound())
-                runner.run(client.clear_display())
+                runner.run(client.audio_stop())
+                runner.run(client.display_clear())
         except Exception:
             pass
         save_state(str(left.cwd), str(right.cwd), active_left)

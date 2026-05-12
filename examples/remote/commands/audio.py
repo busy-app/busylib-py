@@ -70,25 +70,25 @@ def _audio_cache_key(data: bytes) -> str:
     return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
-def _remote_assets_dir(app_id: str) -> str:
+def _remote_assets_dir(application_name: str) -> str:
     """
     Build the storage path where app assets are kept on device.
     """
-    return f"/ext/assets/{app_id}"
+    return f"/ext/assets/{application_name}"
 
 
 async def _list_remote_assets(
     client: AsyncBusyBar,
-    app_id: str,
+    application_name: str,
 ) -> set[str]:
     """
     Return a set of asset names currently present on the device.
 
     Errors are treated as an empty listing to keep audio flow resilient.
     """
-    remote_dir = _remote_assets_dir(app_id)
+    remote_dir = _remote_assets_dir(application_name)
     try:
-        listing = await client.list_storage_files(remote_dir)
+        listing = await client.storage_list(remote_dir)
     except Exception as exc:  # noqa: BLE001
         logger.debug("audio: failed to list remote assets: %s", exc)
         return set()
@@ -253,7 +253,9 @@ class AudioCommand(CommandBase):
                 _store_cached_audio(cache_dir, cache_key, filename, converted_data)
 
             self._status_message("audio: checking remote assets")
-            remote_assets = await _list_remote_assets(self._client, settings.app_id)
+            remote_assets = await _list_remote_assets(
+                self._client, settings.application_name
+            )
             self._status_message(f"audio: remote has {len(remote_assets)} assets")
             if filename in remote_assets:
                 self._status_message(f"audio: refreshing {filename}")
@@ -262,15 +264,15 @@ class AudioCommand(CommandBase):
 
             upload_timeout = _audio_timeout(settings.audio_upload_timeout_seconds)
             if upload_timeout is None:
-                await self._client.upload_asset(
-                    settings.app_id,
+                await self._client.assets_upload(
+                    settings.application_name,
                     filename,
                     converted_data,
                 )
             else:
                 await asyncio.wait_for(
-                    self._client.upload_asset(
-                        settings.app_id,
+                    self._client.assets_upload(
+                        settings.application_name,
                         filename,
                         converted_data,
                     ),
@@ -280,10 +282,14 @@ class AudioCommand(CommandBase):
 
             play_timeout = _audio_timeout(settings.audio_play_timeout_seconds)
             if play_timeout is None:
-                await self._client.play_audio(settings.app_id, filename)
+                await self._client.audio_play(
+                    application_name=settings.application_name, path=filename
+                )
             else:
                 await asyncio.wait_for(
-                    self._client.play_audio(settings.app_id, filename),
+                    self._client.audio_play(
+                        application_name=settings.application_name, path=filename
+                    ),
                     timeout=play_timeout,
                 )
             self._status_message("audio: done")
@@ -337,7 +343,7 @@ class AudioStopCommand(CommandBase):
         """
         logger.info("command:audio_stop")
         try:
-            await self._client.stop_audio()
+            await self._client.audio_stop()
             self._status_message("audio: stopped")
         except Exception as exc:  # noqa: BLE001
             logger.exception("command:audio_stop failed")

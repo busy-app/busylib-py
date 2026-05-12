@@ -7,11 +7,12 @@ from .account import AccountMixin, AsyncAccountMixin
 from .busy import AsyncBusyMixin, BusyMixin
 from .assets import AssetsMixin, AsyncAssetsMixin
 from .audio import AsyncAudioMixin, AudioMixin
-from .base import AsyncClientBase, SyncClientBase
+from .base import AsyncClientBase, PreparedRequest, SyncClientBase
 from .ble import AsyncBleMixin, BleMixin
 from .display import AsyncDisplayMixin, DisplayMixin
 from .firmware import AsyncFirmwareMixin, FirmwareMixin
 from .input import AsyncInputMixin, InputMixin
+from .state_stream import AsyncStateStreamMixin, StateStreamMixin
 from .storage import AsyncStorageMixin, StorageMixin
 from .time import AsyncTimeMixin, TimeMixin
 from .updater import AsyncUpdaterMixin, UpdaterMixin
@@ -34,6 +35,7 @@ class BusyBar(
     AudioMixin,
     WifiMixin,
     InputMixin,
+    StateStreamMixin,
     BleMixin,
     SyncClientBase,
 ):
@@ -92,6 +94,7 @@ class AsyncBusyBar(
     AsyncAudioMixin,
     AsyncWifiMixin,
     AsyncInputMixin,
+    AsyncStateStreamMixin,
     AsyncBleMixin,
     AsyncClientBase,
 ):
@@ -134,4 +137,4 @@ class AsyncBusyBar(
         return await self.usb_reboot(raise_on_error=raise_on_error)
 
 
-__all__ = ["BusyBar", "AsyncBusyBar"]
+__all__ = ["BusyBar", "AsyncBusyBar", "PreparedRequest"]

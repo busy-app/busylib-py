@@ -37,13 +37,13 @@ def test_assets_upload_and_delete_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    resp = client.upload_asset("app", "file.bin", b"data")
+    resp = client.assets_upload("app", "file.bin", b"data")
     assert resp.result == "OK"
     assert seen["path"] == "/api/assets/upload"
-    assert seen["params"] == {"app_id": "app", "file": "file.bin"}
+    assert seen["params"] == {"application_name": "app", "file": "file.bin"}
     assert seen["body"] == b"data"
 
-    resp = client.delete_app_assets("app")
+    resp = client.assets_delete("app")
     assert resp.result == "OK"
 
 
@@ -66,7 +66,7 @@ def test_assets_upload_sync_uses_extended_timeout_by_default(
         return {"result": "OK"}
 
     monkeypatch.setattr(client, "_request", fake_request)
-    resp = client.upload_asset("app", "file.bin", b"data")
+    resp = client.assets_upload("app", "file.bin", b"data")
     assert resp.result == "OK"
     assert captured["timeout"] == assets_client.ASSET_UPLOAD_TIMEOUT
 
@@ -90,7 +90,7 @@ def test_assets_upload_sync_allows_timeout_override(
         return {"result": "OK"}
 
     monkeypatch.setattr(client, "_request", fake_request)
-    resp = client.upload_asset("app", "file.bin", b"data", timeout=7.5)
+    resp = client.assets_upload("app", "file.bin", b"data", timeout=7.5)
     assert resp.result == "OK"
     assert captured["timeout"] == 7.5
 
@@ -113,13 +113,13 @@ async def test_assets_upload_and_delete_async() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
-    resp = await client.upload_asset("app", "file.bin", b"data")
+    resp = await client.assets_upload("app", "file.bin", b"data")
     assert resp.result == "OK"
     assert seen[0]["path"] == "/api/assets/upload"
-    assert seen[0]["params"] == {"app_id": "app", "file": "file.bin"}
+    assert seen[0]["params"] == {"application_name": "app", "file": "file.bin"}
     assert seen[0]["body"] == b"data"
 
-    resp = await client.delete_app_assets("app")
+    resp = await client.assets_delete("app")
     assert resp.result == "OK"
     await client.aclose()
 
@@ -144,7 +144,7 @@ async def test_assets_upload_async_uses_extended_timeout_by_default(
         return {"result": "OK"}
 
     monkeypatch.setattr(client, "_request", fake_request)
-    resp = await client.upload_asset("app", "file.bin", b"data")
+    resp = await client.assets_upload("app", "file.bin", b"data")
     assert resp.result == "OK"
     assert captured["timeout"] == assets_client.ASSET_UPLOAD_TIMEOUT
     await client.aclose()
@@ -170,7 +170,7 @@ async def test_assets_upload_async_allows_timeout_override(
         return {"result": "OK"}
 
     monkeypatch.setattr(client, "_request", fake_request)
-    resp = await client.upload_asset("app", "file.bin", b"data", timeout=9.5)
+    resp = await client.assets_upload("app", "file.bin", b"data", timeout=9.5)
     assert resp.result == "OK"
     assert captured["timeout"] == 9.5
     await client.aclose()
@@ -195,9 +195,9 @@ def test_ble_and_wifi_status_sync() -> None:
     client = _make_sync_client(responder)
     ble = client.ble_status()
     assert ble.state == "on"
-    status = client.get_wifi_status()
+    status = client.wifi_status()
     assert status.ssid == "Test"
-    networks = client.scan_wifi_networks()
+    networks = client.wifi_networks()
     assert networks.count == 0
     assert seen == ["/api/ble/status", "/api/wifi/status", "/api/wifi/networks"]
 
@@ -217,10 +217,10 @@ def test_access_mode_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    info = client.get_http_access()
+    info = client.access()
     assert info.mode == "key"
     assert info.key_valid is True
-    resp = client.set_http_access("enabled", "1234")
+    resp = client.access_set("enabled", "1234")
     assert resp.result == "OK"
     assert seen == [
         {"path": "/api/access", "params": {}},
@@ -254,12 +254,12 @@ def test_busy_snapshot_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    snapshot = client.get_busy_snapshot()
+    snapshot = client.busy_snapshot()
     assert snapshot.snapshot.type == "SIMPLE"
     assert snapshot.snapshot.card_id == "card"
     assert snapshot.snapshot.time_left_ms == 9000
     assert snapshot.snapshot.is_paused is False
-    resp = client.set_busy_snapshot(snapshot)
+    resp = client.busy_snapshot_set(snapshot)
     assert resp.result == "OK"
     assert len(seen) == 2
     assert seen[0]["path"] == "/api/busy/snapshot"
@@ -286,9 +286,9 @@ async def test_ble_and_wifi_status_async() -> None:
     client = _make_async_client(responder)
     ble = await client.ble_status()
     assert ble.state == "on"
-    status = await client.get_wifi_status()
+    status = await client.wifi_status()
     assert status.ssid == "Test"
-    networks = await client.scan_wifi_networks()
+    networks = await client.wifi_networks()
     assert networks.count == 0
     assert seen == ["/api/ble/status", "/api/wifi/status", "/api/wifi/networks"]
     await client.aclose()
@@ -310,10 +310,10 @@ async def test_access_mode_async() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
-    info = await client.get_http_access()
+    info = await client.access()
     assert info.mode == "key"
     assert info.key_valid is True
-    resp = await client.set_http_access("enabled", "1234")
+    resp = await client.access_set("enabled", "1234")
     assert resp.result == "OK"
     assert seen == [
         {"path": "/api/access", "params": {}},
@@ -349,12 +349,12 @@ async def test_busy_snapshot_async() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
-    snapshot = await client.get_busy_snapshot()
+    snapshot = await client.busy_snapshot()
     assert snapshot.snapshot.type == "SIMPLE"
     assert snapshot.snapshot.card_id == "card"
     assert snapshot.snapshot.time_left_ms == 9000
     assert snapshot.snapshot.is_paused is False
-    resp = await client.set_busy_snapshot(snapshot)
+    resp = await client.busy_snapshot_set(snapshot)
     assert resp.result == "OK"
     assert len(seen) == 2
     assert seen[0]["path"] == "/api/busy/snapshot"
@@ -362,7 +362,7 @@ async def test_busy_snapshot_async() -> None:
     await client.aclose()
 
 
-def test_updater_update_firmware_sync() -> None:
+def test_updater_update_sync() -> None:
     """
     Ensure firmware update sends raw body without params.
     """
@@ -374,7 +374,7 @@ def test_updater_update_firmware_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    resp = client.update_firmware(b"fw")
+    resp = client.update(b"fw")
     assert resp.result == "OK"
     assert seen["params"] == {}
     assert seen["body"] == b"fw"
@@ -391,9 +391,9 @@ def test_time_endpoints_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    resp = client.set_time_timestamp("2025-10-02T14:30:45+04:00")
+    resp = client.time_timestamp("2025-10-02T14:30:45+04:00")
     assert resp.result == "OK"
-    resp = client.set_time_timezone("Europe/Moscow")
+    resp = client.time_timezone("Europe/Moscow")
     assert resp.result == "OK"
     assert seen == [
         {
@@ -405,7 +405,7 @@ def test_time_endpoints_sync() -> None:
 
 
 @pytest.mark.asyncio
-async def test_updater_update_firmware_async() -> None:
+async def test_updater_update_async() -> None:
     """
     Ensure async firmware update omits params.
     """
@@ -416,7 +416,7 @@ async def test_updater_update_firmware_async() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
-    resp = await client.update_firmware(b"fw")
+    resp = await client.update(b"fw")
     assert resp.result == "OK"
     await client.aclose()
 
@@ -433,9 +433,9 @@ async def test_time_endpoints_async() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
-    resp = await client.set_time_timestamp("2025-10-02T14:30:45+04:00")
+    resp = await client.time_timestamp("2025-10-02T14:30:45+04:00")
     assert resp.result == "OK"
-    resp = await client.set_time_timezone("Europe/Moscow")
+    resp = await client.time_timezone("Europe/Moscow")
     assert resp.result == "OK"
     assert seen == [
         {
@@ -463,15 +463,15 @@ def test_updater_check_status_and_changelog_sync() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
-    resp = client.check_firmware_update()
+    resp = client.update_check()
     assert resp.result == "OK"
-    status = client.get_update_status()
+    status = client.update_status()
     assert status.install is not None
-    changelog = client.get_update_changelog("1.2.3")
+    changelog = client.update_changelog("1.2.3")
     assert changelog.changelog == "Fixes"
-    resp = client.install_firmware_update("1.2.3")
+    resp = client.update_install("1.2.3")
     assert resp.result == "OK"
-    resp = client.abort_firmware_download()
+    resp = client.update_abort_download()
     assert resp.result == "OK"
     assert seen == [
         "/api/update/check",
@@ -499,15 +499,15 @@ async def test_updater_check_status_and_changelog_async() -> None:
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
-    resp = await client.check_firmware_update()
+    resp = await client.update_check()
     assert resp.result == "OK"
-    status = await client.get_update_status()
+    status = await client.update_status()
     assert status.check is not None
-    changelog = await client.get_update_changelog("2.0.0")
+    changelog = await client.update_changelog("2.0.0")
     assert changelog.changelog == "New"
-    resp = await client.install_firmware_update("2.0.0")
+    resp = await client.update_install("2.0.0")
     assert resp.result == "OK"
-    resp = await client.abort_firmware_download()
+    resp = await client.update_abort_download()
     assert resp.result == "OK"
     assert seen == [
         "/api/update/check",

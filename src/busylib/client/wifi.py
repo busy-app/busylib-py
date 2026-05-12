@@ -14,22 +14,22 @@ class WifiMixin(SyncClientBase):
     Wi-Fi control helpers: enable, connect, scan, and status.
     """
 
-    def enable_wifi(self) -> types.SuccessResponse:
-        logger.info("enable_wifi")
+    def wifi_enable(self) -> types.SuccessResponse:
+        logger.info("wifi_enable")
         data = self._request("POST", "/api/wifi/enable")
         return types.SuccessResponse.model_validate(data)
 
-    def disable_wifi(self) -> types.SuccessResponse:
-        logger.info("disable_wifi")
+    def wifi_disable(self) -> types.SuccessResponse:
+        logger.info("wifi_disable")
         data = self._request("POST", "/api/wifi/disable")
         return types.SuccessResponse.model_validate(data)
 
-    def get_wifi_status(self) -> types.StatusResponse:
-        logger.info("get_wifi_status")
+    def wifi_status(self) -> types.StatusResponse:
+        logger.info("wifi_status")
         data = self._request("GET", "/api/wifi/status")
         return types.StatusResponse.model_validate(data)
 
-    def connect_wifi(
+    def wifi_connect(
         self, config: types.ConnectRequestConfig | dict[str, Any]
     ) -> types.SuccessResponse:
         ssid = (
@@ -37,7 +37,7 @@ class WifiMixin(SyncClientBase):
             if isinstance(config, types.ConnectRequestConfig)
             else config.get("ssid")
         )
-        logger.info("connect_wifi ssid=%s", ssid)
+        logger.info("wifi_connect ssid=%s", ssid)
         model = (
             config
             if isinstance(config, types.ConnectRequestConfig)
@@ -51,13 +51,13 @@ class WifiMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    def disconnect_wifi(self) -> types.SuccessResponse:
-        logger.info("disconnect_wifi")
+    def wifi_disconnect(self) -> types.SuccessResponse:
+        logger.info("wifi_disconnect")
         data = self._request("POST", "/api/wifi/disconnect")
         return types.SuccessResponse.model_validate(data)
 
-    def scan_wifi_networks(self) -> types.NetworkResponse:
-        logger.info("scan_wifi_networks")
+    def wifi_networks(self) -> types.NetworkResponse:
+        logger.info("wifi_networks")
         data = self._request("GET", "/api/wifi/networks")
         return types.NetworkResponse.model_validate(data)
 
@@ -67,22 +67,22 @@ class AsyncWifiMixin(AsyncClientBase):
     Async Wi-Fi control helpers: enable, connect, scan, and status.
     """
 
-    async def enable_wifi(self) -> types.SuccessResponse:
-        logger.info("async enable_wifi")
+    async def wifi_enable(self) -> types.SuccessResponse:
+        logger.info("async wifi_enable")
         data = await self._request("POST", "/api/wifi/enable")
         return types.SuccessResponse.model_validate(data)
 
-    async def disable_wifi(self) -> types.SuccessResponse:
-        logger.info("async disable_wifi")
+    async def wifi_disable(self) -> types.SuccessResponse:
+        logger.info("async wifi_disable")
         data = await self._request("POST", "/api/wifi/disable")
         return types.SuccessResponse.model_validate(data)
 
-    async def get_wifi_status(self) -> types.StatusResponse:
-        logger.info("async get_wifi_status")
+    async def wifi_status(self) -> types.StatusResponse:
+        logger.info("async wifi_status")
         data = await self._request("GET", "/api/wifi/status")
         return types.StatusResponse.model_validate(data)
 
-    async def connect_wifi(
+    async def wifi_connect(
         self,
         config: types.ConnectRequestConfig | dict[str, Any],
     ) -> types.SuccessResponse:
@@ -91,7 +91,7 @@ class AsyncWifiMixin(AsyncClientBase):
             if isinstance(config, types.ConnectRequestConfig)
             else config.get("ssid")
         )
-        logger.info("async connect_wifi ssid=%s", ssid)
+        logger.info("async wifi_connect ssid=%s", ssid)
         model = (
             config
             if isinstance(config, types.ConnectRequestConfig)
@@ -105,12 +105,12 @@ class AsyncWifiMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    async def disconnect_wifi(self) -> types.SuccessResponse:
-        logger.info("async disconnect_wifi")
+    async def wifi_disconnect(self) -> types.SuccessResponse:
+        logger.info("async wifi_disconnect")
         data = await self._request("POST", "/api/wifi/disconnect")
         return types.SuccessResponse.model_validate(data)
 
-    async def scan_wifi_networks(self) -> types.NetworkResponse:
-        logger.info("async scan_wifi_networks")
+    async def wifi_networks(self) -> types.NetworkResponse:
+        logger.info("async wifi_networks")
         data = await self._request("GET", "/api/wifi/networks")
         return types.NetworkResponse.model_validate(data)

@@ -4,7 +4,11 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from busylib.client import AsyncBusyBar
-from busylib.features import collect_device_snapshot
+from busylib.features import (
+    DeviceSnapshot,
+    DeviceStateStore,
+    collect_device_snapshot,
+)
 
 from examples.remote.constants import (
     TEXT_LINK_FAIL,
@@ -27,12 +31,33 @@ async def dashboard(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
         logger.warning(TEXT_SNAPSHOT_FAIL, exc)
 
 
+async def stream_dashboard_state(
+    client: AsyncBusyBar,
+    renderer: TerminalRenderer,
+    *,
+    initial_snapshot: DeviceSnapshot,
+) -> None:
+    """
+    Keep dashboard info in sync from `/api/status/ws` protobuf updates.
+
+    The initial snapshot is collected via HTTP once. After that, only
+    websocket state updates are applied.
+    """
+    store = DeviceStateStore(initial_snapshot)
+    store.on_state(lambda snapshot: renderer.update_info(snapshot=snapshot))
+    renderer.update_info(snapshot=store.snapshot)
+    async for message in client.stream_status_ws():
+        if not isinstance(message, dict):
+            continue
+        store.apply_stream_message(message)
+
+
 async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
     """
     Refresh cloud link status and update the renderer.
     """
     try:
-        info = await client.get_account_info()
+        info = await client.account_info()
         if info.linked:
             renderer.update_info(
                 link_connected=True,
@@ -40,7 +65,7 @@ async def cloud_link(client: AsyncBusyBar, renderer: TerminalRenderer) -> None:
                 link_email=info.email,
             )
             return
-        link_info = await client.link_account()
+        link_info = await client.account_link()
         renderer.update_info(
             link_connected=False,
             link_key=link_info.code,
@@ -54,8 +79,8 @@ async def update_check(client: AsyncBusyBar, renderer: TerminalRenderer) -> None
     Request a firmware update check and update the renderer.
     """
     try:
-        await client.check_firmware_update()
-        status = await client.get_update_status()
+        await client.update_check()
+        status = await client.update_status()
         available = False
         if status.check and status.check.available_version:
             available = True

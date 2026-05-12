@@ -11,7 +11,7 @@ class RemoteSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="BUSYBAR_REMOTE_")
 
-    app_id: str = Field(default="remote")
+    application_name: str = Field(default="remote")
     icon_mode: str = Field(default="text")
     spacer: str = Field(default=" ")
     pixel_char: str | None = Field(default=None)

@@ -238,8 +238,8 @@ class RecordAudioCommand(CommandBase):
             )
             filename = Path(converted_path).name
             self._status_message(f"record_audio: uploading {filename}")
-            await self._client.upload_asset(
-                settings.app_id,
+            await self._client.assets_upload(
+                settings.application_name,
                 filename,
                 converted_data,
             )

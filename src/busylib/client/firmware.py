@@ -13,8 +13,8 @@ class FirmwareMixin(SyncClientBase):
     Version and system status methods.
     """
 
-    def get_version(self) -> types.VersionInfo:
-        logger.info("get_version")
+    def version(self) -> types.VersionInfo:
+        logger.info("version")
         data = self._request("GET", "/api/version")
         version_info = types.VersionInfo.model_validate(data)
         if version_info.api_semver:
@@ -25,34 +25,34 @@ class FirmwareMixin(SyncClientBase):
             )
         return version_info
 
-    def get_status(self) -> types.Status:
-        logger.info("get_status")
+    def status(self) -> types.Status:
+        logger.info("status")
         data = self._request("GET", "/api/status")
         return types.Status.model_validate(data)
 
-    def get_system_status(self) -> types.StatusSystem:
-        logger.info("get_system_status")
+    def status_system(self) -> types.StatusSystem:
+        logger.info("status_system")
         data = self._request("GET", "/api/status/system")
         return types.StatusSystem.model_validate(data)
 
-    def get_power_status(self) -> types.StatusPower:
-        logger.info("get_power_status")
+    def status_power(self) -> types.StatusPower:
+        logger.info("status_power")
         data = self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
-    def get_device_name(self) -> types.DeviceNameResponse:
+    def name(self) -> types.DeviceNameResponse:
         """
         Fetch device name via GET /api/name.
         """
-        logger.info("get_device_name")
+        logger.info("name")
         data = self._request("GET", "/api/name")
         return types.DeviceNameResponse.model_validate(data)
 
-    def set_device_name(self, name: str) -> types.SuccessResponse:
+    def name_set(self, name: str) -> types.SuccessResponse:
         """
         Set device name via POST /api/name.
         """
-        logger.info("set_device_name")
+        logger.info("name_set")
         payload = types.DeviceNameUpdate(name=name).model_dump()
         data = self._request(
             "POST",
@@ -61,11 +61,11 @@ class FirmwareMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    def get_device_time(self) -> types.DeviceTimeResponse:
+    def time(self) -> types.DeviceTimeResponse:
         """
         Fetch device time via GET /api/time.
         """
-        logger.info("get_device_time")
+        logger.info("time")
         data = self._request("GET", "/api/time")
         return types.DeviceTimeResponse.model_validate(data)
 
@@ -75,8 +75,8 @@ class AsyncFirmwareMixin(AsyncClientBase):
     Async variant of version and system status methods.
     """
 
-    async def get_version(self) -> types.VersionInfo:
-        logger.info("async get_version")
+    async def version(self) -> types.VersionInfo:
+        logger.info("async version")
         data = await self._request("GET", "/api/version")
         version_info = types.VersionInfo.model_validate(data)
         if version_info.api_semver:
@@ -87,34 +87,34 @@ class AsyncFirmwareMixin(AsyncClientBase):
             )
         return version_info
 
-    async def get_status(self) -> types.Status:
-        logger.info("async get_status")
+    async def status(self) -> types.Status:
+        logger.info("async status")
         data = await self._request("GET", "/api/status")
         return types.Status.model_validate(data)
 
-    async def get_system_status(self) -> types.StatusSystem:
-        logger.info("async get_system_status")
+    async def status_system(self) -> types.StatusSystem:
+        logger.info("async status_system")
         data = await self._request("GET", "/api/status/system")
         return types.StatusSystem.model_validate(data)
 
-    async def get_power_status(self) -> types.StatusPower:
-        logger.info("async get_power_status")
+    async def status_power(self) -> types.StatusPower:
+        logger.info("async status_power")
         data = await self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
-    async def get_device_name(self) -> types.DeviceNameResponse:
+    async def name(self) -> types.DeviceNameResponse:
         """
         Fetch device name via GET /api/name.
         """
-        logger.info("async get_device_name")
+        logger.info("async name")
         data = await self._request("GET", "/api/name")
         return types.DeviceNameResponse.model_validate(data)
 
-    async def set_device_name(self, name: str) -> types.SuccessResponse:
+    async def name_set(self, name: str) -> types.SuccessResponse:
         """
         Set device name via POST /api/name.
         """
-        logger.info("async set_device_name")
+        logger.info("async name_set")
         payload = types.DeviceNameUpdate(name=name).model_dump()
         data = await self._request(
             "POST",
@@ -123,10 +123,10 @@ class AsyncFirmwareMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    async def get_device_time(self) -> types.DeviceTimeResponse:
+    async def time(self) -> types.DeviceTimeResponse:
         """
         Fetch device time via GET /api/time.
         """
-        logger.info("async get_device_time")
+        logger.info("async time")
         data = await self._request("GET", "/api/time")
         return types.DeviceTimeResponse.model_validate(data)

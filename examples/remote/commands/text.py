@@ -106,5 +106,7 @@ class TextCommand(CommandBase):
             scroll_rate=scroll_rate,
             display=types.DisplayName.FRONT,
         )
-        payload = types.DisplayElements(app_id="remote_command", elements=[element])
-        await self._client.draw_on_display(payload)
+        payload = types.DisplayElements(
+            application_name="remote_command", elements=[element]
+        )
+        await self._client.display_draw(payload)

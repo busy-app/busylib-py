@@ -22,37 +22,41 @@ class AssetsMixin(SyncClientBase):
     Asset upload and deletion helpers.
     """
 
-    def upload_asset(
+    def assets_upload(
         self,
-        app_id: str,
+        application_name: str,
         filename: str,
         data: bytes,
         *,
         timeout: float | httpx.Timeout | None = ASSET_UPLOAD_TIMEOUT,
     ) -> types.SuccessResponse:
         """
-        Upload an asset file for the given app.
+        Upload an asset file for the given application.
 
         Uses a longer default timeout to tolerate large payload uploads.
         """
         logger.info(
-            "upload_asset app_id=%s filename=%s size=%s", app_id, filename, len(data)
+            "assets_upload application_name=%s filename=%s size=%s",
+            application_name,
+            filename,
+            len(data),
         )
         payload = self._request(
             "POST",
             "/api/assets/upload",
-            params={"app_id": app_id, "file": filename},
+            params={"file": filename},
+            application_name=application_name,
             data=data,
             timeout=timeout,
         )
         return types.SuccessResponse.model_validate(payload)
 
-    def delete_app_assets(self, app_id: str) -> types.SuccessResponse:
-        logger.info("delete_app_assets app_id=%s", app_id)
+    def assets_delete(self, application_name: str) -> types.SuccessResponse:
+        logger.info("assets_delete application_name=%s", application_name)
         data = self._request(
             "DELETE",
             "/api/assets/upload",
-            params={"app_id": app_id},
+            application_name=application_name,
         )
         return types.SuccessResponse.model_validate(data)
 
@@ -62,39 +66,40 @@ class AsyncAssetsMixin(AsyncClientBase):
     Async asset upload and deletion helpers.
     """
 
-    async def upload_asset(
+    async def assets_upload(
         self,
-        app_id: str,
+        application_name: str,
         filename: str,
         data: bytes,
         *,
         timeout: float | httpx.Timeout | None = ASSET_UPLOAD_TIMEOUT,
     ) -> types.SuccessResponse:
         """
-        Upload an asset file for the given app.
+        Upload an asset file for the given application.
 
         Uses a longer default timeout to tolerate large payload uploads.
         """
         logger.info(
-            "async upload_asset app_id=%s filename=%s size=%s",
-            app_id,
+            "async assets_upload application_name=%s filename=%s size=%s",
+            application_name,
             filename,
             len(data),
         )
         payload = await self._request(
             "POST",
             "/api/assets/upload",
-            params={"app_id": app_id, "file": filename},
+            params={"file": filename},
+            application_name=application_name,
             data=data,
             timeout=timeout,
         )
         return types.SuccessResponse.model_validate(payload)
 
-    async def delete_app_assets(self, app_id: str) -> types.SuccessResponse:
-        logger.info("async delete_app_assets app_id=%s", app_id)
+    async def assets_delete(self, application_name: str) -> types.SuccessResponse:
+        logger.info("async assets_delete application_name=%s", application_name)
         data = await self._request(
             "DELETE",
             "/api/assets/upload",
-            params={"app_id": app_id},
+            application_name=application_name,
         )
         return types.SuccessResponse.model_validate(data)

@@ -244,14 +244,14 @@ class RemotePanel(Panel):
         """
         try:
             client = self.runner.require_client()
-            listing = self.runner.run(client.list_storage_files(self.cwd))
+            listing = self.runner.run(client.storage_list(self.cwd))
             self._apply_listing(listing)
         except BusyBarAPIError as exc:
             if exc.code == 400 and self.cwd != "/ext":
                 self.cwd = "/ext"
                 try:
                     client = self.runner.require_client()
-                    listing = self.runner.run(client.list_storage_files(self.cwd))
+                    listing = self.runner.run(client.storage_list(self.cwd))
                     self._apply_listing(
                         listing,
                         error="Reset to /ext after 400 error",
@@ -304,7 +304,7 @@ class RemotePanel(Panel):
         Delegates to the BusyBar client via AsyncRunner.
         """
         client = self.runner.require_client()
-        runner.run(client.remove_storage_file(self.path_of(entry)))  # type: ignore[arg-type]
+        runner.run(client.storage_remove(self.path_of(entry)))  # type: ignore[arg-type]
 
     def _apply_listing(self, listing: object, *, error: str | None = None) -> None:
         """

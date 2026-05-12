@@ -13,20 +13,20 @@ class TimeMixin(SyncClientBase):
     Device time helpers.
     """
 
-    def set_time_timestamp(self, timestamp: str) -> types.SuccessResponse:
+    def time_timestamp(self, timestamp: str) -> types.SuccessResponse:
         """
         Set device time via POST /api/time/timestamp.
         """
-        logger.info("set_time_timestamp")
+        logger.info("time_timestamp")
         params = {"timestamp": timestamp}
         data = self._request("POST", "/api/time/timestamp", params=params)
         return types.SuccessResponse.model_validate(data)
 
-    def set_time_timezone(self, timezone: str) -> types.SuccessResponse:
+    def time_timezone(self, timezone: str) -> types.SuccessResponse:
         """
         Set device timezone via POST /api/time/timezone.
         """
-        logger.info("set_time_timezone")
+        logger.info("time_timezone")
         params = {"timezone": timezone}
         data = self._request("POST", "/api/time/timezone", params=params)
         return types.SuccessResponse.model_validate(data)
@@ -37,20 +37,20 @@ class AsyncTimeMixin(AsyncClientBase):
     Async device time helpers.
     """
 
-    async def set_time_timestamp(self, timestamp: str) -> types.SuccessResponse:
+    async def time_timestamp(self, timestamp: str) -> types.SuccessResponse:
         """
         Set device time via POST /api/time/timestamp.
         """
-        logger.info("async set_time_timestamp")
+        logger.info("async time_timestamp")
         params = {"timestamp": timestamp}
         data = await self._request("POST", "/api/time/timestamp", params=params)
         return types.SuccessResponse.model_validate(data)
 
-    async def set_time_timezone(self, timezone: str) -> types.SuccessResponse:
+    async def time_timezone(self, timezone: str) -> types.SuccessResponse:
         """
         Set device timezone via POST /api/time/timezone.
         """
-        logger.info("async set_time_timezone")
+        logger.info("async time_timezone")
         params = {"timezone": timezone}
         data = await self._request("POST", "/api/time/timezone", params=params)
         return types.SuccessResponse.model_validate(data)
