@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, cast
 from urllib.parse import quote, urlparse, urlunparse
 
 import websockets
@@ -169,10 +169,8 @@ class DisplayMixin(SyncClientBase):
                 override_name,
             )
         if clear_before_draw:
-            clear_request_kwargs = {
-                "application_name": model.application_name,
-                **request_kwargs,
-            }
+            clear_request_kwargs = cast(RequestKwargs, dict(request_kwargs))
+            clear_request_kwargs.pop("application_name", None)
             self.display_clear(**clear_request_kwargs)
         payload = model.model_dump(exclude_none=True)
         if sanitize_text:
@@ -361,10 +359,8 @@ class AsyncDisplayMixin(AsyncClientBase):
                 override_name,
             )
         if clear_before_draw:
-            clear_request_kwargs = {
-                "application_name": model.application_name,
-                **request_kwargs,
-            }
+            clear_request_kwargs = cast(RequestKwargs, dict(request_kwargs))
+            clear_request_kwargs.pop("application_name", None)
             await self.display_clear(**clear_request_kwargs)
         payload = model.model_dump(exclude_none=True)
         if sanitize_text:
