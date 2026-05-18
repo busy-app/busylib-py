@@ -407,6 +407,16 @@ class StorageDirElement(BaseModel):
 
 
 StorageListElement = StorageFileElement | StorageDirElement
+DisplayFontName = Literal[
+    "tiny",
+    "small",
+    "normal",
+    "condensed",
+    "bold",
+    "large",
+    "extra_large",
+    "global",
+]
 
 
 class StorageList(BaseModel):
@@ -437,7 +447,7 @@ class TextElement(DisplayElementBase):
     x: int
     y: int
     text: str
-    font: Literal["small", "medium", "medium_condensed", "big"]
+    font: DisplayFontName
     align: (
         Literal[
             "top_left",

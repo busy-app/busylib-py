@@ -3,6 +3,7 @@ from typing import Callable
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from busylib import BusyBar, exceptions, types
 
@@ -724,6 +725,51 @@ def test_display_draw_color_serialization():
     assert resp.result == "OK"
     color = seen["body"]["elements"][0]["color"]
     assert color == "#FF000080"
+
+
+def test_text_element_accepts_current_font_names() -> None:
+    """
+    Validate font names supported by the current display API.
+
+    Firmware API 22 rejects the old medium/medium_condensed/big names.
+    """
+    for font in (
+        "tiny",
+        "small",
+        "normal",
+        "condensed",
+        "bold",
+        "large",
+        "extra_large",
+        "global",
+    ):
+        element = types.TextElement(
+            id=f"text-{font}",
+            type="text",
+            x=0,
+            y=0,
+            text="hi",
+            font=font,
+        )
+        assert element.font == font
+
+
+@pytest.mark.parametrize("font", ["medium", "medium_condensed", "big"])
+def test_text_element_rejects_legacy_font_names(font: str) -> None:
+    """
+    Reject font names removed from the current display API.
+
+    This catches payload regressions that firmware returns as HTTP 400.
+    """
+    with pytest.raises(ValidationError):
+        types.TextElement(
+            id=f"text-{font}",
+            type="text",
+            x=0,
+            y=0,
+            text="hi",
+            font=font,  # type: ignore[reportArgumentType]
+        )
 
 
 def test_display_draw_color_tuple_alpha():
