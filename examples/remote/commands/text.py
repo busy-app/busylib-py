@@ -55,8 +55,17 @@ class TextCommand(CommandBase):
         )
         parser.add_argument(
             "--font",
-            choices=["small", "medium", "medium_condensed", "big"],
-            default="big",
+            choices=[
+                "tiny",
+                "small",
+                "normal",
+                "condensed",
+                "bold",
+                "large",
+                "extra_large",
+                "global",
+            ],
+            default="extra_large",
             help="Font name",
         )
         parser.add_argument(

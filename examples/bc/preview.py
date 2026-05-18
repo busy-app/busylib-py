@@ -287,7 +287,7 @@ def start_text_preview_thread(
                             x=0,
                             y=center_y,
                             text=line,
-                            font="medium",
+                            font="normal",
                             width=width,
                             scroll_rate=1000,
                             display=types.DisplayName.FRONT,
