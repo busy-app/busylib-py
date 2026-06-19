@@ -6,6 +6,7 @@ requires = [ "setuptools>=61", "setuptools-scm", "wheel" ]
 name = "busylib"
 description = "Python library for Busy Bar API"
 readme = "README.md"
+license = "MIT"
 authors = [
   { name = "flipperdevices", email = "pypi@flipperdevices.com" },
 ]

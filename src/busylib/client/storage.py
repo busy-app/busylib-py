@@ -76,11 +76,26 @@ class StorageMixin(SyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     def storage_mkdir(self, path: str) -> types.SuccessResponse:
+        """
+        Create a storage directory via POST /api/storage/mkdir.
+        """
         logger.info("storage_mkdir path=%s", path)
         data = self._request(
             "POST",
             "/api/storage/mkdir",
             params={"path": path},
+        )
+        return types.SuccessResponse.model_validate(data)
+
+    def storage_rename(self, old_path: str, new_path: str) -> types.SuccessResponse:
+        """
+        Rename a storage entry via POST /api/storage/rename.
+        """
+        logger.info("storage_rename old_path=%s new_path=%s", old_path, new_path)
+        data = self._request(
+            "POST",
+            "/api/storage/rename",
+            params={"old_path": old_path, "new_path": new_path},
         )
         return types.SuccessResponse.model_validate(data)
 
@@ -158,11 +173,28 @@ class AsyncStorageMixin(AsyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     async def storage_mkdir(self, path: str) -> types.SuccessResponse:
+        """
+        Create a storage directory via POST /api/storage/mkdir.
+        """
         logger.info("async storage_mkdir path=%s", path)
         data = await self._request(
             "POST",
             "/api/storage/mkdir",
             params={"path": path},
+        )
+        return types.SuccessResponse.model_validate(data)
+
+    async def storage_rename(
+        self, old_path: str, new_path: str
+    ) -> types.SuccessResponse:
+        """
+        Rename a storage entry via POST /api/storage/rename.
+        """
+        logger.info("async storage_rename old_path=%s new_path=%s", old_path, new_path)
+        data = await self._request(
+            "POST",
+            "/api/storage/rename",
+            params={"old_path": old_path, "new_path": new_path},
         )
         return types.SuccessResponse.model_validate(data)
 

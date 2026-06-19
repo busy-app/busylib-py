@@ -12,6 +12,7 @@ from .ble import AsyncBleMixin, BleMixin
 from .display import AsyncDisplayMixin, DisplayMixin
 from .firmware import AsyncFirmwareMixin, FirmwareMixin
 from .input import AsyncInputMixin, InputMixin
+from .smart_home import AsyncSmartHomeMixin, SmartHomeMixin
 from .state_stream import AsyncStateStreamMixin, StateStreamMixin
 from .storage import AsyncStorageMixin, StorageMixin
 from .time import AsyncTimeMixin, TimeMixin
@@ -35,6 +36,7 @@ class BusyBar(
     AudioMixin,
     WifiMixin,
     InputMixin,
+    SmartHomeMixin,
     StateStreamMixin,
     BleMixin,
     SyncClientBase,
@@ -94,6 +96,7 @@ class AsyncBusyBar(
     AsyncAudioMixin,
     AsyncWifiMixin,
     AsyncInputMixin,
+    AsyncSmartHomeMixin,
     AsyncStateStreamMixin,
     AsyncBleMixin,
     AsyncClientBase,

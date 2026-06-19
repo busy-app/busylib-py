@@ -13,7 +13,7 @@ AccountProfileName = Literal["dev", "prod", "local", "custom"]
 
 class AccountMixin(SyncClientBase):
     """
-    Account linking and MQTT profile helpers.
+    Account linking and MQTT backend helpers.
     """
 
     def account_unlink(self) -> types.SuccessResponse:
@@ -48,9 +48,37 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/status")
         return types.AccountState.model_validate(data)
 
+    def account_backend(self) -> types.AccountBackend:
+        """
+        Fetch MQTT backend settings via GET /api/account/backend.
+        """
+        logger.info("account_backend")
+        data = self._request("GET", "/api/account/backend")
+        return types.AccountBackend.model_validate(data)
+
+    def account_backend_set(
+        self,
+        backend: types.AccountBackend | dict[str, object],
+    ) -> types.SuccessResponse:
+        """
+        Set MQTT backend settings via PUT /api/account/backend.
+        """
+        logger.info("account_backend_set")
+        model = (
+            backend
+            if isinstance(backend, types.AccountBackend)
+            else types.AccountBackend.model_validate(backend)
+        )
+        data = self._request(
+            "PUT",
+            "/api/account/backend",
+            json_payload=model.model_dump(mode="json"),
+        )
+        return types.SuccessResponse.model_validate(data)
+
     def account_profile(self) -> types.AccountProfile:
         """
-        Fetch MQTT profile via GET /api/account/profile.
+        Fetch legacy MQTT profile via GET /api/account/profile.
         """
         logger.info("account_profile")
         data = self._request("GET", "/api/account/profile")
@@ -62,7 +90,7 @@ class AccountMixin(SyncClientBase):
         custom_url: str | None = None,
     ) -> types.SuccessResponse:
         """
-        Set MQTT profile via POST /api/account/profile.
+        Set legacy MQTT profile via POST /api/account/profile.
         """
         logger.info("account_profile_set profile=%s", profile)
         params: dict[str, str] = {"profile": profile}
@@ -78,7 +106,7 @@ class AccountMixin(SyncClientBase):
 
 class AsyncAccountMixin(AsyncClientBase):
     """
-    Async account linking and MQTT profile helpers.
+    Async account linking and MQTT backend helpers.
     """
 
     async def account_unlink(self) -> types.SuccessResponse:
@@ -113,9 +141,37 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/status")
         return types.AccountState.model_validate(data)
 
+    async def account_backend(self) -> types.AccountBackend:
+        """
+        Fetch MQTT backend settings via GET /api/account/backend.
+        """
+        logger.info("async account_backend")
+        data = await self._request("GET", "/api/account/backend")
+        return types.AccountBackend.model_validate(data)
+
+    async def account_backend_set(
+        self,
+        backend: types.AccountBackend | dict[str, object],
+    ) -> types.SuccessResponse:
+        """
+        Set MQTT backend settings via PUT /api/account/backend.
+        """
+        logger.info("async account_backend_set")
+        model = (
+            backend
+            if isinstance(backend, types.AccountBackend)
+            else types.AccountBackend.model_validate(backend)
+        )
+        data = await self._request(
+            "PUT",
+            "/api/account/backend",
+            json_payload=model.model_dump(mode="json"),
+        )
+        return types.SuccessResponse.model_validate(data)
+
     async def account_profile(self) -> types.AccountProfile:
         """
-        Fetch MQTT profile via GET /api/account/profile.
+        Fetch legacy MQTT profile via GET /api/account/profile.
         """
         logger.info("async account_profile")
         data = await self._request("GET", "/api/account/profile")
@@ -127,7 +183,7 @@ class AsyncAccountMixin(AsyncClientBase):
         custom_url: str | None = None,
     ) -> types.SuccessResponse:
         """
-        Set MQTT profile via POST /api/account/profile.
+        Set legacy MQTT profile via POST /api/account/profile.
         """
         logger.info("async account_profile_set profile=%s", profile)
         params: dict[str, str] = {"profile": profile}

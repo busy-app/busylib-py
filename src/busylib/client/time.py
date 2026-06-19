@@ -10,8 +10,24 @@ logger = logging.getLogger(__name__)
 
 class TimeMixin(SyncClientBase):
     """
-    Device time helpers.
+    Device time and timezone helpers.
     """
+
+    def time_timezone_info(self) -> types.TimezoneInfo:
+        """
+        Fetch current device timezone via GET /api/time/timezone.
+        """
+        logger.info("time_timezone_info")
+        data = self._request("GET", "/api/time/timezone")
+        return types.TimezoneInfo.model_validate(data)
+
+    def time_timezone_list(self) -> types.TimezoneListResponse:
+        """
+        Fetch supported device timezones via GET /api/time/tzlist.
+        """
+        logger.info("time_timezone_list")
+        data = self._request("GET", "/api/time/tzlist")
+        return types.TimezoneListResponse.model_validate(data)
 
     def time_timestamp(self, timestamp: str) -> types.SuccessResponse:
         """
@@ -34,8 +50,24 @@ class TimeMixin(SyncClientBase):
 
 class AsyncTimeMixin(AsyncClientBase):
     """
-    Async device time helpers.
+    Async device time and timezone helpers.
     """
+
+    async def time_timezone_info(self) -> types.TimezoneInfo:
+        """
+        Fetch current device timezone via GET /api/time/timezone.
+        """
+        logger.info("async time_timezone_info")
+        data = await self._request("GET", "/api/time/timezone")
+        return types.TimezoneInfo.model_validate(data)
+
+    async def time_timezone_list(self) -> types.TimezoneListResponse:
+        """
+        Fetch supported device timezones via GET /api/time/tzlist.
+        """
+        logger.info("async time_timezone_list")
+        data = await self._request("GET", "/api/time/tzlist")
+        return types.TimezoneListResponse.model_validate(data)
 
     async def time_timestamp(self, timestamp: str) -> types.SuccessResponse:
         """

@@ -13,10 +13,7 @@ class UpdaterMixin(SyncClientBase):
     Firmware update helpers for the updater API.
     """
 
-    def update(
-        self,
-        firmware_data: bytes,
-    ) -> types.SuccessResponse:
+    def update(self, firmware_data: bytes) -> types.SuccessResponse:
         """
         Upload firmware update TAR and initiate update.
         """
@@ -76,16 +73,41 @@ class UpdaterMixin(SyncClientBase):
         data = self._request("POST", "/api/update/abort_download")
         return types.SuccessResponse.model_validate(data)
 
+    def update_autoupdate(self) -> types.AutoupdateSettings:
+        """
+        Fetch autoupdate settings via GET /api/update/autoupdate.
+        """
+        logger.info("update_autoupdate")
+        data = self._request("GET", "/api/update/autoupdate")
+        return types.AutoupdateSettings.model_validate(data)
+
+    def update_autoupdate_set(
+        self,
+        settings: types.AutoupdateSettings | dict[str, object],
+    ) -> types.SuccessResponse:
+        """
+        Set autoupdate settings via POST /api/update/autoupdate.
+        """
+        logger.info("update_autoupdate_set")
+        model = (
+            settings
+            if isinstance(settings, types.AutoupdateSettings)
+            else types.AutoupdateSettings.model_validate(settings)
+        )
+        data = self._request(
+            "POST",
+            "/api/update/autoupdate",
+            json_payload=model.model_dump(mode="json", exclude_none=True),
+        )
+        return types.SuccessResponse.model_validate(data)
+
 
 class AsyncUpdaterMixin(AsyncClientBase):
     """
     Async firmware update helpers for the updater API.
     """
 
-    async def update(
-        self,
-        firmware_data: bytes,
-    ) -> types.SuccessResponse:
+    async def update(self, firmware_data: bytes) -> types.SuccessResponse:
         """
         Upload firmware update TAR and initiate update.
         """
@@ -143,4 +165,32 @@ class AsyncUpdaterMixin(AsyncClientBase):
         """
         logger.info("async update_abort_download")
         data = await self._request("POST", "/api/update/abort_download")
+        return types.SuccessResponse.model_validate(data)
+
+    async def update_autoupdate(self) -> types.AutoupdateSettings:
+        """
+        Fetch autoupdate settings via GET /api/update/autoupdate.
+        """
+        logger.info("async update_autoupdate")
+        data = await self._request("GET", "/api/update/autoupdate")
+        return types.AutoupdateSettings.model_validate(data)
+
+    async def update_autoupdate_set(
+        self,
+        settings: types.AutoupdateSettings | dict[str, object],
+    ) -> types.SuccessResponse:
+        """
+        Set autoupdate settings via POST /api/update/autoupdate.
+        """
+        logger.info("async update_autoupdate_set")
+        model = (
+            settings
+            if isinstance(settings, types.AutoupdateSettings)
+            else types.AutoupdateSettings.model_validate(settings)
+        )
+        data = await self._request(
+            "POST",
+            "/api/update/autoupdate",
+            json_payload=model.model_dump(mode="json", exclude_none=True),
+        )
         return types.SuccessResponse.model_validate(data)

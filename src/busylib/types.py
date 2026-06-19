@@ -70,8 +70,12 @@ class StrEnum(str, Enum):
 
 
 class WifiState(StrEnum):
+    UNKNOWN = "unknown"
     DISCONNECTED = "disconnected"
     CONNECTED = "connected"
+    CONNECTING = "connecting"
+    DISCONNECTING = "disconnecting"
+    RECONNECTING = "reconnecting"
 
 
 class WifiSecurityMethod(StrEnum):
@@ -82,6 +86,7 @@ class WifiSecurityMethod(StrEnum):
     WPA_WPA2 = "WPA/WPA2"
     WPA3 = "WPA3"
     WPA2_WPA3 = "WPA2/WPA3"
+    UNSUPPORTED = "Unsupported"
 
 
 class WifiIpMethod(StrEnum):
@@ -159,12 +164,45 @@ class VersionInfo(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class StatusDevice(BaseModel):
+    serial_number: str | None = None
+    usb_mac: str | None = None
+    wifi_mac: str | None = None
+    ble_mac: str | None = None
+    otp_valid: bool | None = None
+    otp_model: str | None = None
+    otp_timestamp: int | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class StatusFirmware(BaseModel):
+    version: str | None = None
+    target: int | None = None
+    branch: str | None = None
+    build_date: datetime | str | None = None
+    commit_hash: str | None = None
+    nwp_version: str | None = None
+    matter_version: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class StatusSystem(BaseModel):
+    api_semver: str | None = None
     version: str | None = None
     uptime: str | None = None
     branch: str | None = None
     build_date: datetime | None = None
     commit_hash: str | None = None
+    boot_time: int | None = None
+    auto_update_enabled: bool | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class NetworkInterfaceInfo(BaseModel):
+    type: Literal["usb", "wifi"] | None = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -180,6 +218,8 @@ class StatusPower(BaseModel):
 
 
 class Status(BaseModel):
+    device: StatusDevice | None = None
+    firmware: StatusFirmware | None = None
     system: StatusSystem | None = None
     power: StatusPower | None = None
 
@@ -202,6 +242,20 @@ class DeviceNameUpdate(BaseModel):
 
 class DeviceTimeResponse(BaseModel):
     timestamp: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class TimezoneInfo(BaseModel):
+    name: str
+    offset: str
+    abbr: str
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class TimezoneListResponse(BaseModel):
+    list: list[TimezoneInfo]
 
     model_config = ConfigDict(extra="ignore")
 
@@ -283,6 +337,47 @@ class BusySnapshot(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class BusyTimerInfiniteSettings(BaseModel):
+    type: Literal["INFINITE"]
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BusyTimerSimpleSettings(BaseModel):
+    type: Literal["SIMPLE"]
+    total_time_ms: int
+
+    model_config = ConfigDict(extra="ignore")
+
+
+BusyTimerSettings = Annotated[
+    BusyTimerInfiniteSettings | BusyTimerSimpleSettings | BusySnapshotIntervalSettings,
+    Field(discriminator="type"),
+]
+
+
+class BusyBarSettings(BaseModel):
+    theme: str
+    show_work_phase_only: bool
+    trigger_smart_home: bool
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BusyProfile(BaseModel):
+    sort_order: int
+    title: str
+    id: str
+    timer_settings: BusyTimerSettings
+    busy_bar_settings: BusyBarSettings
+    profile_timestamp_ms: int
+
+    model_config = ConfigDict(extra="ignore")
+
+
+BusyProfileSlot = Literal["busy", "custom"]
+
+
 class AccountInfo(BaseModel):
     linked: bool | None = None
     id: str | None = None
@@ -293,14 +388,34 @@ class AccountInfo(BaseModel):
 
 
 class AccountState(BaseModel):
+    status: Literal["error", "disconnected", "connected"] | None = None
     state: Literal["error", "disconnected", "connected"] | None = None
 
     model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="after")
+    def _sync_state_aliases(self) -> "AccountState":
+        """
+        Keep the old state attribute and OpenAPI status field in sync.
+        """
+        if self.state is None:
+            self.state = self.status
+        if self.status is None:
+            self.status = self.state
+        return self
 
 
 class AccountProfile(BaseModel):
     state: Literal["dev", "prod", "local", "custom"] | None = None
     custom_url: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccountBackend(BaseModel):
+    server_url: str
+    client_cert_type: Literal["default", "custom", "none"]
+    ignore_server_cert: bool
 
     model_config = ConfigDict(extra="ignore")
 
@@ -373,9 +488,21 @@ class UpdateInstallStatus(BaseModel):
 class UpdateCheckStatus(BaseModel):
     available_version: str | None = None
     event: Literal["start", "stop", "none"] | None = None
+    status: Literal["available", "not_available", "failure", "none"] | None = None
     result: Literal["available", "not_available", "failure", "none"] | None = None
 
     model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="after")
+    def _sync_result_aliases(self) -> "UpdateCheckStatus":
+        """
+        Keep the old result attribute and OpenAPI status field in sync.
+        """
+        if self.result is None:
+            self.result = self.status
+        if self.status is None:
+            self.status = self.result
+        return self
 
 
 class UpdateStatus(BaseModel):
@@ -387,6 +514,14 @@ class UpdateStatus(BaseModel):
 
 class UpdateChangelogResponse(BaseModel):
     changelog: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AutoupdateSettings(BaseModel):
+    is_enabled: bool | None = None
+    interval_start: str | None = None
+    interval_end: str | None = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -546,6 +681,7 @@ class DisplayElements(BaseModel):
 
 
 class DisplayBrightnessInfo(BaseModel):
+    value: str | None = None
     front: str | None = None
     back: str | None = None
 
@@ -655,6 +791,56 @@ class ScreenResponse(BaseModel):
 
 
 class BleStatus(BaseModel):
-    state: str
+    status: str | None = None
+    state: str | None = None
+    address: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="after")
+    def _sync_state_aliases(self) -> "BleStatus":
+        """
+        Keep the old state attribute and OpenAPI status field in sync.
+        """
+        if self.state is None:
+            self.state = self.status
+        if self.status is None:
+            self.status = self.state
+        return self
+
+
+class SmartHomePairingStatus(BaseModel):
+    value: (
+        Literal[
+            "never_started",
+            "started",
+            "completed_successfully",
+            "failed",
+        ]
+        | None
+    ) = None
+    timestamp: int | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class SmartHomePairingInfo(BaseModel):
+    fabric_count: int | None = None
+    latest_pairing_status: SmartHomePairingStatus | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class SmartHomePairingPayload(BaseModel):
+    available_until: str | None = None
+    qr_code: str | None = None
+    manual_code: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class SmartHomeSwitchState(BaseModel):
+    state: bool | None = None
+    startup: Literal["off", "on", "toggle", "last"] | None = None
 
     model_config = ConfigDict(extra="ignore")
