@@ -180,7 +180,7 @@ class StatusFirmware(BaseModel):
     version: str | None = None
     target: int | None = None
     branch: str | None = None
-    build_date: datetime | str | None = None
+    build_date: str | None = None
     commit_hash: str | None = None
     nwp_version: str | None = None
     matter_version: str | None = None
@@ -202,7 +202,7 @@ class StatusSystem(BaseModel):
 
 
 class NetworkInterfaceInfo(BaseModel):
-    type: Literal["usb", "wifi"] | None = None
+    type: str | None = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -388,20 +388,19 @@ class AccountInfo(BaseModel):
 
 
 class AccountState(BaseModel):
-    status: Literal["error", "disconnected", "connected"] | None = None
-    state: Literal["error", "disconnected", "connected"] | None = None
+    status: str | None = None
+    state: str | None = Field(default=None, exclude=True)
 
     model_config = ConfigDict(extra="ignore")
 
     @model_validator(mode="after")
     def _sync_state_aliases(self) -> "AccountState":
         """
-        Keep the old state attribute and OpenAPI status field in sync.
+        Keep OpenAPI status authoritative while accepting legacy state input.
         """
-        if self.state is None:
-            self.state = self.status
         if self.status is None:
             self.status = self.state
+        self.state = self.status
         return self
 
 
@@ -414,7 +413,7 @@ class AccountProfile(BaseModel):
 
 class AccountBackend(BaseModel):
     server_url: str
-    client_cert_type: Literal["default", "custom", "none"]
+    client_cert_type: str
     ignore_server_cert: bool
 
     model_config = ConfigDict(extra="ignore")
@@ -437,48 +436,9 @@ class UpdateInstallDownload(BaseModel):
 
 class UpdateInstallStatus(BaseModel):
     is_allowed: bool | None = None
-    event: (
-        Literal[
-            "session_start",
-            "session_stop",
-            "action_begin",
-            "action_done",
-            "detail_change",
-            "action_progress",
-            "none",
-        ]
-        | None
-    ) = None
-    action: (
-        Literal[
-            "download",
-            "sha_verification",
-            "unpack",
-            "prepare",
-            "apply",
-            "none",
-        ]
-        | None
-    ) = None
-    status: (
-        Literal[
-            "ok",
-            "battery_low",
-            "busy",
-            "download_failure",
-            "download_abort",
-            "sha_mismatch",
-            "unpack_staging_dir_failure",
-            "unpack_archive_open_failure",
-            "unpack_archive_unpack_failure",
-            "install_manifest_not_found",
-            "install_manifest_invalid",
-            "install_session_config_failure",
-            "install_pointer_setup_failure",
-            "unknown_failure",
-        ]
-        | None
-    ) = None
+    event: str | None = None
+    action: str | None = None
+    status: str | None = None
     detail: str | None = None
     download: UpdateInstallDownload | None = None
 
@@ -487,21 +447,20 @@ class UpdateInstallStatus(BaseModel):
 
 class UpdateCheckStatus(BaseModel):
     available_version: str | None = None
-    event: Literal["start", "stop", "none"] | None = None
-    status: Literal["available", "not_available", "failure", "none"] | None = None
-    result: Literal["available", "not_available", "failure", "none"] | None = None
+    event: str | None = None
+    status: str | None = None
+    result: str | None = Field(default=None, exclude=True)
 
     model_config = ConfigDict(extra="ignore")
 
     @model_validator(mode="after")
     def _sync_result_aliases(self) -> "UpdateCheckStatus":
         """
-        Keep the old result attribute and OpenAPI status field in sync.
+        Keep OpenAPI status authoritative while accepting legacy result input.
         """
-        if self.result is None:
-            self.result = self.status
         if self.status is None:
             self.status = self.result
+        self.result = self.status
         return self
 
 
@@ -792,7 +751,7 @@ class ScreenResponse(BaseModel):
 
 class BleStatus(BaseModel):
     status: str | None = None
-    state: str | None = None
+    state: str | None = Field(default=None, exclude=True)
     address: str | None = None
 
     model_config = ConfigDict(extra="ignore")
@@ -800,25 +759,16 @@ class BleStatus(BaseModel):
     @model_validator(mode="after")
     def _sync_state_aliases(self) -> "BleStatus":
         """
-        Keep the old state attribute and OpenAPI status field in sync.
+        Keep OpenAPI status authoritative while accepting legacy state input.
         """
-        if self.state is None:
-            self.state = self.status
         if self.status is None:
             self.status = self.state
+        self.state = self.status
         return self
 
 
 class SmartHomePairingStatus(BaseModel):
-    value: (
-        Literal[
-            "never_started",
-            "started",
-            "completed_successfully",
-            "failed",
-        ]
-        | None
-    ) = None
+    value: str | None = None
     timestamp: int | None = None
 
     model_config = ConfigDict(extra="ignore")
@@ -841,6 +791,6 @@ class SmartHomePairingPayload(BaseModel):
 
 class SmartHomeSwitchState(BaseModel):
     state: bool | None = None
-    startup: Literal["off", "on", "toggle", "last"] | None = None
+    startup: str | None = None
 
     model_config = ConfigDict(extra="ignore")

@@ -309,15 +309,70 @@ def test_response_alias_models_accept_openapi_and_legacy_fields() -> None:
     Validate response aliases introduced by the firmware OpenAPI refresh.
     """
     account = types.AccountState.model_validate({"status": "connected"})
+    legacy_account = types.AccountState.model_validate({"state": "disconnected"})
+    conflict_account = types.AccountState.model_validate(
+        {"status": "connected", "state": "error"}
+    )
     ble = types.BleStatus.model_validate({"status": "connected", "address": "AA"})
+    legacy_ble = types.BleStatus.model_validate({"state": "connectable"})
     update = types.UpdateStatus.model_validate(
         {"check": {"available_version": "1.2.3", "status": "available"}}
     )
+    legacy_update = types.UpdateCheckStatus.model_validate({"result": "failure"})
 
     assert account.status == "connected"
     assert account.state == "connected"
+    assert account.model_dump(exclude_none=True) == {"status": "connected"}
+    assert legacy_account.status == "disconnected"
+    assert conflict_account.status == "connected"
+    assert conflict_account.state == "connected"
     assert ble.status == "connected"
     assert ble.state == "connected"
+    assert ble.model_dump(exclude_none=True) == {"status": "connected", "address": "AA"}
+    assert legacy_ble.status == "connectable"
     assert update.check is not None
     assert update.check.status == "available"
     assert update.check.result == "available"
+    assert update.check.model_dump(exclude_none=True) == {
+        "available_version": "1.2.3",
+        "status": "available",
+    }
+    assert legacy_update.status == "failure"
+
+
+def test_response_models_keep_firmware_strings_forward_compatible() -> None:
+    """
+    Ensure firmware response strings stay opaque for forward compatibility.
+    """
+    firmware = types.StatusFirmware.model_validate(
+        {"build_date": "2026-06-19T12:00:00", "target": 22}
+    )
+    transport = types.NetworkInterfaceInfo.model_validate({"type": "ethernet"})
+    backend = types.AccountBackend.model_validate(
+        {
+            "server_url": "default",
+            "client_cert_type": "future-cert",
+            "ignore_server_cert": False,
+        }
+    )
+    pairing = types.SmartHomePairingStatus.model_validate({"value": "in_progress"})
+    switch = types.SmartHomeSwitchState.model_validate(
+        {"state": True, "startup": "schedule"}
+    )
+    update = types.UpdateStatus.model_validate(
+        {
+            "install": {"event": "future_event", "action": "future_action"},
+            "check": {"status": "future_status"},
+        }
+    )
+
+    assert firmware.build_date == "2026-06-19T12:00:00"
+    assert transport.type == "ethernet"
+    assert backend.client_cert_type == "future-cert"
+    assert pairing.value == "in_progress"
+    assert switch.startup == "schedule"
+    assert update.install is not None
+    assert update.install.event == "future_event"
+    assert update.install.action == "future_action"
+    assert update.check is not None
+    assert update.check.status == "future_status"
