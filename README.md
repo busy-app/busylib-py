@@ -1,8 +1,8 @@
 # busylib
 
-[![PyPI](https://img.shields.io/pypi/v/busylib.svg)](https://pypi.org/project/busylib/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/busylib.svg)](https://pypi.org/project/busylib/)
-[![License](https://img.shields.io/pypi/l/busylib.svg)](https://github.com/busy-app/busylib-py/blob/main/LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/busylib.svg?label=PyPI)](https://pypi.org/project/busylib/)
+[![Python versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/busylib/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/busy-app/busylib-py/blob/main/LICENSE)
 
 A simple and intuitive Python client for interacting with the Busy Bar API. This library allows you to programmatically control the device's display, audio, and assets.
 
