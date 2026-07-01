@@ -364,6 +364,7 @@ class SyncClientBase:
         backoff: float = DEFAULT_BACKOFF,
         transport: httpx.BaseTransport | None = None,
         api_version: str | None = None,
+        compatibility_mode: versioning.CompatibilityMode = "warn",
     ) -> None:
         if addr is None and token is None:
             self.base_url = settings.base_url
@@ -379,6 +380,9 @@ class SyncClientBase:
         self.max_retries = max(0, int(max_retries))
         self.backoff = backoff
         self.api_version = api_version or versioning.API_VERSION
+        if compatibility_mode not in ("warn", "strict", "none"):
+            raise ValueError("compatibility_mode must be 'warn', 'strict', or 'none'")
+        self.compatibility_mode: versioning.CompatibilityMode = compatibility_mode
         self._device_api_version: str | None = None
 
         headers: dict[str, str] = {versioning.API_VERSION_HEADER: self.api_version}
@@ -413,6 +417,18 @@ class SyncClientBase:
         Returns True for local connection_type.
         """
         return self.connection_type == "local"
+
+    def method_compatibility(
+        self,
+        method_name: str,
+    ) -> versioning.MethodCompatibility | None:
+        """
+        Return declarative OpenAPI compatibility metadata for a client method.
+        """
+        method = getattr(self, method_name, None)
+        if not callable(method):
+            return None
+        return versioning.get_method_compatibility(method)
 
     def is_local_available(self) -> bool:
         """
@@ -629,6 +645,7 @@ class AsyncClientBase:
         backoff: float = DEFAULT_BACKOFF,
         transport: httpx.AsyncBaseTransport | None = None,
         api_version: str | None = None,
+        compatibility_mode: versioning.CompatibilityMode = "warn",
     ) -> None:
         if addr is None and token is None:
             self.base_url = settings.base_url
@@ -644,6 +661,9 @@ class AsyncClientBase:
         self.max_retries = max(0, int(max_retries))
         self.backoff = backoff
         self.api_version = api_version or versioning.API_VERSION
+        if compatibility_mode not in ("warn", "strict", "none"):
+            raise ValueError("compatibility_mode must be 'warn', 'strict', or 'none'")
+        self.compatibility_mode: versioning.CompatibilityMode = compatibility_mode
         self._device_api_version: str | None = None
 
         headers: dict[str, str] = {versioning.API_VERSION_HEADER: self.api_version}
@@ -678,6 +698,18 @@ class AsyncClientBase:
         Returns True for local connection_type.
         """
         return self.connection_type == "local"
+
+    def method_compatibility(
+        self,
+        method_name: str,
+    ) -> versioning.MethodCompatibility | None:
+        """
+        Return declarative OpenAPI compatibility metadata for a client method.
+        """
+        method = getattr(self, method_name, None)
+        if not callable(method):
+            return None
+        return versioning.get_method_compatibility(method)
 
     async def is_local_available(self) -> bool:
         """

@@ -12,9 +12,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_extra_types.color import Color
 
 from . import exceptions
+from ._utils import ColorInput, normalize_rgba_color
 
 
 class BaseModel(PydanticBaseModel):
@@ -115,6 +115,7 @@ class DisplayElementType(StrEnum):
     IMAGE = "image"
     ANIMATION = "animation"
     COUNTDOWN = "countdown"
+    RECTANGLE = "rectangle"
 
 
 class DisplayName(StrEnum):
@@ -172,6 +173,10 @@ class StatusDevice(BaseModel):
     otp_valid: bool | None = None
     otp_model: str | None = None
     otp_timestamp: int | None = None
+    firmware_security: str | None = Field(
+        default=None,
+        description="Firmware security status: secure, insecure, other, or unknown.",
+    )
 
     model_config = ConfigDict(extra="ignore")
 
@@ -531,17 +536,9 @@ class DisplayElementBase(BaseModel):
     id: str
     timeout: int | None = Field(default=None, ge=0)
     display_until: str | None = None
+    x: int = Field(default=0, ge=-4096, le=4095)
+    y: int = Field(default=0, ge=-4096, le=4095)
     display: DisplayName | None = DisplayName.FRONT
-
-    model_config = ConfigDict(extra="allow")
-
-
-class TextElement(DisplayElementBase):
-    type: Literal["text"] = "text"
-    x: int
-    y: int
-    text: str
-    font: DisplayFontName
     align: (
         Literal[
             "top_left",
@@ -556,87 +553,124 @@ class TextElement(DisplayElementBase):
         ]
         | None
     ) = None
-    color: str | Sequence[int | float] | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+class TextElement(DisplayElementBase):
+    type: Literal["text"] = "text"
+    text: str
+    font: DisplayFontName
+    color: ColorInput | None = None
     width: int | None = Field(default=None, gt=0)
-    scroll_rate: int | None = Field(default=None, gt=0)
+    scroll_rate: int | None = Field(default=None, ge=0)
+    scroll_start_delay: int | None = Field(default=None, ge=0)
+    scroll_repeat_delay: int | None = Field(default=None, ge=0)
 
     @field_validator("color", mode="before")
     @classmethod
-    def _normalize_color(cls, value: str | Sequence[int | float] | None) -> str | None:
-        if value is None:
-            return None
-
-        if isinstance(value, (list, tuple)):
-            if len(value) not in (3, 4):
-                raise ValueError(
-                    "Color tuple/list must have 3 (RGB) or 4 (RGBA) elements"
-                )
-
-            def to_channel(component: int | float) -> int:
-                # Accept 0-1 floats or 0-255 ints
-                if isinstance(component, float):
-                    scaled = component * 255 if component <= 1 else component
-                    return int(round(scaled))
-                return int(component)
-
-            r, g, b = [max(0, min(255, to_channel(c))) for c in value[:3]]
-            alpha_component = value[3] if len(value) == 4 else 255
-            alpha = max(0, min(255, to_channel(alpha_component)))
-            return f"#{r:02X}{g:02X}{b:02X}{alpha:02X}"
-
-        if not isinstance(value, str):
-            raise ValueError("Color must be a string or RGB/RGBA tuple")
-
-        col = Color(value)
-        hex_value = col.as_hex().upper()
-        if len(hex_value) == 9:  # #RRGGBBAA
-            return hex_value
-        if len(hex_value) == 7:  # #RRGGBB, append opaque alpha
-            return f"{hex_value}FF"
-
-        rgb = col.as_rgb_tuple()
-        r, g, b = rgb[0], rgb[1], rgb[2]
-        return f"#{r:02X}{g:02X}{b:02X}FF"
+    def _normalize_color(cls, value: ColorInput | None) -> str | None:
+        return normalize_rgba_color(value)
 
 
 class ImageElement(DisplayElementBase):
     type: Literal["image"] = "image"
-    x: int
-    y: int
     path: str | None = None
     stock_path: str | None = None
+    opacity: int = Field(default=100, ge=0, le=100)
 
 
 class AnimationElement(DisplayElementBase):
     type: Literal["animation"] = "animation"
-    x: int
-    y: int
     path: str | None = None
     stock_path: str | None = None
     loop: bool = False
     await_previous_end: bool = False
     section: str | None = None
+    opacity: int = Field(default=100, ge=0, le=100)
 
 
 class CountdownElement(DisplayElementBase):
     type: Literal["countdown"] = "countdown"
-    x: int
-    y: int
     timestamp: str
-    color: str | Sequence[int | float] | None = None
+    color: ColorInput | None = None
     direction: Literal["time_left", "time_since"]
     show_hours: Literal["when_non_zero", "always"]
 
+    @field_validator("color", mode="before")
+    @classmethod
+    def _normalize_color(cls, value: ColorInput | None) -> str | None:
+        return normalize_rgba_color(value)
 
-DisplayElement = TextElement | ImageElement | AnimationElement | CountdownElement
+
+class RectangleElement(DisplayElementBase):
+    type: Literal["rectangle"] = "rectangle"
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    radius: int = Field(default=0, ge=0)
+    fill: Literal["none", "solid", "gradient_h", "gradient_v"] = "none"
+    fill_colors: list[ColorInput] = Field(
+        default_factory=lambda: ["#FFFFFFFF", "#00000000"],
+        min_length=1,
+        max_length=2,
+    )
+    border_width: int = Field(default=1, ge=0)
+    border_color: ColorInput = "#FFFFFFFF"
+
+    @field_validator("fill_colors", mode="before")
+    @classmethod
+    def _normalize_fill_colors(
+        cls,
+        value: Sequence[ColorInput | None] | None,
+    ) -> list[str]:
+        """
+        Normalize rectangle fill colors while preserving OpenAPI list shape.
+        """
+        if value is None:
+            return ["#FFFFFFFF", "#00000000"]
+        if isinstance(value, str):
+            raise ValueError("fill_colors must be a list of colors")
+
+        colors: list[str] = []
+        for item in value:
+            if item is None:
+                raise ValueError("fill_colors must not contain null values")
+            normalized = normalize_rgba_color(item)
+            if normalized is None:
+                raise ValueError("fill_colors must not contain null values")
+            colors.append(normalized)
+        return colors
+
+    @field_validator("border_color", mode="before")
+    @classmethod
+    def _normalize_border_color(
+        cls,
+        value: ColorInput | None,
+    ) -> str | None:
+        return normalize_rgba_color(value)
+
+
+DisplayElement = Annotated[
+    TextElement | ImageElement | AnimationElement | CountdownElement | RectangleElement,
+    Field(discriminator="type"),
+]
 
 
 class DisplayElements(BaseModel):
     application_name: str = Field(min_length=1)
     priority: int = Field(default=50, ge=1, le=100)
-    elements: list[DisplayElement]
+    led_notification_color: ColorInput | None = None
+    elements: list[DisplayElement] = Field(min_length=1)
 
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    @field_validator("led_notification_color", mode="before")
+    @classmethod
+    def _normalize_led_color(
+        cls,
+        value: ColorInput | None,
+    ) -> str | None:
+        return normalize_rgba_color(value)
 
 
 class DisplayBrightnessInfo(BaseModel):

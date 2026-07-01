@@ -2,11 +2,59 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
+from typing import Literal, TypeVar
 
 from . import exceptions
 
 API_VERSION = os.environ.get("BUSY_API_VERSION", "0.1.0")
 API_VERSION_HEADER = "X-Busy-Api-Version"
+CompatibilityMode = Literal["warn", "strict", "none"]
+F = TypeVar("F", bound=Callable[..., object])
+
+
+class MethodCompatibility(dict[str, str]):
+    """
+    Dictionary metadata describing when a client helper appeared in OpenAPI.
+    """
+
+
+def requires_openapi(
+    version: str,
+    *,
+    path: str,
+    method: str,
+) -> Callable[[F], F]:
+    """
+    Attach declarative OpenAPI compatibility metadata to a client method.
+    """
+
+    def decorator(func: F) -> F:
+        setattr(
+            func,
+            "__busy_openapi__",
+            MethodCompatibility(
+                version=version,
+                path=path,
+                method=method,
+            ),
+        )
+        return func
+
+    return decorator
+
+
+def get_method_compatibility(
+    method: Callable[..., object],
+) -> MethodCompatibility | None:
+    """
+    Return OpenAPI compatibility metadata attached to a client method.
+    """
+    target = getattr(method, "__func__", method)
+    metadata = getattr(target, "__busy_openapi__", None)
+    if isinstance(metadata, MethodCompatibility):
+        return metadata
+    return None
 
 
 def _parse_major_minor(version: str) -> tuple[int, int]:
@@ -46,3 +94,21 @@ def ensure_compatible(*, library_version: str, device_version: str) -> None:
             device_version=device_version,
             message="Device API minor version is behind Busy Lib; please update firmware.",
         )
+
+
+def compatibility_error(
+    *,
+    library_version: str,
+    device_version: str,
+) -> exceptions.BusyBarAPIVersionError | None:
+    """
+    Return compatibility error instead of raising it.
+    """
+    try:
+        ensure_compatible(
+            library_version=library_version,
+            device_version=device_version,
+        )
+    except exceptions.BusyBarAPIVersionError as exc:
+        return exc
+    return None
