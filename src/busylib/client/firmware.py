@@ -8,9 +8,33 @@ from .base import AsyncClientBase, SyncClientBase
 logger = logging.getLogger(__name__)
 
 
+def _handle_compatibility(
+    *,
+    mode: versioning.CompatibilityMode,
+    library_version: str,
+    device_version: str,
+) -> None:
+    """
+    Apply configured API compatibility policy after `/api/version`.
+    """
+    if mode == "none":
+        return
+
+    error = versioning.compatibility_error(
+        library_version=library_version,
+        device_version=device_version,
+    )
+    if error is None:
+        return
+    if mode == "strict":
+        raise error
+
+    logger.warning("%s", error)
+
+
 class FirmwareMixin(SyncClientBase):
     """
-    Version, transport, and system status methods.
+    Version, transport, system status, and system maintenance methods.
     """
 
     def version(self) -> types.VersionInfo:
@@ -22,7 +46,8 @@ class FirmwareMixin(SyncClientBase):
         version_info = types.VersionInfo.model_validate(data)
         if version_info.api_semver:
             self._device_api_version = version_info.api_semver
-            versioning.ensure_compatible(
+            _handle_compatibility(
+                mode=self.compatibility_mode,
                 library_version=self.api_version,
                 device_version=version_info.api_semver,
             )
@@ -76,6 +101,22 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
+    @versioning.requires_openapi("24.3.0", path="/api/log_dump", method="POST")
+    def log_dump(self, path: str | None = None) -> types.SuccessResponse:
+        """
+        Dump the in-memory device log buffer to a storage file.
+        """
+        logger.info("log_dump path=%s", path)
+        data = self._request(
+            "POST",
+            "/api/log_dump",
+            params={"path": path} if path is not None else None,
+            allow_text=True,
+        )
+        if data == "":
+            return types.SuccessResponse(result="OK")
+        return types.SuccessResponse.model_validate(data)
+
     def name(self) -> types.DeviceNameResponse:
         """
         Fetch device name via GET /api/name.
@@ -120,7 +161,8 @@ class AsyncFirmwareMixin(AsyncClientBase):
         version_info = types.VersionInfo.model_validate(data)
         if version_info.api_semver:
             self._device_api_version = version_info.api_semver
-            versioning.ensure_compatible(
+            _handle_compatibility(
+                mode=self.compatibility_mode,
                 library_version=self.api_version,
                 device_version=version_info.api_semver,
             )
@@ -173,6 +215,22 @@ class AsyncFirmwareMixin(AsyncClientBase):
         logger.info("async status_power")
         data = await self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
+
+    @versioning.requires_openapi("24.3.0", path="/api/log_dump", method="POST")
+    async def log_dump(self, path: str | None = None) -> types.SuccessResponse:
+        """
+        Dump the in-memory device log buffer to a storage file.
+        """
+        logger.info("async log_dump path=%s", path)
+        data = await self._request(
+            "POST",
+            "/api/log_dump",
+            params={"path": path} if path is not None else None,
+            allow_text=True,
+        )
+        if data == "":
+            return types.SuccessResponse(result="OK")
+        return types.SuccessResponse.model_validate(data)
 
     async def name(self) -> types.DeviceNameResponse:
         """

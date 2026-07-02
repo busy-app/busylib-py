@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from busylib import AsyncBusyBar, BusyBar, types
+from busylib import AsyncBusyBar, BusyBar, exceptions, types
 
 
 def _make_sync_client(responder) -> BusyBar:
@@ -151,6 +151,7 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
                     "serial_number": "203638485431500400123456",
                     "usb_mac": "0c:fa:22:21:2a:31",
                     "otp_valid": True,
+                    "firmware_security": "secure",
                 },
             )
         if request.url.path == "/api/status/firmware":
@@ -183,29 +184,216 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
                     "interval_end": "08:00",
                 },
             )
+        if request.url.path == "/api/log_dump":
+            return httpx.Response(200)
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     assert client.transport().type == "wifi"
-    assert client.status_device().serial_number == "203638485431500400123456"
+    device = client.status_device()
+    assert device.serial_number == "203638485431500400123456"
+    assert device.firmware_security == "secure"
     assert client.status_firmware().target == 22
     assert client.time_timezone_info().abbr == "IST"
     assert client.time_timezone_list().list[0].name == "UTC"
     assert client.storage_rename("/ext/a.txt", "/ext/b.txt").result == "OK"
+    assert client.log_dump("/ext/dump.log").result == "OK"
     autoupdate = client.update_autoupdate()
     assert autoupdate.is_enabled is True
     assert client.update_autoupdate_set({"is_enabled": False}).result == "OK"
 
-    assert seen[5] == {
+    storage_request = next(
+        item for item in seen if item["path"] == "/api/storage/rename"
+    )
+    log_dump_request = next(item for item in seen if item["path"] == "/api/log_dump")
+    autoupdate_put = next(
+        item
+        for item in seen
+        if item["path"] == "/api/update/autoupdate" and item["body"] != b""
+    )
+
+    assert storage_request == {
         "method": "POST",
         "path": "/api/storage/rename",
         "params": {"old_path": "/ext/a.txt", "new_path": "/ext/b.txt"},
         "body": b"",
     }
-    assert seen[7]["path"] == "/api/update/autoupdate"
-    autoupdate_body = seen[7]["body"]
+    assert log_dump_request == {
+        "method": "POST",
+        "path": "/api/log_dump",
+        "params": {"path": "/ext/dump.log"},
+        "body": b"",
+    }
+    autoupdate_body = autoupdate_put["body"]
     assert isinstance(autoupdate_body, bytes)
     assert json.loads(autoupdate_body) == {"is_enabled": False}
+
+
+def test_display_rectangle_payload_matches_openapi() -> None:
+    """
+    Ensure display draw serializes newly documented rectangle and LED fields.
+    """
+    seen: list[dict[str, object]] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "body": request.content,
+            }
+        )
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = _make_sync_client(responder)
+    response = client.display_draw(
+        {
+            "application_name": "my_app",
+            "priority": 90,
+            "led_notification_color": "red",
+            "elements": [
+                {
+                    "id": "text",
+                    "type": "text",
+                    "text": "Hello",
+                    "font": "normal",
+                    "x": 1,
+                    "y": 2,
+                    "scroll_start_delay": 1000,
+                    "scroll_repeat_delay": 2500,
+                },
+                {
+                    "id": "rect",
+                    "type": "rectangle",
+                    "width": 10,
+                    "height": 5,
+                    "radius": 2,
+                    "fill": "gradient_h",
+                    "fill_colors": ["#FF0000FF", "blue"],
+                    "border_width": 2,
+                    "border_color": (0, 255, 0, 0.5),
+                },
+                {
+                    "id": "image",
+                    "type": "image",
+                    "path": "data.png",
+                    "opacity": 75,
+                },
+            ],
+        }
+    )
+
+    assert response.result == "OK"
+    assert seen[0]["method"] == "POST"
+    assert seen[0]["path"] == "/api/display/draw"
+    body = seen[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body) == {
+        "application_name": "my_app",
+        "priority": 90,
+        "led_notification_color": "#FF0000FF",
+        "elements": [
+            {
+                "id": "text",
+                "x": 1,
+                "y": 2,
+                "display": "front",
+                "type": "text",
+                "text": "Hello",
+                "font": "normal",
+                "scroll_start_delay": 1000,
+                "scroll_repeat_delay": 2500,
+            },
+            {
+                "id": "rect",
+                "x": 0,
+                "y": 0,
+                "display": "front",
+                "type": "rectangle",
+                "width": 10,
+                "height": 5,
+                "radius": 2,
+                "fill": "gradient_h",
+                "fill_colors": ["#FF0000FF", "#0000FFFF"],
+                "border_width": 2,
+                "border_color": "#00FF0080",
+            },
+            {
+                "id": "image",
+                "x": 0,
+                "y": 0,
+                "display": "front",
+                "type": "image",
+                "path": "data.png",
+                "opacity": 75,
+            },
+        ],
+    }
+
+
+def test_display_payload_validation_matches_openapi_discriminator() -> None:
+    """
+    Reject missing element types, empty element lists, and invalid fill colors.
+    """
+    with pytest.raises(exceptions.BusyBarResponseValidationError):
+        types.DisplayElements.model_validate(
+            {"application_name": "my_app", "elements": [{"id": "bare"}]}
+        )
+
+    with pytest.raises(exceptions.BusyBarResponseValidationError):
+        types.DisplayElements.model_validate(
+            {"application_name": "my_app", "elements": []}
+        )
+
+    with pytest.raises(exceptions.BusyBarResponseValidationError):
+        types.DisplayElements.model_validate(
+            {
+                "application_name": "my_app",
+                "elements": [
+                    {
+                        "id": "rect",
+                        "type": "rectangle",
+                        "width": 10,
+                        "height": 5,
+                        "fill_colors": ["red", None],
+                    }
+                ],
+            }
+        )
+
+    with pytest.raises(exceptions.BusyBarResponseValidationError):
+        types.DisplayElements.model_validate(
+            {
+                "application_name": "my_app",
+                "elements": [
+                    {
+                        "id": "rect",
+                        "type": "rectangle",
+                        "width": 10,
+                        "height": 5,
+                        "fill_colors": "red",
+                    }
+                ],
+            }
+        )
+
+    display = types.DisplayElements.model_validate(
+        {
+            "application_name": "my_app",
+            "elements": [
+                {
+                    "id": "text",
+                    "type": "text",
+                    "text": "Hello",
+                    "font": "normal",
+                    "scroll_rate": 0,
+                }
+            ],
+        }
+    )
+    text = display.elements[0]
+    assert isinstance(text, types.TextElement)
+    assert text.scroll_rate == 0
 
 
 def test_smart_home_sync_requests_match_openapi() -> None:
@@ -287,6 +475,8 @@ async def test_async_new_openapi_helpers() -> None:
             return httpx.Response(200, json=_busy_profile_payload())
         if request.url.path == "/api/smart_home/switch":
             return httpx.Response(200, json={"state": True})
+        if request.url.path == "/api/log_dump":
+            return httpx.Response(200)
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
@@ -294,6 +484,7 @@ async def test_async_new_openapi_helpers() -> None:
     assert (await client.busy_profile("busy")).title == "Focus"
     assert (await client.smart_home_switch()).state is True
     assert (await client.storage_rename("/a", "/b")).result == "OK"
+    assert (await client.log_dump()).result == "OK"
     await client.aclose()
 
     assert seen == [
@@ -301,6 +492,7 @@ async def test_async_new_openapi_helpers() -> None:
         "GET /api/busy/profiles/busy",
         "GET /api/smart_home/switch",
         "POST /api/storage/rename",
+        "POST /api/log_dump",
     ]
 
 
