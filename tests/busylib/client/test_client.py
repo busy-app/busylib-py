@@ -67,6 +67,23 @@ def test_version_success():
     assert result.branch == "main"
 
 
+def test_version_default_api_version_remains_device_semver() -> None:
+    """
+    Keep the default API compatibility header on the device semver track.
+    """
+    seen: dict[str, str | None] = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["header"] = request.headers.get("x-busy-api-version")
+        return httpx.Response(200, json={"api_semver": "0.1.0"})
+
+    client = make_client(responder)
+    result = client.version()
+
+    assert result.api_semver == "0.1.0"
+    assert seen["header"] == "0.1.0"
+
+
 def test_name_and_time():
     """
     Fetch device name and time from their respective endpoints.
@@ -226,9 +243,26 @@ def test_plain_text_error_response():
     assert "HTTP 404" in str(exc.value)
 
 
-def test_version_incompatible_requires_device_update():
+def test_version_incompatible_warns_by_default(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """
-    Reject incompatible firmware API versions.
+    Warn by default instead of blocking callers on API version mismatch.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"api_semver": "0.9.0"})
+
+    client = make_client(responder, api_version="1.0.0")
+    result = client.version()
+
+    assert result.api_semver == "0.9.0"
+    assert "update firmware" in caplog.text
+
+
+def test_version_incompatible_strict_requires_device_update():
+    """
+    Reject incompatible firmware API versions in strict mode.
 
     Ensures the version guard raises a dedicated error.
     """
@@ -236,10 +270,55 @@ def test_version_incompatible_requires_device_update():
     def responder(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"api_semver": "0.9.0"})
 
-    client = make_client(responder, api_version="1.0.0")
+    client = make_client(
+        responder,
+        api_version="1.0.0",
+        compatibility_mode="strict",
+    )
     with pytest.raises(exceptions.BusyBarAPIVersionError) as exc:
         client.version()
     assert "update firmware" in str(exc.value)
+
+
+def test_version_incompatible_can_skip_compatibility_check() -> None:
+    """
+    Allow callers to opt out from compatibility checks.
+    """
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"api_semver": "0.9.0"})
+
+    client = make_client(
+        responder,
+        api_version="1.0.0",
+        compatibility_mode="none",
+    )
+    result = client.version()
+
+    assert result.api_semver == "0.9.0"
+
+
+def test_client_rejects_unknown_compatibility_mode() -> None:
+    """
+    Validate compatibility policy names at client construction.
+    """
+    with pytest.raises(ValueError):
+        make_client(lambda _request: httpx.Response(200), compatibility_mode="fail")
+
+
+def test_method_compatibility_metadata() -> None:
+    """
+    Expose declarative OpenAPI metadata for version-gated helpers.
+    """
+    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    metadata = client.method_compatibility("log_dump")
+
+    assert metadata == {
+        "version": "24.3.0",
+        "path": "/api/log_dump",
+        "method": "POST",
+    }
+    assert client.method_compatibility("missing") is None
 
 
 def test_request_carries_api_version_header():

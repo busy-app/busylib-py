@@ -69,6 +69,25 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## API Compatibility
+
+By default, `version()` records the device `api_semver` and logs a warning when
+it does not match the library compatibility header. Use strict mode when your
+application should fail fast on incompatible firmware.
+
+```python
+bb = BusyBar("10.0.4.20", compatibility_mode="strict")
+bb.version()
+```
+
+For migrations and diagnostics, methods can expose the OpenAPI version where
+they were introduced.
+
+```python
+metadata = bb.method_compatibility("log_dump")
+# {"version": "24.3.0", "path": "/api/log_dump", "method": "POST"}
+```
+
 ## API Examples
 
 Here are some examples of how to use the library to control your Busy Bar device.
