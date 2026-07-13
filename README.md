@@ -88,6 +88,14 @@ metadata = bb.method_compatibility("log_dump")
 # {"version": "24.3.0", "path": "/api/log_dump", "method": "POST"}
 ```
 
+## Agent-Assisted Scripts
+
+This repository includes [`AGENTS.md`](AGENTS.md), a compact guide for coding
+Busy Bar scripts and small apps with AI coding agents. It covers how to inspect
+the installed `busylib` API before coding, avoid invented methods or payloads,
+reuse clients safely, keep device effects bounded, and structure non-trivial
+scripts with dry-run support.
+
 ## API Examples
 
 Here are some examples of how to use the library to control your Busy Bar device.
