@@ -35,7 +35,7 @@ class FilePreviewer(Protocol):
         self,
         client: AsyncBusyBar,
         entry: Entry,
-        runner: "AsyncRunner",
+        runner: AsyncRunner,
         status: list[str],
         *,
         application_name: str,
@@ -81,7 +81,7 @@ class WavPreviewer:
         self,
         client: AsyncBusyBar,
         entry: Entry,
-        runner: "AsyncRunner",
+        runner: AsyncRunner,
         status: list[str],
         *,
         application_name: str,
@@ -120,7 +120,7 @@ class TxtPreviewer:
         self,
         client: AsyncBusyBar,
         entry: Entry,
-        runner: "AsyncRunner",
+        runner: AsyncRunner,
         status: list[str],
         *,
         application_name: str,
@@ -173,7 +173,7 @@ class PngPreviewer:
         self,
         client: AsyncBusyBar,
         entry: Entry,
-        runner: "AsyncRunner",
+        runner: AsyncRunner,
         status: list[str],
         *,
         application_name: str,
@@ -222,7 +222,7 @@ class DefaultPreviewer:
         self,
         client: AsyncBusyBar,
         entry: Entry,
-        runner: "AsyncRunner",
+        runner: AsyncRunner,
         status: list[str],
         *,
         application_name: str,
@@ -250,7 +250,7 @@ def start_text_preview_thread(
     application_name: str,
     rel_path: str,
     client: AsyncBusyBar,
-    runner: "AsyncRunner",
+    runner: AsyncRunner,
     lines: list[str],
 ) -> None:
     """
@@ -346,9 +346,9 @@ def preview_mode_for_entry(entry: Entry) -> PreviewMode:
 
 
 def preview_remote(
-    panel: "Panel",
+    panel: Panel,
     status: list[str],
-    runner: "AsyncRunner",
+    runner: AsyncRunner,
 ) -> PreviewMode:
     """
     Preview the selected remote file if supported.

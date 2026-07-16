@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Literal, Sequence
+from typing import Annotated, Any, Literal
+from collections.abc import Sequence
 
 from pydantic import (
     BaseModel as PydanticBaseModel,
@@ -399,7 +400,7 @@ class AccountState(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     @model_validator(mode="after")
-    def _sync_state_aliases(self) -> "AccountState":
+    def _sync_state_aliases(self) -> AccountState:
         """
         Keep OpenAPI status authoritative while accepting legacy state input.
         """
@@ -459,7 +460,7 @@ class UpdateCheckStatus(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     @model_validator(mode="after")
-    def _sync_result_aliases(self) -> "UpdateCheckStatus":
+    def _sync_result_aliases(self) -> UpdateCheckStatus:
         """
         Keep OpenAPI status authoritative while accepting legacy result input.
         """
@@ -718,7 +719,7 @@ class AudioPlayRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def _validate_source(self) -> "AudioPlayRequest":
+    def _validate_source(self) -> AudioPlayRequest:
         """
         Ensure payload references exactly one audio source style.
 
@@ -791,7 +792,7 @@ class BleStatus(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     @model_validator(mode="after")
-    def _sync_state_aliases(self) -> "BleStatus":
+    def _sync_state_aliases(self) -> BleStatus:
         """
         Keep OpenAPI status authoritative while accepting legacy state input.
         """
