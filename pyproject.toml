@@ -48,7 +48,7 @@ dev = [
   "pytest>=8.4.1",
   "pytest-asyncio>=0.24",
   "pytest-cov>=7",
-  "ruff>=0.9",
+  "ruff>=0.15",
   "tomli>=2.2",
 ]
 
@@ -66,6 +66,10 @@ extend-exclude = [
   ".vscode",
   "__pycache__",
   "build",
+]
+lint.extend-select = [
+  # https://docs.astral.sh/ruff/rules/#pyupgrade-up
+  "UP",
 ]
 
 [tool.pytest]

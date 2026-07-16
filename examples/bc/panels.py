@@ -93,7 +93,7 @@ class Panel:
         """
         return Entry(name=name, is_dir=is_dir, size=size, path=self.dest_path(name))
 
-    def delete(self, entry: Entry, runner: "AsyncRunner") -> None:
+    def delete(self, entry: Entry, runner: AsyncRunner) -> None:
         """
         Delete the selected entry.
 
@@ -193,7 +193,7 @@ class LocalPanel(Panel):
         """
         return str(self.cwd / name)
 
-    def delete(self, entry: Entry, runner: "AsyncRunner") -> None:  # noqa: ARG002
+    def delete(self, entry: Entry, runner: AsyncRunner) -> None:  # noqa: ARG002
         """
         Delete a local file or directory.
 
@@ -213,7 +213,7 @@ class RemotePanel(Panel):
     Uses the AsyncRunner to perform network calls.
     """
 
-    def __init__(self, runner: "AsyncRunner") -> None:
+    def __init__(self, runner: AsyncRunner) -> None:
         """
         Initialize a remote panel at the default storage path.
 
@@ -297,7 +297,7 @@ class RemotePanel(Panel):
         """
         return (self.cwd.rstrip("/") + "/" + name).replace("//", "/")
 
-    def delete(self, entry: Entry, runner: "AsyncRunner") -> None:
+    def delete(self, entry: Entry, runner: AsyncRunner) -> None:
         """
         Delete a remote storage entry.
 
