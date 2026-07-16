@@ -101,21 +101,28 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
-    @versioning.requires_openapi("24.3.0", path="/api/log_dump", method="POST")
-    def log_dump(self, path: str | None = None) -> types.SuccessResponse:
+    @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
+    def log_dump(
+        self,
+        filename: str | None = None,
+        *,
+        path: str | None = None,
+    ) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
         """
-        logger.info("log_dump path=%s", path)
+        if filename is None:
+            filename = path
+        logger.info("log_dump filename=%s", filename)
         data = self._request(
             "POST",
             "/api/log_dump",
-            params={"path": path} if path is not None else None,
+            params={"filename": filename} if filename is not None else None,
             allow_text=True,
         )
         if data == "":
-            return types.SuccessResponse(result="OK")
-        return types.SuccessResponse.model_validate(data)
+            return types.LogDumpResponse(result="OK")
+        return types.LogDumpResponse.model_validate(data)
 
     def name(self) -> types.DeviceNameResponse:
         """
@@ -216,21 +223,28 @@ class AsyncFirmwareMixin(AsyncClientBase):
         data = await self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
-    @versioning.requires_openapi("24.3.0", path="/api/log_dump", method="POST")
-    async def log_dump(self, path: str | None = None) -> types.SuccessResponse:
+    @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
+    async def log_dump(
+        self,
+        filename: str | None = None,
+        *,
+        path: str | None = None,
+    ) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
         """
-        logger.info("async log_dump path=%s", path)
+        if filename is None:
+            filename = path
+        logger.info("async log_dump filename=%s", filename)
         data = await self._request(
             "POST",
             "/api/log_dump",
-            params={"path": path} if path is not None else None,
+            params={"filename": filename} if filename is not None else None,
             allow_text=True,
         )
         if data == "":
-            return types.SuccessResponse(result="OK")
-        return types.SuccessResponse.model_validate(data)
+            return types.LogDumpResponse(result="OK")
+        return types.LogDumpResponse.model_validate(data)
 
     async def name(self) -> types.DeviceNameResponse:
         """

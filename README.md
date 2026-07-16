@@ -85,7 +85,7 @@ they were introduced.
 
 ```python
 metadata = bb.method_compatibility("log_dump")
-# {"version": "24.3.0", "path": "/api/log_dump", "method": "POST"}
+# {"version": "25.0.0", "path": "/api/log_dump", "method": "POST"}
 ```
 
 ## Agent-Assisted Scripts

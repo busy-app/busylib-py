@@ -155,6 +155,12 @@ class SuccessResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class LogDumpResponse(SuccessResponse):
+    path: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class VersionInfo(BaseModel):
     api_semver: str | None = None
     version: str | None = None
@@ -187,6 +193,7 @@ class StatusFirmware(BaseModel):
     branch: str | None = None
     build_date: str | None = None
     commit_hash: str | None = None
+    intercom_version: str | None = None
     nwp_version: str | None = None
     matter_version: str | None = None
 

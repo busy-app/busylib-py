@@ -75,13 +75,13 @@ def test_version_default_api_version_remains_device_semver() -> None:
 
     def responder(request: httpx.Request) -> httpx.Response:
         seen["header"] = request.headers.get("x-busy-api-version")
-        return httpx.Response(200, json={"api_semver": "0.1.0"})
+        return httpx.Response(200, json={"api_semver": "25.0.0"})
 
     client = make_client(responder)
     result = client.version()
 
-    assert result.api_semver == "0.1.0"
-    assert seen["header"] == "0.1.0"
+    assert result.api_semver == "25.0.0"
+    assert seen["header"] == "25.0.0"
 
 
 def test_name_and_time():
@@ -314,7 +314,7 @@ def test_method_compatibility_metadata() -> None:
     metadata = client.method_compatibility("log_dump")
 
     assert metadata == {
-        "version": "24.3.0",
+        "version": "25.0.0",
         "path": "/api/log_dump",
         "method": "POST",
     }
