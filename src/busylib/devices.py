@@ -50,7 +50,9 @@ class BusyBarDevices:
         return BusyBarAddress(ip_address=address, affinity=BusyBarDevices._address_affinity(address))
 
     @staticmethod
-    def discover() -> list[BusyBarDevice]:
+    def discover(timeout: float = TIMEOUT) -> list[BusyBarDevice]:
+        ...
+        sleep(timeout)
         zeroconf = Zeroconf()
 
         devices_by_id: dict[str, BusyBarDevice] = {}
@@ -69,13 +71,14 @@ class BusyBarDevices:
             addresses = info.ip_addresses_by_version(IPVersion.V4Only)
             addresses = (BusyBarDevices._ip_address_to_our(addr.compressed) for addr in addresses)
 
-            device_name = str(info.properties[b"name"] or BUSYBAR_DEFAULT_NAME, "utf8")
+            raw_name = info.properties.get(b"name") or BUSYBAR_DEFAULT_NAME
+            device_name = raw_name.decode("utf-8", errors="replace")
             default_device = BusyBarDevice(name=device_name, temporary_id=temporary_id, addresses=set())
             device = devices_by_id.get(temporary_id, default_device)
             device.addresses = device.addresses.union(addresses)
             devices_by_id[temporary_id] = device
 
-        browser = ServiceBrowser(zeroconf, BUSYBAR_SERVICE, handlers=[_on_service_state_change])
+        ServiceBrowser(zeroconf, BUSYBAR_SERVICE, handlers=[_on_service_state_change])
         sleep(TIMEOUT)
         zeroconf.close()
 
