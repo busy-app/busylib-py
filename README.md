@@ -222,6 +222,24 @@ volume = bb.audio_volume()
 print(f"Volume: {volume.volume}")
 ```
 
+### Discovering devices on the network
+
+Instead of hardcoding an IP address, you can discover devices like so:
+
+```python
+from busylib import BusyBarDevices
+
+for device in BusyBarDevices.discover():
+    print(f"Device: {device.name}")
+    print(f"  Over USB: {device.get_address('over_usb')}")
+    print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
+
+# Example output:
+# Device: "Anna's Busy Bar"
+#   Over USB: 10.0.4.20
+#   Over Wi-Fi: 192.168.100.2
+```
+
 ### Preparing and Executing Requests Separately
 
 You can prepare a low-level request first and execute it later, optionally
