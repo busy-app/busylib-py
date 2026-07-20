@@ -102,17 +102,22 @@ class FirmwareMixin(SyncClientBase):
         return types.StatusPower.model_validate(data)
 
     @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
-    def log_dump(
-        self,
-        filename: str | None = None,
-        *,
-        path: str | None = None,
-    ) -> types.LogDumpResponse:
+    def log_dump(self, filename: str | None = None) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
+
+        `filename` is a bare name without a path or extension, matching
+        `^[a-zA-Z0-9_-]+$` on firmware OpenAPI 25.0.0+; the device appends its
+        own extension and storage path. When omitted, the device picks a
+        default file.
+
+        Breaking change: prior to 25.0.0 this method accepted `path=` (a full
+        device-side path). That parameter has been removed rather than
+        aliased, since the two contracts are not translatable (a full path
+        never matches the new filename pattern). Callers targeting firmware
+        older than 25.0.0 should pin an older `busylib` release instead of
+        adapting call sites.
         """
-        if filename is None:
-            filename = path
         logger.info("log_dump filename=%s", filename)
         data = self._request(
             "POST",
@@ -224,17 +229,22 @@ class AsyncFirmwareMixin(AsyncClientBase):
         return types.StatusPower.model_validate(data)
 
     @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
-    async def log_dump(
-        self,
-        filename: str | None = None,
-        *,
-        path: str | None = None,
-    ) -> types.LogDumpResponse:
+    async def log_dump(self, filename: str | None = None) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
+
+        `filename` is a bare name without a path or extension, matching
+        `^[a-zA-Z0-9_-]+$` on firmware OpenAPI 25.0.0+; the device appends its
+        own extension and storage path. When omitted, the device picks a
+        default file.
+
+        Breaking change: prior to 25.0.0 this method accepted `path=` (a full
+        device-side path). That parameter has been removed rather than
+        aliased, since the two contracts are not translatable (a full path
+        never matches the new filename pattern). Callers targeting firmware
+        older than 25.0.0 should pin an older `busylib` release instead of
+        adapting call sites.
         """
-        if filename is None:
-            filename = path
         logger.info("async log_dump filename=%s", filename)
         data = await self._request(
             "POST",

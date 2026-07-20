@@ -157,9 +157,13 @@ class SuccessResponse(BaseModel):
 
 
 class LogDumpResponse(SuccessResponse):
-    path: str | None = None
+    """
+    Response for POST /api/log_dump.
 
-    model_config = ConfigDict(extra="ignore")
+    `model_config` is inherited from `SuccessResponse` (extra="ignore").
+    """
+
+    path: str | None = None
 
 
 class VersionInfo(BaseModel):
