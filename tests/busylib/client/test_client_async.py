@@ -421,3 +421,45 @@ async def test_async_display_brightness_set_params():
     assert seen["params"] == {"value": "auto"}
     assert seen["content"] == b""
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_log_dump_empty_body_returns_ok():
+    """
+    Legacy/empty response body for POST /api/log_dump still parses (async).
+
+    Mirrors the sync test: some firmware responds with an empty body instead
+    of JSON, and that must keep working after the 25.0.0 rework.
+    """
+    seen = {}
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(200)
+
+    client = make_client(responder)
+    result = await client.log_dump(filename="dump")
+
+    assert isinstance(result, types.LogDumpResponse)
+    assert result.result == "OK"
+    assert result.path is None
+    assert seen["params"] == {"filename": "dump"}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_log_dump_rejects_legacy_path_kwarg():
+    """
+    The pre-25.0.0 `path=` alias was removed, not silently translated (async).
+
+    A caller still using the old keyword must fail loudly at the call site
+    instead of getting an HTTP 400 from the device.
+    """
+
+    async def responder(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    with pytest.raises(TypeError):
+        await client.log_dump(path="/ext/dump.log")  # type: ignore[call-arg]
+    await client.aclose()
