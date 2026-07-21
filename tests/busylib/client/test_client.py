@@ -75,13 +75,13 @@ def test_version_default_api_version_remains_device_semver() -> None:
 
     def responder(request: httpx.Request) -> httpx.Response:
         seen["header"] = request.headers.get("x-busy-api-version")
-        return httpx.Response(200, json={"api_semver": "0.1.0"})
+        return httpx.Response(200, json={"api_semver": "25.0.0"})
 
     client = make_client(responder)
     result = client.version()
 
-    assert result.api_semver == "0.1.0"
-    assert seen["header"] == "0.1.0"
+    assert result.api_semver == "25.0.0"
+    assert seen["header"] == "25.0.0"
 
 
 def test_name_and_time():
@@ -314,11 +314,63 @@ def test_method_compatibility_metadata() -> None:
     metadata = client.method_compatibility("log_dump")
 
     assert metadata == {
-        "version": "24.3.0",
+        "version": "25.0.0",
         "path": "/api/log_dump",
         "method": "POST",
     }
     assert client.method_compatibility("missing") is None
+
+
+def test_log_dump_empty_body_returns_ok() -> None:
+    """
+    Legacy/empty response body for POST /api/log_dump still parses.
+
+    Some firmware responds with an empty body instead of JSON; this must
+    keep working after the 25.0.0 filename/response-type rework.
+    """
+    seen = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(200)
+
+    client = make_client(responder)
+    result = client.log_dump(filename="dump")
+
+    assert isinstance(result, types.LogDumpResponse)
+    assert result.result == "OK"
+    assert result.path is None
+    assert seen["params"] == {"filename": "dump"}
+
+
+def test_log_dump_no_filename_omits_params() -> None:
+    """
+    Calling log_dump() without a filename sends no query params.
+    """
+    seen = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(200, json={"result": "OK"})
+
+    client = make_client(responder)
+    result = client.log_dump()
+
+    assert result.result == "OK"
+    assert seen["params"] == {}
+
+
+def test_log_dump_rejects_legacy_path_kwarg() -> None:
+    """
+    The pre-25.0.0 `path=` alias was removed, not silently translated.
+
+    A caller still using the old keyword must fail loudly at the call site
+    instead of getting an HTTP 400 from the device.
+    """
+    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+
+    with pytest.raises(TypeError):
+        client.log_dump(path="/ext/dump.log")  # type: ignore[call-arg]
 
 
 def test_request_carries_api_version_header():

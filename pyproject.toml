@@ -31,6 +31,7 @@ dependencies = [
   "pydantic-settings>=2.12",
   "typing-extensions>=4.6",
   "websockets>=12",
+  "zeroconf>=0.150",
 ]
 urls.Documentation = "https://busylib.readthedocs.io"
 urls.Homepage = "https://github.com/busy-app/busylib-py"

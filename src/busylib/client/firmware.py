@@ -101,21 +101,33 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
-    @versioning.requires_openapi("24.3.0", path="/api/log_dump", method="POST")
-    def log_dump(self, path: str | None = None) -> types.SuccessResponse:
+    @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
+    def log_dump(self, filename: str | None = None) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
+
+        `filename` is a bare name without a path or extension, matching
+        `^[a-zA-Z0-9_-]+$` on firmware OpenAPI 25.0.0+; the device appends its
+        own extension and storage path. When omitted, the device picks a
+        default file.
+
+        Breaking change: prior to 25.0.0 this method accepted `path=` (a full
+        device-side path). That parameter has been removed rather than
+        aliased, since the two contracts are not translatable (a full path
+        never matches the new filename pattern). Callers targeting firmware
+        older than 25.0.0 should pin an older `busylib` release instead of
+        adapting call sites.
         """
-        logger.info("log_dump path=%s", path)
+        logger.info("log_dump filename=%s", filename)
         data = self._request(
             "POST",
             "/api/log_dump",
-            params={"path": path} if path is not None else None,
+            params={"filename": filename} if filename is not None else None,
             allow_text=True,
         )
         if data == "":
-            return types.SuccessResponse(result="OK")
-        return types.SuccessResponse.model_validate(data)
+            return types.LogDumpResponse(result="OK")
+        return types.LogDumpResponse.model_validate(data)
 
     def name(self) -> types.DeviceNameResponse:
         """
@@ -216,21 +228,33 @@ class AsyncFirmwareMixin(AsyncClientBase):
         data = await self._request("GET", "/api/status/power")
         return types.StatusPower.model_validate(data)
 
-    @versioning.requires_openapi("24.3.0", path="/api/log_dump", method="POST")
-    async def log_dump(self, path: str | None = None) -> types.SuccessResponse:
+    @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
+    async def log_dump(self, filename: str | None = None) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
+
+        `filename` is a bare name without a path or extension, matching
+        `^[a-zA-Z0-9_-]+$` on firmware OpenAPI 25.0.0+; the device appends its
+        own extension and storage path. When omitted, the device picks a
+        default file.
+
+        Breaking change: prior to 25.0.0 this method accepted `path=` (a full
+        device-side path). That parameter has been removed rather than
+        aliased, since the two contracts are not translatable (a full path
+        never matches the new filename pattern). Callers targeting firmware
+        older than 25.0.0 should pin an older `busylib` release instead of
+        adapting call sites.
         """
-        logger.info("async log_dump path=%s", path)
+        logger.info("async log_dump filename=%s", filename)
         data = await self._request(
             "POST",
             "/api/log_dump",
-            params={"path": path} if path is not None else None,
+            params={"filename": filename} if filename is not None else None,
             allow_text=True,
         )
         if data == "":
-            return types.SuccessResponse(result="OK")
-        return types.SuccessResponse.model_validate(data)
+            return types.LogDumpResponse(result="OK")
+        return types.LogDumpResponse.model_validate(data)
 
     async def name(self) -> types.DeviceNameResponse:
         """

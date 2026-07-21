@@ -156,6 +156,16 @@ class SuccessResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class LogDumpResponse(SuccessResponse):
+    """
+    Response for POST /api/log_dump.
+
+    `model_config` is inherited from `SuccessResponse` (extra="ignore").
+    """
+
+    path: str | None = None
+
+
 class VersionInfo(BaseModel):
     api_semver: str | None = None
     version: str | None = None
@@ -188,6 +198,7 @@ class StatusFirmware(BaseModel):
     branch: str | None = None
     build_date: str | None = None
     commit_hash: str | None = None
+    intercom_version: str | None = None
     nwp_version: str | None = None
     matter_version: str | None = None
 

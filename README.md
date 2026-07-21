@@ -80,13 +80,32 @@ bb = BusyBar("10.0.4.20", compatibility_mode="strict")
 bb.version()
 ```
 
-For migrations and diagnostics, methods can expose the OpenAPI version where
-they were introduced.
+For migrations and diagnostics, methods can expose the minimum firmware
+OpenAPI version their current implementation targets (not necessarily the
+version where the underlying device endpoint first appeared).
 
 ```python
 metadata = bb.method_compatibility("log_dump")
-# {"version": "24.3.0", "path": "/api/log_dump", "method": "POST"}
+# {"version": "25.0.0", "path": "/api/log_dump", "method": "POST"}
 ```
+
+### Versioning Policy
+
+When a device endpoint's contract changes in a way that isn't translatable
+(renamed/re-typed parameters, new validation, a different response shape),
+`busylib` takes a clean break instead of carrying a silent compatibility
+shim:
+
+- The helper is rewritten against the new contract and its
+  `@requires_openapi(...)` version is bumped to record what it now targets.
+- The old parameter/behavior is removed, not aliased. A caller depending on
+  the old contract gets a clear `TypeError`/`ValueError` at the call site
+  instead of a confusing error from the device.
+- Projects that must keep talking to older firmware should pin the
+  `busylib` version that matches that firmware (see `AGENTS.md`: "upgrade or
+  pin `busylib` intentionally instead of assuming latest methods exist"),
+  rather than expecting a single library version to speak every firmware
+  contract at once.
 
 ## Agent-Assisted Scripts
 
@@ -220,6 +239,24 @@ print(f"Front brightness: {brightness.front}, Back brightness: {brightness.back}
 
 volume = bb.audio_volume()
 print(f"Volume: {volume.volume}")
+```
+
+### Discovering devices on the network
+
+Instead of hardcoding an IP address, you can discover devices like so:
+
+```python
+from busylib import BusyBarDevices
+
+for device in BusyBarDevices.discover():
+    print(f"Device: {device.name}")
+    print(f"  Over USB: {device.get_address('over_usb')}")
+    print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
+
+# Example output:
+# Device: "Anna's Busy Bar"
+#   Over USB: 10.0.4.20
+#   Over Wi-Fi: 192.168.100.2
 ```
 
 ### Preparing and Executing Requests Separately

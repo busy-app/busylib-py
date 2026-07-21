@@ -163,6 +163,7 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
                     "branch": "dev",
                     "build_date": "2026-06-19",
                     "commit_hash": "abc123",
+                    "intercom_version": "intercom",
                 },
             )
         if request.url.path == "/api/time/timezone" and request.method == "GET":
@@ -185,7 +186,10 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
                 },
             )
         if request.url.path == "/api/log_dump":
-            return httpx.Response(200)
+            return httpx.Response(
+                200,
+                json={"result": "OK", "path": "/ext/dump.txt"},
+            )
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
@@ -193,11 +197,15 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
     device = client.status_device()
     assert device.serial_number == "203638485431500400123456"
     assert device.firmware_security == "secure"
-    assert client.status_firmware().target == 22
+    firmware = client.status_firmware()
+    assert firmware.target == 22
+    assert firmware.intercom_version == "intercom"
     assert client.time_timezone_info().abbr == "IST"
     assert client.time_timezone_list().list[0].name == "UTC"
     assert client.storage_rename("/ext/a.txt", "/ext/b.txt").result == "OK"
-    assert client.log_dump("/ext/dump.log").result == "OK"
+    log_dump = client.log_dump(filename="dump")
+    assert log_dump.result == "OK"
+    assert log_dump.path == "/ext/dump.txt"
     autoupdate = client.update_autoupdate()
     assert autoupdate.is_enabled is True
     assert client.update_autoupdate_set({"is_enabled": False}).result == "OK"
@@ -221,7 +229,7 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
     assert log_dump_request == {
         "method": "POST",
         "path": "/api/log_dump",
-        "params": {"path": "/ext/dump.log"},
+        "params": {"filename": "dump"},
         "body": b"",
     }
     autoupdate_body = autoupdate_put["body"]
@@ -476,7 +484,7 @@ async def test_async_new_openapi_helpers() -> None:
         if request.url.path == "/api/smart_home/switch":
             return httpx.Response(200, json={"state": True})
         if request.url.path == "/api/log_dump":
-            return httpx.Response(200)
+            return httpx.Response(200, json={"result": "OK", "path": "/ext/log.txt"})
         return httpx.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
@@ -484,7 +492,9 @@ async def test_async_new_openapi_helpers() -> None:
     assert (await client.busy_profile("busy")).title == "Focus"
     assert (await client.smart_home_switch()).state is True
     assert (await client.storage_rename("/a", "/b")).result == "OK"
-    assert (await client.log_dump()).result == "OK"
+    log_dump = await client.log_dump()
+    assert log_dump.result == "OK"
+    assert log_dump.path == "/ext/log.txt"
     await client.aclose()
 
     assert seen == [

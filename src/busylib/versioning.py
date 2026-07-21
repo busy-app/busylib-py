@@ -7,7 +7,7 @@ from typing import Literal, TypeVar
 
 from . import exceptions
 
-API_VERSION = os.environ.get("BUSY_API_VERSION", "0.1.0")
+API_VERSION = os.environ.get("BUSY_API_VERSION", "25.0.0")
 API_VERSION_HEADER = "X-Busy-Api-Version"
 CompatibilityMode = Literal["warn", "strict", "none"]
 F = TypeVar("F", bound=Callable[..., object])
@@ -27,6 +27,13 @@ def requires_openapi(
 ) -> Callable[[F], F]:
     """
     Attach declarative OpenAPI compatibility metadata to a client method.
+
+    `version` is the minimum firmware OpenAPI version the current
+    implementation targets, not necessarily the version in which the
+    underlying device endpoint first appeared. When a method's request or
+    response contract changes in a breaking, non-translatable way, bump this
+    version to match the new contract rather than keeping the old value or
+    adding a silent compatibility shim.
     """
 
     def decorator(func: F) -> F:
