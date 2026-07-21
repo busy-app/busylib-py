@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.10
+    rev: v0.15.21
     hooks:
       - id: ruff-check
         args: ["--fix"]
@@ -8,17 +8,17 @@ repos:
       - id: ruff-format
         exclude: ^src/busylib/state_stream_proto/.*_pb2\.py$
   - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: v2.21.0
+    rev: v2.25.3
     hooks:
       - id: pyproject-fmt
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.408
+    rev: v1.1.411
     hooks:
       - id: pyright
         files: ^(src/busylib/|tests/)
         args: ["--pythonpath=.venv/bin/python"]
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-merge-conflict
