@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import sys
 
+from examples.remote.discovery import resolve_connection
 from examples.remote.runner import _run as runner
 from examples.remote.constants import (
     DEFAULT_LOG_LEVEL,
@@ -70,7 +71,8 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_build_env_help_epilog(),
     )
-    parser.add_argument("--addr", default=None, help=TEXT_ARG_ADDR)
+    parser.add_argument("addr_positional", nargs="?", default=None, help=TEXT_ARG_ADDR)
+    parser.add_argument("--addr", dest="addr", default=None, help=TEXT_ARG_ADDR)
     parser.add_argument("--token", default=None, help=TEXT_ARG_TOKEN)
     parser.add_argument(
         "--http-poll-interval",
@@ -111,7 +113,10 @@ def parse_args() -> argparse.Namespace:
         default=settings.frame_mode,
         help=TEXT_ARG_FRAME,
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.addr is None:
+        args.addr = args.addr_positional
+    return args
 
 
 async def _run(args: argparse.Namespace) -> None:
@@ -141,6 +146,8 @@ def main() -> None:
     args = None
     try:
         args = parse_args()
+        if args.addr is None:
+            args.addr, args.token = resolve_connection(args.token)
         asyncio.run(_run(args))
     except KeyboardInterrupt as exc:
         prefix, message = _format_error_message(exc)

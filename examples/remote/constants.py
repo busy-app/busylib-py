@@ -84,17 +84,12 @@ DEFAULT_HELP_MIN_WIDTH = 10
 BYTES_KIB = 1024
 
 TEXT_HTTP_POLL = "Polling /api/screen every {interval}s from {addr}"
-TEXT_WS_STREAM = "Streaming screen from {addr}"
-TEXT_WS_STREAM_VERBOSE = "Streaming via WebSocket from {base}/api/screen/ws"
 TEXT_STREAMING_INFO = "{protocol} {host}"
 TEXT_INIT_START = "Initializing remote stream"
 TEXT_INIT_CONNECTING = "Connecting to bar at {addr}"
-TEXT_INIT_WS = "Opening WebSocket stream"
 TEXT_INIT_HTTP = "Starting HTTP polling"
 TEXT_INIT_WAIT_FRAME = "Waiting for the first frame"
 TEXT_INIT_STREAMING = "First frame received; streaming started"
-TEXT_STREAM_EMPTY = "Stream frame empty; skipping"
-TEXT_STREAM_LEN = "Stream frame len={size} (expected {expected})"
 TEXT_POLL_FAIL = "Polling failed: %s"
 TEXT_POLL_LEN = "Received frame len={size} (expected {expected})"
 TEXT_SNAPSHOT_FAIL = "Snapshot update failed: %s"

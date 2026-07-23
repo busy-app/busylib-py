@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-import json
+import base64
+import binascii
 import logging
 import re
-from collections.abc import AsyncIterator
 from typing import Any, cast
-from urllib.parse import quote, urlparse, urlunparse
 
-import websockets
 from typing_extensions import Unpack
 
-from .. import display, exceptions, types
+from .. import display, types
 from .base import AsyncClientBase, RequestKwargs, SyncClientBase
 
 logger = logging.getLogger(__name__)
-_WS_MAX_SIZE = 4 * 1024 * 1024
-_WS_PING_INTERVAL_SECONDS = 20
-_WS_PING_TIMEOUT_SECONDS = 20
 
 DISPLAY_DRAW_PATH = "/api/display/draw"
 _EMOJI_AND_SYMBOLS_PATTERN = re.compile(
@@ -27,73 +22,31 @@ _WHITESPACE_PATTERN = re.compile(r"\s+")
 _SANITIZE_LOG_TEXT_LIMIT = 80
 
 
-def _http_to_ws(addr: str) -> str:
-    parsed = urlparse(addr if "://" in addr else f"http://{addr}")
-    scheme = "wss" if parsed.scheme == "https" else "ws"
-    return urlunparse(parsed._replace(scheme=scheme))
+def _decode_frame_bytes(data: bytes, display_id: int) -> bytes | None:
+    """
+    Decode the `/api/screen` HTTP response into RGB888 bytes.
 
+    The endpoint's `Content-Type: image/bmp` header is misleading: the body
+    is base64-encoded (via mongoose's `mg_print_base64`), uncompressed
+    framebuffer bytes with no real BMP header, RGB888 for the front display
+    and L4-packed (2 pixels/byte) for the back display. Returns None if the
+    payload cannot be decoded or its size doesn't match the display.
+    """
+    try:
+        raw = base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        return None
 
-def _rle_decode(data: bytes, blk_size: int) -> bytes | None:
-    out = bytearray()
-    i = 0
-    total = len(data)
-    while i < total:
-        ctrl = data[i]
-        i += 1
-        if ctrl & 0x80:
-            count = ctrl & 0x7F
-            need = count * blk_size
-            if i + need > total:
-                return None
-            out.extend(data[i : i + need])
-            i += need
-        else:
-            count = ctrl
-            if i + blk_size > total:
-                return None
-            block = data[i : i + blk_size]
-            i += blk_size
-            out.extend(block * count)
-    return bytes(out)
+    pixel_format = "L4" if display_id == 1 else "RGB888"
+    try:
+        decoded = display.decode_frame_data("PLAIN", pixel_format, raw)
+    except ValueError:
+        return None
 
-
-def _back_b4_to_b8(data: bytes) -> bytes:
-    out = bytearray(len(data) * 2)
-    idx = 0
-    for byte in data:
-        px1 = byte & 0x0F
-        px2 = (byte >> 4) & 0x0F
-        out[idx] = px1
-        out[idx + 1] = px2
-        idx += 2
-    return bytes(out)
-
-
-def _decode_frame_bytes(data: bytes, display_id: int, *, from_ws: bool) -> bytes | None:
     spec = display.get_display_spec(display_id)
-    width, height = spec.width, spec.height
-    expected = width * height * 3
-    nibble_expected = (width * height) // 2
-    gray_expected = width * height
-
-    if from_ws:
-        blk_size = 2 if display_id == 1 else 3
-        decoded = _rle_decode(data, blk_size)
-        if decoded:
-            data = decoded
-
-    if len(data) == expected:
-        return data
-
-    if len(data) == nibble_expected:
-        unpacked = _back_b4_to_b8(data)
-        return b"".join(bytes((v * 17, v * 17, v * 17)) for v in unpacked)
-
-    if len(data) == gray_expected:
-        factor = 17 if display_id == 1 else 1
-        return b"".join(bytes((v * factor, v * factor, v * factor)) for v in data)
-
-    return None
+    if len(decoded) != spec.width * spec.height * 3:
+        return None
+    return decoded
 
 
 def _sanitize_text_value(value: str) -> str:
@@ -297,9 +250,11 @@ class DisplayMixin(SyncClientBase):
         """
         Fetch a single display frame via GET /api/screen.
 
-        The handler returns raw framebuffer bytes without compression. Client
-        must pass `display` query param: 0 for front (RGB, 24 bpp, 72x16 =>
-        3456 bytes) or 1 for back (L4 grayscale, 160x80 => 6400 bytes).
+        The response body is base64-encoded, uncompressed framebuffer bytes
+        (the `Content-Type: image/bmp` header is misleading, there is no
+        real BMP header). Client must pass `display` query param: 0 for
+        front (RGB888, 72x16 => 3456 bytes decoded) or 1 for back
+        (L4-packed, 160x80 => 6400 bytes decoded).
         """
         logger.info("screen display=%s", display_id)
         target = display.get_display_spec(display_id)
@@ -312,19 +267,8 @@ class DisplayMixin(SyncClientBase):
         if not isinstance(raw, (bytes, bytearray)):
             raise TypeError("Expected bytes response for screen frame")
         data = bytes(raw)
-        decoded = _decode_frame_bytes(data, target.index, from_ws=False)
+        decoded = _decode_frame_bytes(data, target.index)
         return decoded if decoded is not None else data
-
-    def screen_ws(self, display_id: int) -> None:
-        """
-        WebSocket streaming via GET /api/screen/ws.
-
-        Server upgrades HTTP to WebSocket. This sync client intentionally does
-        not implement streaming; use the async client for WebSocket frames.
-        """
-        raise NotImplementedError(
-            "WebSocket streaming is implemented only for async client."
-        )
 
 
 class AsyncDisplayMixin(AsyncClientBase):
@@ -489,9 +433,11 @@ class AsyncDisplayMixin(AsyncClientBase):
         """
         Fetch a single display frame via GET /api/screen.
 
-        The handler returns raw framebuffer bytes without compression. Client
-        must pass `display` query param: 0 for front (RGB, 24 bpp, 72x16 =>
-        3456 bytes) or 1 for back (L4 grayscale, 160x80 => 6400 bytes).
+        The response body is base64-encoded, uncompressed framebuffer bytes
+        (the `Content-Type: image/bmp` header is misleading, there is no
+        real BMP header). Client must pass `display` query param: 0 for
+        front (RGB888, 72x16 => 3456 bytes decoded) or 1 for back
+        (L4-packed, 160x80 => 6400 bytes decoded).
         """
         logger.info("async screen display=%s", display_id)
         target = display.get_display_spec(display_id)
@@ -504,52 +450,5 @@ class AsyncDisplayMixin(AsyncClientBase):
         if not isinstance(raw, (bytes, bytearray)):
             raise TypeError("Expected bytes response for screen frame")
         data = bytes(raw)
-        decoded = _decode_frame_bytes(data, target.index, from_ws=False)
+        decoded = _decode_frame_bytes(data, target.index)
         return decoded if decoded is not None else data
-
-    async def screen_ws(self, display_id: int) -> AsyncIterator[bytes | str]:
-        """
-        Stream display frames via GET /api/screen/ws.
-
-        Yields bytes for image frames and strings for server messages.
-        """
-        headers = self.client.headers
-        token = headers.get("Authorization") if headers else None
-        if token and token.lower().startswith("bearer "):
-            token = token.split(" ", 1)[1]
-        else:
-            token = (
-                None
-                if headers is None
-                else (headers.get("x-api-token") or headers.get("X-API-Token"))
-            )
-
-        target = display.get_display_spec(display_id)
-        ws_url = _http_to_ws(self.base_url).rstrip("/") + "/api/screen/ws"
-        if token:
-            ws_url += f"?x-api-token={quote(token, safe='')}"
-
-        try:
-            async with websockets.connect(
-                ws_url,
-                max_size=_WS_MAX_SIZE,
-                ping_interval=_WS_PING_INTERVAL_SECONDS,
-                ping_timeout=_WS_PING_TIMEOUT_SECONDS,
-            ) as ws:
-                await ws.send(json.dumps({"display": target.index}))
-                async for message in ws:
-                    if isinstance(message, bytes):
-                        decoded = _decode_frame_bytes(
-                            message,
-                            target.index,
-                            from_ws=True,
-                        )
-                        yield decoded if decoded is not None else message
-                    else:
-                        yield message
-        except Exception as exc:
-            raise exceptions.BusyBarWebSocketError(
-                "WebSocket streaming failed",
-                path="/api/screen/ws",
-                original=exc,
-            ) from exc
