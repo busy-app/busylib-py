@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import base64
+
 import httpx
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar
+from busylib import display
 from busylib.client import assets as assets_client
 from busylib.client import display as display_client
 
@@ -521,24 +524,129 @@ async def test_updater_check_status_and_changelog_async() -> None:
 
 def test_decode_frame_bytes_back_nibbles() -> None:
     """
-    Decode back display nibble data into grayscale RGB bytes.
+    Decode the base64-encoded, L4-packed back-display HTTP response.
     """
     spec = display_client.display.get_display_spec(1)
     nibble_len = (spec.width * spec.height) // 2
-    data = bytes([0x21]) * nibble_len
-    decoded = display_client._decode_frame_bytes(data, 1, from_ws=False)
+    raw = bytes([0x21]) * nibble_len
+    decoded = display_client._decode_frame_bytes(base64.b64encode(raw), 1)
     assert decoded is not None
     assert len(decoded) == spec.width * spec.height * 3
     assert decoded[:3] == bytes([17, 17, 17])
     assert decoded[3:6] == bytes([34, 34, 34])
 
 
+def test_decode_frame_bytes_front_rgb888() -> None:
+    """
+    Decode the base64-encoded, uncompressed front-display HTTP response.
+
+    `/api/screen` never compresses data (unlike the protobuf `Frame` state
+    updates); the body is plain base64-encoded RGB888 bytes.
+    """
+    spec = display_client.display.get_display_spec(0)
+    raw = bytes([1, 2, 3]) * (spec.width * spec.height)
+
+    decoded = display_client._decode_frame_bytes(base64.b64encode(raw), 0)
+
+    assert decoded == raw
+
+
+def test_decode_frame_bytes_rejects_wrong_size() -> None:
+    """
+    Reject a decoded payload whose size doesn't match the display.
+    """
+    decoded = display_client._decode_frame_bytes(base64.b64encode(b"\x01\x02\x03"), 0)
+    assert decoded is None
+
+
+def test_decode_frame_bytes_rejects_invalid_base64() -> None:
+    """
+    Reject a payload that isn't valid base64 instead of raising.
+    """
+    decoded = display_client._decode_frame_bytes(b"not-base64!!", 0)
+    assert decoded is None
+
+
 def test_rle_decode_repeats_and_copy() -> None:
     """
     Ensure RLE decoder handles repeat and copy blocks.
     """
-    repeated = display_client._rle_decode(bytes([2, 9, 9, 9]), 3)
+    repeated = display.rle_decode(bytes([2, 9, 9, 9]), 3)
     assert repeated == bytes([9, 9, 9, 9, 9, 9])
 
-    copied = display_client._rle_decode(bytes([0x82, 1, 2, 3, 4, 5, 6]), 3)
+    copied = display.rle_decode(bytes([0x82, 1, 2, 3, 4, 5, 6]), 3)
     assert copied == bytes([1, 2, 3, 4, 5, 6])
+
+
+def test_decode_frame_data_plain_rgb888() -> None:
+    """
+    RGB888/PLAIN frame data passes through unchanged.
+    """
+    data = bytes([10, 20, 30, 40, 50, 60])
+    decoded = display.decode_frame_data("PLAIN", "RGB888", data)
+    assert decoded == data
+
+
+def test_decode_frame_data_plain_l8() -> None:
+    """
+    L8/PLAIN grayscale bytes expand to RGB triplets without scaling.
+    """
+    decoded = display.decode_frame_data("PLAIN", "L8", bytes([5, 250]))
+    assert decoded == bytes([5, 5, 5, 250, 250, 250])
+
+
+def test_decode_frame_data_plain_l4() -> None:
+    """
+    L4/PLAIN packed nibbles unpack and scale into RGB triplets.
+    """
+    decoded = display.decode_frame_data("PLAIN", "L4", bytes([0x21]))
+    assert decoded == bytes([17, 17, 17, 34, 34, 34])
+
+
+def test_decode_frame_data_run_length_rgb888() -> None:
+    """
+    RUN_LENGTH-encoded RGB888 frame data decodes via the RLE repeat block.
+    """
+    rle = bytes([2, 1, 2, 3])  # repeat (1,2,3) twice
+    decoded = display.decode_frame_data("RUN_LENGTH", "RGB888", rle)
+    assert decoded == bytes([1, 2, 3, 1, 2, 3])
+
+
+def test_decode_frame_data_deflate_rgb888() -> None:
+    """
+    DEFLATE-encoded RGB888 frame data inflates before use.
+    """
+    import zlib
+
+    raw = bytes([9, 8, 7, 6, 5, 4])
+    decoded = display.decode_frame_data("DEFLATE", "RGB888", zlib.compress(raw))
+    assert decoded == raw
+
+
+def test_decode_frame_data_deflate_run_length_l8() -> None:
+    """
+    DEFLATE_RUN_LENGTH first inflates, then RLE-decodes the result.
+    """
+    import zlib
+
+    rle = bytes([3, 42])  # repeat single L8 byte 3 times
+    decoded = display.decode_frame_data(
+        "DEFLATE_RUN_LENGTH", "L8", zlib.compress(rle)
+    )
+    assert decoded == bytes([42, 42, 42] * 3)
+
+
+def test_decode_frame_data_unsupported_pixel_format() -> None:
+    """
+    Unknown pixel formats raise instead of silently misrendering.
+    """
+    with pytest.raises(ValueError, match="pixel_format"):
+        display.decode_frame_data("PLAIN", "YUV420", b"\x00")
+
+
+def test_decode_frame_data_unsupported_encoding() -> None:
+    """
+    Unknown encodings raise instead of silently misrendering.
+    """
+    with pytest.raises(ValueError, match="encoding"):
+        display.decode_frame_data("LZMA", "RGB888", b"\x00")

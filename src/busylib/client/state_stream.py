@@ -9,6 +9,7 @@ from urllib.parse import quote, urlparse, urlunparse
 
 from google.protobuf.json_format import MessageToDict
 import websockets
+import websockets.exceptions
 
 from .. import exceptions
 from ..state_stream_proto import state_pb2
@@ -132,6 +133,20 @@ class AsyncStateStreamMixin(AsyncClientBase):
                         ) from exc
         except exceptions.BusyBarProtocolError:
             raise
+        except websockets.exceptions.InvalidStatus as exc:
+            status_code = exc.response.status_code
+            if status_code in (401, 403):
+                raise exceptions.BusyBarWebSocketError(
+                    "Status WebSocket streaming failed: authentication required "
+                    f"(HTTP {status_code}). Pass a valid --token",
+                    path="/api/status/ws",
+                    original=exc,
+                ) from exc
+            raise exceptions.BusyBarWebSocketError(
+                "Status WebSocket streaming failed",
+                path="/api/status/ws",
+                original=exc,
+            ) from exc
         except Exception as exc:
             raise exceptions.BusyBarWebSocketError(
                 "Status WebSocket streaming failed",

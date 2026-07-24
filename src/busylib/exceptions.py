@@ -239,4 +239,5 @@ class BusyBarWebSocketError(BusyBarError):
     ) -> None:
         self.path = path
         self.original = original
-        super().__init__(f"{message} ({path})")
+        detail = f": {original}" if original is not None else ""
+        super().__init__(f"{message} ({path}){detail}")

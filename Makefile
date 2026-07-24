@@ -116,6 +116,10 @@ proto-sync:
 	@command -v uv >/dev/null 2>&1 || (echo "uv not found in PATH" && exit 1)
 	@mkdir -p "$(PROTO_OUT_DIR)"
 	uv run python -m grpc_tools.protoc -I "$(PROTO_DIR)" --python_out="$(PROTO_OUT_DIR)" $(addprefix $(PROTO_DIR)/,$(PROTO_FILES))
+	@echo "Rewriting protoc-generated absolute imports to package-relative imports"
+	@find "$(PROTO_OUT_DIR)" -name '*_pb2.py' -exec sed -i.bak \
+		-E 's/^import ([a-z_]+_pb2) as /from . import \1 as /; s/^from (state|util) import/from .\1 import/' \
+		{} + -exec rm -f {}.bak \;
 
 # Run example by directory name via uv.
 # Usage: make run-example remote -- --flag value
