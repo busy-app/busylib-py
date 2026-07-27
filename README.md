@@ -259,6 +259,20 @@ for device in BusyBarDevices.discover():
 #   Over Wi-Fi: 192.168.100.2
 ```
 
+The `remote` example (`make run-example remote`, or
+`uv run python -m examples.remote.main`) uses this automatically when no
+`--addr`/address is given: it discovers devices via mDNS, lets you pick one
+by name if more than one is found, and prompts for the access key/PIN
+(masked, via `getpass`) if the selected device requires one and no
+`--token` was given.
+
+```bash
+uv run python -m examples.remote.main
+# No --addr given; discovering Busy Bar devices on the network...
+# Found one Busy Bar device: "Anna's Busy Bar"
+# Enter access key/PIN for "Anna's Busy Bar" (leave blank if none):
+```
+
 ### Preparing and Executing Requests Separately
 
 You can prepare a low-level request first and execute it later, optionally
