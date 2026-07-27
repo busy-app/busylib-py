@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import getpass
+
 from busylib import BusyBar, BusyBarDevices
 from busylib.devices import BusyBarDevice
 from busylib.types import HttpAccessInfo
@@ -73,7 +75,7 @@ def resolve_connection(
     device = _select_device(devices)
     addr = _device_address(device)
     if addr is None:
-        raise SystemExit(f"Device {device.name!r} has no usable IP address.")
+        raise SystemExit(f"Device {device.name} has no usable IP address.")
 
     access_info = _probe_access_mode(addr, token)
     if access_info is None:
@@ -92,8 +94,8 @@ def resolve_connection(
         confirmed_no_key_needed = access_info.mode != "key"
 
     if not confirmed_no_key_needed and not token:
-        entered = input(
-            f"Enter access key/PIN for {device.name!r} (leave blank if none): "
+        entered = getpass.getpass(
+            f"Enter access key/PIN for {device.name} (leave blank if none): "
         ).strip()
         token = entered or token
 

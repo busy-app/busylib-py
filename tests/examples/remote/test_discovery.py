@@ -45,10 +45,10 @@ def test_resolve_connection_single_device_no_key_needed(
         lambda addr, token: HttpAccessInfo(mode="enabled", key_valid=None),
     )
 
-    def _fail_input(_prompt: str) -> str:
+    def _fail_getpass(_prompt: str) -> str:
         raise AssertionError("should not prompt when access mode isn't 'key'")
 
-    monkeypatch.setattr("builtins.input", _fail_input)
+    monkeypatch.setattr(discovery.getpass, "getpass", _fail_getpass)
 
     addr, token = discovery.resolve_connection(None)
     assert addr == "192.168.1.20"
@@ -70,7 +70,7 @@ def test_resolve_connection_prompts_for_key_when_required(
         "_probe_access_mode",
         lambda addr, token: HttpAccessInfo(mode="key", key_valid=False),
     )
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1234")
+    monkeypatch.setattr(discovery.getpass, "getpass", lambda _prompt: "1234")
 
     addr, token = discovery.resolve_connection(None)
     assert addr == "192.168.1.20"
@@ -93,10 +93,10 @@ def test_resolve_connection_skips_prompt_when_token_already_valid(
         lambda addr, token: HttpAccessInfo(mode="key", key_valid=True),
     )
 
-    def _fail_input(_prompt: str) -> str:
+    def _fail_getpass(_prompt: str) -> str:
         raise AssertionError("should not prompt when the existing token is valid")
 
-    monkeypatch.setattr("builtins.input", _fail_input)
+    monkeypatch.setattr(discovery.getpass, "getpass", _fail_getpass)
 
     addr, token = discovery.resolve_connection("already-valid")
     assert addr == "192.168.1.20"
@@ -123,7 +123,7 @@ def test_resolve_connection_prompts_when_key_provisioned_but_no_token_given(
         "_probe_access_mode",
         lambda addr, token: HttpAccessInfo(mode="key", key_valid=True),
     )
-    monkeypatch.setattr("builtins.input", lambda _prompt: "4321")
+    monkeypatch.setattr(discovery.getpass, "getpass", lambda _prompt: "4321")
 
     addr, token = discovery.resolve_connection(None)
     assert addr == "192.168.1.20"
@@ -143,7 +143,7 @@ def test_resolve_connection_prompts_when_access_probe_fails(
         discovery.BusyBarDevices, "discover", lambda timeout=1.5: [device]
     )
     monkeypatch.setattr(discovery, "_probe_access_mode", lambda addr, token: None)
-    monkeypatch.setattr("builtins.input", lambda _prompt: "5678")
+    monkeypatch.setattr(discovery.getpass, "getpass", lambda _prompt: "5678")
 
     addr, token = discovery.resolve_connection(None)
     assert addr == "192.168.1.20"
