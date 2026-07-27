@@ -103,6 +103,26 @@ def test_resolve_connection_skips_prompt_when_token_already_valid(
     assert token == "already-valid"
 
 
+def test_resolve_connection_prompts_when_access_probe_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Ask for a key when the access-mode probe itself fails, rather than
+    silently connecting without a token and failing later with a less
+    clear error deep in the WebSocket handshake.
+    """
+    device = _device("Tug's bar", "192.168.1.20")
+    monkeypatch.setattr(
+        discovery.BusyBarDevices, "discover", lambda timeout=1.5: [device]
+    )
+    monkeypatch.setattr(discovery, "_probe_access_mode", lambda addr, token: None)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "5678")
+
+    addr, token = discovery.resolve_connection(None)
+    assert addr == "192.168.1.20"
+    assert token == "5678"
+
+
 def test_resolve_connection_multiple_devices_prompts_selection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

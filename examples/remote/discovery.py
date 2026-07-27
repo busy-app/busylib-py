@@ -76,12 +76,21 @@ def resolve_connection(
         raise SystemExit(f"Device {device.name!r} has no usable IP address.")
 
     access_info = _probe_access_mode(addr, token)
-    needs_key = (
-        access_info is not None
-        and access_info.mode == "key"
-        and not access_info.key_valid
-    )
-    if needs_key and not token:
+    if access_info is None:
+        # Access mode couldn't be verified (e.g. the probe request itself
+        # failed) - ask anyway rather than silently connecting without a
+        # token and failing later with a much less clear error.
+        print(
+            "Could not verify the device's access mode (GET /api/access "
+            "failed); asking for an access key just in case."
+        )
+        confirmed_no_key_needed = False
+    else:
+        confirmed_no_key_needed = access_info.mode != "key" or bool(
+            access_info.key_valid
+        )
+
+    if not confirmed_no_key_needed and not token:
         entered = input(
             f"Enter access key/PIN for {device.name!r} (leave blank if none): "
         ).strip()
