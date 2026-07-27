@@ -103,6 +103,33 @@ def test_resolve_connection_skips_prompt_when_token_already_valid(
     assert token == "already-valid"
 
 
+def test_resolve_connection_prompts_when_key_provisioned_but_no_token_given(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Prompt when the device already has a key provisioned (`key_valid=True`)
+    but the client has no token at all.
+
+    `key_valid` reflects whether the device has a key configured, not
+    whether our (absent) token matches it - a real bar reports exactly
+    `{"mode": "key", "key_valid": true}` here, and must still prompt.
+    """
+    device = _device("Tug's bar", "192.168.1.20")
+    monkeypatch.setattr(
+        discovery.BusyBarDevices, "discover", lambda timeout=1.5: [device]
+    )
+    monkeypatch.setattr(
+        discovery,
+        "_probe_access_mode",
+        lambda addr, token: HttpAccessInfo(mode="key", key_valid=True),
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: "4321")
+
+    addr, token = discovery.resolve_connection(None)
+    assert addr == "192.168.1.20"
+    assert token == "4321"
+
+
 def test_resolve_connection_prompts_when_access_probe_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

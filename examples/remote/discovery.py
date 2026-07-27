@@ -86,9 +86,10 @@ def resolve_connection(
         )
         confirmed_no_key_needed = False
     else:
-        confirmed_no_key_needed = access_info.mode != "key" or bool(
-            access_info.key_valid
-        )
+        # `key_valid` reflects whether the device already has a key
+        # provisioned at all, not whether *our* (possibly absent) token
+        # matches it - so it must not be used to skip the prompt.
+        confirmed_no_key_needed = access_info.mode != "key"
 
     if not confirmed_no_key_needed and not token:
         entered = input(
