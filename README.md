@@ -109,7 +109,8 @@ shim:
 
 ## Agent-Assisted Scripts
 
-This repository includes [`AGENTS.md`](AGENTS.md), a compact guide for coding
+This repository includes
+[`AGENTS.md`](https://github.com/busy-app/busylib-py/blob/main/AGENTS.md), a compact guide for coding
 Busy Bar scripts and small apps with AI coding agents. It covers how to inspect
 the installed `busylib` API before coding, avoid invented methods or payloads,
 reuse clients safely, keep device effects bounded, and structure non-trivial

@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-cov lint typecheck quality format clean build upload docs run-example proto-sync
+.PHONY: help install install-dev test test-cov lint typecheck quality format clean build upload docs docs-serve run-example proto-sync
 
 PROTO_REPO ?= https://github.com/flipperdevices/bsb-protobuf
 PROTO_DIR ?= .cache/bsb-protobuf
@@ -39,7 +39,8 @@ help:
 	@echo "  clean       - Clean build artifacts"
 	@echo "  build       - Build package"
 	@echo "  upload      - Upload to PyPI"
-	@echo "  docs        - Generate documentation"
+	@echo "  docs        - Build the documentation site into ./site"
+	@echo "  docs-serve  - Serve the documentation locally with live reload"
 	@echo "  proto-sync  - Pull proto schema from flipperdevices/bsb-protobuf and regenerate state stream Python files"
 	@echo "  run-example - Run example main module via uv (usage: make run-example <name> [args...])"
 
@@ -95,9 +96,13 @@ build: clean
 upload: build
 	uv run twine upload dist/*
 
-# Generate documentation (placeholder)
+# Build the documentation site into ./site
 docs:
-	@echo "Documentation generation not implemented yet"
+	uv run --extra docs mkdocs build --strict
+
+# Serve the documentation locally with live reload
+docs-serve:
+	uv run --extra docs mkdocs serve
 
 # Regenerate protobuf models for status websocket stream support.
 # By default this target keeps a local checkout in .cache/bsb-protobuf.
