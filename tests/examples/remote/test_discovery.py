@@ -20,13 +20,42 @@ def _device(name: str, ip: str, temporary_id: str = "id") -> BusyBarDevice:
     )
 
 
-def test_resolve_connection_no_devices_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_connection_no_devices_and_no_usb_fallback_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
-    Raise a clear, actionable error when discovery finds nothing.
+    Raise a clear, actionable error when mDNS finds nothing and the USB
+    fallback address is also unreachable.
     """
     monkeypatch.setattr(discovery.BusyBarDevices, "discover", lambda timeout=1.5: [])
-    with pytest.raises(SystemExit, match="No Busy Bar devices found"):
+    monkeypatch.setattr(discovery, "_probe_access_mode", lambda addr, token: None)
+    with pytest.raises(SystemExit, match="USB fallback"):
         discovery.resolve_connection(None)
+
+
+def test_resolve_connection_falls_back_to_usb_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Use the well-known USB address when mDNS discovery finds nothing but
+    that address is reachable (e.g. a USB-connected bar on firmware that
+    doesn't advertise `_busybar._tcp` yet).
+    """
+    monkeypatch.setattr(discovery.BusyBarDevices, "discover", lambda timeout=1.5: [])
+    monkeypatch.setattr(
+        discovery,
+        "_probe_access_mode",
+        lambda addr, token: HttpAccessInfo(mode="disabled", key_valid=None),
+    )
+
+    def _fail_getpass(_prompt: str) -> str:
+        raise AssertionError("should not prompt when access mode isn't 'key'")
+
+    monkeypatch.setattr(discovery.getpass, "getpass", _fail_getpass)
+
+    addr, token = discovery.resolve_connection(None)
+    assert addr == discovery.USB_FALLBACK_ADDRESS
+    assert token is None
 
 
 def test_resolve_connection_single_device_no_key_needed(

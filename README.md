@@ -264,7 +264,9 @@ The `remote` example (`make run-example remote`, or
 `--addr`/address is given: it discovers devices via mDNS, lets you pick one
 by name if more than one is found, and prompts for the access key/PIN
 (masked, via `getpass`) if the selected device requires one and no
-`--token` was given.
+`--token` was given. Shipped firmware doesn't advertise `_busybar._tcp` for
+mDNS discovery yet, so if nothing is found it falls back to the well-known
+static USB address (`10.0.4.20`) that a USB-connected bar is reachable at.
 
 ```bash
 uv run python -m examples.remote.main
