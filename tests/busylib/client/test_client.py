@@ -698,22 +698,60 @@ def test_display_draw_can_sanitize_text_payload(caplog) -> None:
     ) in caplog.text
 
 
-def test_screen_returns_bytes():
+def test_screen_returns_decoded_rgb_bytes():
     """
-    Return raw bytes for screen frame requests.
+    Decode the base64 framebuffer response into RGB888 bytes.
+    """
+    import base64
 
-    Confirms binary content is not JSON-decoded.
-    """
-    expected = b"\x00\x01\x02"
+    from busylib import display
+
+    spec = display.get_display_spec(1)
+    packed = bytes([0x21]) * ((spec.width * spec.height) // 2)
 
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/screen"
         assert request.url.params["display"] == "1"
-        return httpx.Response(200, content=expected)
+        return httpx.Response(200, content=base64.b64encode(packed))
 
     client = make_client(responder)
     data = client.screen(1)
-    assert data == expected
+    assert len(data) == spec.width * spec.height * 3
+
+
+def test_screen_raises_when_the_frame_cannot_be_decoded():
+    """
+    Surface an undecodable frame instead of handing back raw bytes.
+
+    Returning the response body unchanged would let a renderer draw
+    base64 text as if it were pixels.
+    """
+
+    def responder(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"\x00\x01\x02")
+
+    client = make_client(responder)
+    with pytest.raises(exceptions.BusyBarProtocolError, match="screen frame"):
+        client.screen(1)
+
+
+def test_screen_accepts_a_display_spec():
+    """
+    Accept any display selector `get_display_spec` understands.
+    """
+    import base64
+
+    from busylib import display
+
+    spec = display.get_display_spec(0)
+    frame = bytes([1, 2, 3]) * (spec.width * spec.height)
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["display"] == "0"
+        return httpx.Response(200, content=base64.b64encode(frame))
+
+    client = make_client(responder)
+    assert client.screen(spec) == frame
 
 
 @pytest.mark.parametrize(

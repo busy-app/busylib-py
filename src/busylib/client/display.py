@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from typing_extensions import Unpack
 
-from .. import display, types
+from .. import display, exceptions, types
 from .base import AsyncClientBase, RequestKwargs, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,17 @@ def _decode_frame_bytes(data: bytes, display_id: int) -> bytes | None:
     if len(decoded) != spec.width * spec.height * 3:
         return None
     return decoded
+
+
+def _frame_excerpt(data: bytes, spec: display.DisplaySpec) -> str:
+    """
+    Describe an undecodable frame payload for the raised protocol error.
+    """
+    return (
+        f"{len(data)} bytes for the {spec.name.value} display "
+        f"({spec.width}x{spec.height}); expected base64-encoded "
+        f"{'L4-packed' if spec.index == 1 else 'RGB888'} framebuffer data"
+    )
 
 
 def _sanitize_text_value(value: str) -> str:
@@ -246,7 +257,7 @@ class DisplayMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    def screen(self, display_id: int) -> bytes:
+    def screen(self, display_id: display.DisplaySpecLike) -> bytes:
         """
         Fetch a single display frame via GET /api/screen.
 
@@ -268,7 +279,14 @@ class DisplayMixin(SyncClientBase):
             raise TypeError("Expected bytes response for screen frame")
         data = bytes(raw)
         decoded = _decode_frame_bytes(data, target.index)
-        return decoded if decoded is not None else data
+        if decoded is None:
+            raise exceptions.BusyBarProtocolError(
+                "Could not decode the screen frame",
+                method="GET",
+                path="/api/screen",
+                response_excerpt=_frame_excerpt(data, target),
+            )
+        return decoded
 
 
 class AsyncDisplayMixin(AsyncClientBase):
@@ -429,7 +447,7 @@ class AsyncDisplayMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
-    async def screen(self, display_id: int) -> bytes:
+    async def screen(self, display_id: display.DisplaySpecLike) -> bytes:
         """
         Fetch a single display frame via GET /api/screen.
 
@@ -451,4 +469,11 @@ class AsyncDisplayMixin(AsyncClientBase):
             raise TypeError("Expected bytes response for screen frame")
         data = bytes(raw)
         decoded = _decode_frame_bytes(data, target.index)
-        return decoded if decoded is not None else data
+        if decoded is None:
+            raise exceptions.BusyBarProtocolError(
+                "Could not decode the screen frame",
+                method="GET",
+                path="/api/screen",
+                response_excerpt=_frame_excerpt(data, target),
+            )
+        return decoded

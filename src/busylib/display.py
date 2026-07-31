@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import zlib
 from dataclasses import dataclass
+from typing import TypeAlias
 
 from .types import DisplayName
 
@@ -49,8 +50,14 @@ _DISPLAY_BY_INDEX = {
 }
 
 
+# What callers may pass anywhere a display is selected. `get_display_spec`
+# accepts all of these, so endpoint methods advertise the same contract
+# instead of narrowing to `int`.
+DisplaySpecLike: TypeAlias = "DisplaySpec | DisplayName | int | str | None"
+
+
 def get_display_spec(
-    display: DisplaySpec | DisplayName | int | str | None,
+    display: DisplaySpecLike,
 ) -> DisplaySpec:
     """
     Resolve a display spec using explicit front/back selection.

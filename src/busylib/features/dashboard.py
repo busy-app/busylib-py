@@ -274,10 +274,13 @@ def _apply_frame_update(snapshot: DeviceSnapshot, frame: dict[str, object]) -> N
     if not isinstance(encoding, str) or not isinstance(pixel_format, str):
         return
     try:
+        # `validate=True` matters: without it b64decode silently discards
+        # characters outside the alphabet, turning a corrupted frame into
+        # plausible-looking but wrong pixels instead of an error we can skip.
         decoded = display.decode_frame_data(
             encoding,
             pixel_format,
-            base64.b64decode(raw_data),
+            base64.b64decode(raw_data, validate=True),
         )
     except (ValueError, TypeError) as exc:
         logger.warning("Failed to decode screen frame update: %s", exc)
