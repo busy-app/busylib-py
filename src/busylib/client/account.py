@@ -16,6 +16,11 @@ class AccountMixin(SyncClientBase):
     Account linking and MQTT backend helpers.
     """
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account",
+        method="DELETE",
+    )
     def account_unlink(self) -> types.SuccessResponse:
         """
         Unlink the device from the account via DELETE /api/account.
@@ -24,6 +29,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("DELETE", "/api/account")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account/link",
+        method="POST",
+    )
     def account_link(self) -> types.AccountLink:
         """
         Request an account link code via POST /api/account/link.
@@ -32,6 +42,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("POST", "/api/account/link")
         return types.AccountLink.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/info",
+        method="GET",
+    )
     def account_info(self) -> types.AccountInfo:
         """
         Fetch linked account info via GET /api/account/info.
@@ -40,6 +55,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/info")
         return types.AccountInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/status",
+        method="GET",
+    )
     def account_status(self) -> types.AccountState:
         """
         Fetch MQTT status info via GET /api/account/status.
@@ -48,6 +68,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/status")
         return types.AccountState.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="GET",
+    )
     def account_backend(self) -> types.AccountBackend:
         """
         Fetch MQTT backend settings via GET /api/account/backend.
@@ -56,6 +81,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/backend")
         return types.AccountBackend.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="PUT",
+    )
     def account_backend_set(
         self,
         backend: types.AccountBackend | dict[str, object],
@@ -119,6 +149,11 @@ class AsyncAccountMixin(AsyncClientBase):
     Async account linking and MQTT backend helpers.
     """
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account",
+        method="DELETE",
+    )
     async def account_unlink(self) -> types.SuccessResponse:
         """
         Unlink the device from the account via DELETE /api/account.
@@ -127,6 +162,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("DELETE", "/api/account")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account/link",
+        method="POST",
+    )
     async def account_link(self) -> types.AccountLink:
         """
         Request an account link code via POST /api/account/link.
@@ -135,6 +175,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("POST", "/api/account/link")
         return types.AccountLink.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/info",
+        method="GET",
+    )
     async def account_info(self) -> types.AccountInfo:
         """
         Fetch linked account info via GET /api/account/info.
@@ -143,6 +188,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/info")
         return types.AccountInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/status",
+        method="GET",
+    )
     async def account_status(self) -> types.AccountState:
         """
         Fetch MQTT status info via GET /api/account/status.
@@ -151,6 +201,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/status")
         return types.AccountState.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="GET",
+    )
     async def account_backend(self) -> types.AccountBackend:
         """
         Fetch MQTT backend settings via GET /api/account/backend.
@@ -159,6 +214,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/backend")
         return types.AccountBackend.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="PUT",
+    )
     async def account_backend_set(
         self,
         backend: types.AccountBackend | dict[str, object],

@@ -33,8 +33,11 @@ def requires_openapi(
     Attach declarative OpenAPI compatibility metadata to a client method.
 
     `version` is the minimum firmware OpenAPI version the current
-    implementation targets, not necessarily the version in which the
-    underlying device endpoint first appeared. When a method's request or
+    implementation targets. For most helpers that is the version in which
+    the device endpoint first appeared, taken from the firmware's own route
+    tables across release tags. Where a contract later changed in a
+    breaking way, the higher version wins - `log_dump` targets 25.0.0 even
+    though `/api/log_dump` exists from 24.3.0. When a method's request or
     response contract changes in a breaking, non-translatable way, bump this
     version to match the new contract rather than keeping the old value or
     adding a silent compatibility shim.

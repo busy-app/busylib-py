@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,11 @@ class SmartHomeMixin(SyncClientBase):
     Smart home pairing and switch helpers.
     """
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/pairing",
+        method="GET",
+    )
     def smart_home_pairing(self) -> types.SmartHomePairingInfo:
         """
         Fetch smart home pairing status via GET /api/smart_home/pairing.
@@ -22,6 +27,11 @@ class SmartHomeMixin(SyncClientBase):
         data = self._request("GET", "/api/smart_home/pairing")
         return types.SmartHomePairingInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/pairing",
+        method="POST",
+    )
     def smart_home_pairing_start(self) -> types.SmartHomePairingPayload:
         """
         Start smart home pairing via POST /api/smart_home/pairing.
@@ -30,6 +40,11 @@ class SmartHomeMixin(SyncClientBase):
         data = self._request("POST", "/api/smart_home/pairing")
         return types.SmartHomePairingPayload.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/pairing",
+        method="DELETE",
+    )
     def smart_home_pairing_stop(self) -> types.SuccessResponse:
         """
         Stop smart home pairing via DELETE /api/smart_home/pairing.
@@ -38,6 +53,11 @@ class SmartHomeMixin(SyncClientBase):
         data = self._request("DELETE", "/api/smart_home/pairing")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/switch",
+        method="GET",
+    )
     def smart_home_switch(self) -> types.SmartHomeSwitchState:
         """
         Fetch smart home switch state via GET /api/smart_home/switch.
@@ -46,6 +66,11 @@ class SmartHomeMixin(SyncClientBase):
         data = self._request("GET", "/api/smart_home/switch")
         return types.SmartHomeSwitchState.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/switch",
+        method="POST",
+    )
     def smart_home_switch_set(
         self,
         state: bool,
@@ -73,6 +98,11 @@ class AsyncSmartHomeMixin(AsyncClientBase):
     Async smart home pairing and switch helpers.
     """
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/pairing",
+        method="GET",
+    )
     async def smart_home_pairing(self) -> types.SmartHomePairingInfo:
         """
         Fetch smart home pairing status via GET /api/smart_home/pairing.
@@ -81,6 +111,11 @@ class AsyncSmartHomeMixin(AsyncClientBase):
         data = await self._request("GET", "/api/smart_home/pairing")
         return types.SmartHomePairingInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/pairing",
+        method="POST",
+    )
     async def smart_home_pairing_start(self) -> types.SmartHomePairingPayload:
         """
         Start smart home pairing via POST /api/smart_home/pairing.
@@ -89,6 +124,11 @@ class AsyncSmartHomeMixin(AsyncClientBase):
         data = await self._request("POST", "/api/smart_home/pairing")
         return types.SmartHomePairingPayload.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/pairing",
+        method="DELETE",
+    )
     async def smart_home_pairing_stop(self) -> types.SuccessResponse:
         """
         Stop smart home pairing via DELETE /api/smart_home/pairing.
@@ -97,6 +137,11 @@ class AsyncSmartHomeMixin(AsyncClientBase):
         data = await self._request("DELETE", "/api/smart_home/pairing")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/switch",
+        method="GET",
+    )
     async def smart_home_switch(self) -> types.SmartHomeSwitchState:
         """
         Fetch smart home switch state via GET /api/smart_home/switch.
@@ -105,6 +150,11 @@ class AsyncSmartHomeMixin(AsyncClientBase):
         data = await self._request("GET", "/api/smart_home/switch")
         return types.SmartHomeSwitchState.model_validate(data)
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/smart_home/switch",
+        method="POST",
+    )
     async def smart_home_switch_set(
         self,
         state: bool,
