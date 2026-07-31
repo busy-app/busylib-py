@@ -60,6 +60,14 @@ library find it for you — see [Discovering devices](#discovering-devices-on-th
 
 ## Step 2 — First-time setup
 
+The examples below ship with the source rather than the PyPI package, so grab
+a clone to run them:
+
+```bash
+git clone https://github.com/busy-app/busylib-py
+cd busylib-py
+```
+
 Rather than clicking through the device UI, run the setup wizard. It reads the
 bar's current state, shows you what's already configured, and only asks about
 what's missing:
