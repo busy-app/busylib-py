@@ -9,7 +9,7 @@ import pytest
 
 from busylib import types, versioning
 from examples.setup.prompts import SetupAborted, SetupCancelled
-from examples.setup import steps
+from examples.setup import operations, steps
 from examples.setup.steps import (
     CloudStep,
     FirmwareStep,
@@ -324,7 +324,7 @@ async def test_firmware_keeps_polling_while_the_check_is_running(
     The device reports status "none" until the check produces a result, so
     treating any non-idle status as terminal skipped the first-run update.
     """
-    monkeypatch.setattr(steps, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(operations, "UPDATE_POLL_INTERVAL_SECONDS", 0)
     client = _UpdateClient(
         [_check("none"), _check("none"), _check("available", "1.1.1")]
     )
@@ -342,7 +342,7 @@ async def test_firmware_stops_on_a_terminal_no_update_status(
     """
     `not_available` ends the poll without offering an install.
     """
-    monkeypatch.setattr(steps, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(operations, "UPDATE_POLL_INTERVAL_SECONDS", 0)
     client = _UpdateClient([_check("not_available")])
 
     prompt = RecordingPrompt()
@@ -466,10 +466,10 @@ async def test_stale_available_version_is_not_installed(
     "available"; acting on `available_version` alone got a 400 "Update not
     available" back from a real bar.
     """
-    monkeypatch.setattr(steps, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(operations, "UPDATE_POLL_INTERVAL_SECONDS", 0)
     client = _UpdateClient([_check("none", "1.1.1"), _check("not_available", "1.1.1")])
 
-    assert await FirmwareStep()._await_check_result(client) is None  # type: ignore[arg-type]
+    assert await operations.find_available_update(client) is None  # type: ignore[arg-type]
 
 
 def test_expiry_is_rendered_as_local_time() -> None:
