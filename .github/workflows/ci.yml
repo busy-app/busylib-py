@@ -23,6 +23,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # The README tutorial converts audio, which shells out to ffmpeg.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install dependencies
         run: |
           python -m pip install -U pip
@@ -68,8 +72,6 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          # Keep in sync with the Python version in .readthedocs.yaml so a
-          # build that passes here also passes on Read the Docs.
           python-version: "3.13"
 
       - name: Install dependencies

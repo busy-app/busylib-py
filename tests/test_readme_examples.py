@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+import shutil
 import re
 import wave
 import zlib
@@ -76,6 +77,10 @@ def sample_files(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is None,
+    reason="the tutorial converts audio, which requires ffmpeg",
+)
 def test_readme_examples_run_without_warnings(
     readme_blocks: list[str],
     sample_files: Path,
