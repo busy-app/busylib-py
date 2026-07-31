@@ -443,6 +443,16 @@ async def _run(
                 return
             status_message(message)
 
+        def _set_status_line(text: str | None) -> None:
+            """
+            Update the renderer's transient status line, once it exists.
+
+            Commands are built before the renderer, so this closure resolves
+            it lazily instead of capturing a `None` reference.
+            """
+            if renderer is not None:
+                renderer.update_status_line(text)
+
         _emit_status(TEXT_INIT_START)
         client = AsyncBusyBar(addr=args.addr, token=args.token)
         base_url = getattr(client, "base_url", None) or args.addr or "unknown"
@@ -453,6 +463,7 @@ async def _run(
             status_message=_emit_status,
             stop_event=stop_event,
             input_capture=input_capture,
+            status_line=_set_status_line,
         ):
             register_command(command_registry, command)
         register_command(
