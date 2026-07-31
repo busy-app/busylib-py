@@ -1,0 +1,128 @@
+# Drawing on the displays
+
+A BUSY Bar has two displays, and every draw call targets one of them
+explicitly:
+
+| Display | Size | Kind |
+| --- | --- | --- |
+| `DisplayName.FRONT` | 72 × 16 | RGB LED matrix, ~16M colours |
+| `DisplayName.BACK` | 160 × 80 | Monochrome OLED, 16 shades of grey |
+
+Those numbers matter: an element positioned outside its display is accepted by
+the device but never becomes visible. The client checks for this and logs a
+warning rather than failing, so watch for it while developing:
+
+```
+Element status y=20 exceeds front height=16
+```
+
+You can read the specs from the library instead of hardcoding them:
+
+```python
+from busylib import display
+
+spec = display.get_display_spec(display.DisplayName.FRONT)
+print(spec.width, spec.height)  # 72 16
+```
+
+## Elements
+
+`display_draw` takes a `DisplayElements` payload holding a list of elements.
+Every element carries an `id`, a `type`, coordinates, and the `display` it
+belongs to.
+
+```python
+from busylib import types
+
+payload = types.DisplayElements(
+    application_name="my-app",
+    elements=[...],
+    priority=None,
+    led_notification_color=None,
+)
+```
+
+`application_name` groups everything your app draws, which is what
+`display_clear` and `assets_delete` operate on.
+
+### Text
+
+```python
+types.TextElement(
+    id="status",
+    type="text",
+    x=2,
+    y=4,
+    text="BUILDING",
+    font="small",
+    display=types.DisplayName.FRONT,
+)
+```
+
+Fonts: `tiny`, `small`, `normal`, `condensed`, `bold`, `large`, `extra_large`,
+`global`.
+
+Alignment (`align`) accepts `top_left`, `top_mid`, `top_right`, `mid_left`,
+`center`, `mid_right`, `bottom_left`, `bottom_mid`, `bottom_right`.
+
+Text longer than its `width` can scroll, controlled by `scroll_rate`,
+`scroll_start_delay`, and `scroll_repeat_delay`. Use `timeout` or
+`display_until` to make an element disappear on its own.
+
+### Images
+
+```python
+types.ImageElement(
+    id="icon",
+    type="image",
+    x=0,
+    y=0,
+    path="icon.png",
+    display=types.DisplayName.BACK,
+)
+```
+
+`path` refers to a file already uploaded for your application — see
+[Assets and storage](assets-and-storage.md). Use `stock_path` instead to
+reference artwork that ships with the device. `opacity` blends the image
+against what's underneath.
+
+## Replacing versus adding
+
+By default a draw call adds to what's on screen. To replace your app's previous
+content in one step:
+
+```python
+bb.display_draw(payload, clear_before_draw=True)
+```
+
+To wipe it entirely:
+
+```python
+bb.display_clear()
+```
+
+## Text that came from somewhere else
+
+Text arriving from an API, a commit message, or a chat room can contain emoji
+and control characters the firmware won't render. Let the client strip them:
+
+```python
+bb.display_draw(payload, sanitize_text=True)
+```
+
+Each substitution is logged, so you can see what was removed and why.
+
+## Reading the screen back
+
+`screen()` returns the current contents of a display as RGB888 bytes, which is
+how the `remote` example mirrors the bar in a terminal:
+
+```python
+frame = bb.screen(0)  # 0 = front, 1 = back
+```
+
+The HTTP endpoint returns base64-encoded, uncompressed framebuffer data despite
+advertising `Content-Type: image/bmp`; the client decodes that for you. Live
+frames also arrive in the device state stream — see
+[Device state](device-state.md).

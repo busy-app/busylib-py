@@ -1,0 +1,110 @@
+/*
+ * BUSY brand palette, from the official brand kit: BUSY Red leads for
+ * recognition and action, while black, white, and Slate Grey keep the system
+ * structured. Colour is used with restraint and never decoratively.
+ *
+ * Overrides Material's default indigo scheme in both colour modes rather
+ * than shipping two differently-branded sites.
+ */
+
+:root {
+  /* Brand kit, section 01 - Colors. */
+  --bb-red: #ed0018;
+  --bb-black: #000000;
+  --bb-white: #ffffff;
+  --bb-slate-grey: #818b98;
+
+  /* Lightened red for dark backgrounds, where pure #ED0018 sits too dark. */
+  --bb-red-bright: #ff3347;
+
+  /* Neutral steps derived from Slate Grey for surfaces and borders. */
+  --bb-grey-100: #f4f5f7;
+  --bb-grey-300: #d8dce1;
+  --bb-grey-700: #3c4450;
+  --bb-grey-900: #14171c;
+}
+
+/* Light mode: white page, black chrome, red for links and highlights. */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--bb-black);
+  --md-primary-fg-color--light: var(--bb-grey-700);
+  --md-primary-fg-color--dark: #000000;
+  --md-primary-bg-color: var(--bb-white);
+  --md-primary-bg-color--light: var(--bb-grey-300);
+
+  --md-accent-fg-color: var(--bb-red);
+  --md-accent-fg-color--transparent: rgba(237, 0, 24, 0.1);
+  --md-accent-bg-color: var(--bb-white);
+
+  --md-typeset-a-color: var(--bb-red);
+  --md-code-bg-color: var(--bb-grey-100);
+}
+
+/* Dark mode: near-black page, white text, brighter red so it stays legible. */
+[data-md-color-scheme="slate"] {
+  --md-hue: 240;
+
+  --md-primary-fg-color: var(--bb-grey-900);
+  --md-primary-fg-color--light: var(--bb-grey-700);
+  --md-primary-fg-color--dark: #000000;
+  --md-primary-bg-color: var(--bb-white);
+
+  --md-accent-fg-color: var(--bb-red-bright);
+  --md-accent-fg-color--transparent: rgba(255, 51, 71, 0.12);
+
+  --md-typeset-a-color: var(--bb-red-bright);
+  --md-default-bg-color: var(--bb-black);
+  --md-code-bg-color: #1b1f26;
+}
+
+/* The header is the most brand-visible surface: keep it black in both modes. */
+.md-header {
+  background-color: var(--bb-black);
+  color: var(--bb-white);
+}
+
+.md-tabs {
+  background-color: var(--bb-black);
+}
+
+/* A red rule under the site name ties the header to the accent colour. */
+.md-header__title {
+  font-weight: 600;
+}
+
+/* Admonitions inherit the accent so notes and warnings stay on-palette. */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: var(--bb-slate-grey);
+}
+
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  border-color: var(--bb-red);
+}
+
+.md-typeset .admonition.warning > .admonition-title,
+.md-typeset details.warning > summary {
+  background-color: rgba(237, 0, 24, 0.1);
+}
+
+.md-typeset .admonition.warning > .admonition-title::before,
+.md-typeset details.warning > summary::before {
+  background-color: var(--bb-red);
+}
+
+/* Inline code reads as data, so keep it neutral rather than accent-coloured. */
+.md-typeset code {
+  color: inherit;
+}
+
+/* Signatures in the API reference are dense; give them room to breathe. */
+.md-typeset .doc-signature {
+  font-size: 0.75rem;
+}
+
+.md-typeset h2.doc-heading,
+.md-typeset h3.doc-heading {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  padding-bottom: 0.2em;
+}

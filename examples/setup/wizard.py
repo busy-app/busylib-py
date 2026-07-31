@@ -89,7 +89,7 @@ async def run_setup(
     """
     reports = await collect_status(client, steps)
 
-    prompt.info("Busy Bar setup")
+    prompt.info("BUSY Bar setup")
     for report in reports:
         prompt.info(report.render())
 

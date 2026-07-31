@@ -120,7 +120,7 @@ def _clean_response(text: str, sent_cmd: str) -> str:
 
 class UsbController:
     """
-    Controller for the Busy Bar CLI over telnet.
+    Controller for the BUSY Bar CLI over telnet.
 
     The device exposes a CLI on 10.0.4.20:23 that mirrors USB commands.
     """

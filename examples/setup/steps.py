@@ -273,7 +273,7 @@ class NameStep(SetupStep):
 
 class CloudStep(SetupStep):
     """
-    Link the bar to a Busy cloud account.
+    Link the bar to a BUSY cloud account.
     """
 
     key = "cloud"
@@ -297,7 +297,7 @@ class CloudStep(SetupStep):
             prompt.info("The device did not return a linking code.")
             raise SetupCancelled
 
-        prompt.info(f"Enter this code in the Busy app to link the bar: {link.code}")
+        prompt.info(f"Enter this code in the BUSY App to link the bar: {link.code}")
         if link.expires_at:
             prompt.info(f"The code expires at {link.expires_at}.")
         prompt.info("Re-run setup afterwards to confirm the link.")

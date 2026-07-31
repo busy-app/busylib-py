@@ -5,7 +5,7 @@ from typing import Any
 
 class BusyBarError(Exception):
     """
-    Base class for all Busy Bar library exceptions.
+    Base class for all BUSY Bar library exceptions.
 
     Allows callers to handle library failures via a single except clause.
     """
@@ -13,7 +13,7 @@ class BusyBarError(Exception):
 
 class BusyBarAPIError(BusyBarError):
     """
-    Raised when the Busy Bar API returns an error response.
+    Raised when the BUSY Bar API returns an error response.
 
     Provides access to the response payload for diagnostics.
     """
@@ -86,7 +86,7 @@ class BusyBarRequestError(BusyBarError):
 
 def is_retryable_delivery_error(error: BusyBarError) -> bool:
     """
-    Classify Busy Bar delivery failures for caller retry decisions.
+    Classify BUSY Bar delivery failures for caller retry decisions.
 
     Treats request/transport failures and explicitly transient HTTP statuses
     as retryable. Other 4xx responses are caller or authorization problems and
@@ -100,7 +100,7 @@ def is_retryable_delivery_error(error: BusyBarError) -> bool:
 
 def format_delivery_error(error: BusyBarError) -> str:
     """
-    Format Busy Bar delivery failure into a compact diagnostic string.
+    Format BUSY Bar delivery failure into a compact diagnostic string.
 
     Keeps enough HTTP context and response body excerpt for service logs without
     duplicating full response-formatting logic in each integration.

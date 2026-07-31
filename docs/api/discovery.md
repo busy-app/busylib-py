@@ -1,6 +1,6 @@
 # Device discovery
 
-Busy Bars announce themselves over mDNS, so an address doesn't have to be
+BUSY Bars announce themselves over mDNS, so an address doesn't have to be
 hardcoded.
 
 ```python

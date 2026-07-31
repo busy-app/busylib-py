@@ -100,7 +100,7 @@ async def _forward_keys(
     input_capture: InputCapture | None = None,
 ) -> None:
     """
-    Forward terminal key presses to the Busy Bar input API.
+    Forward terminal key presses to the BUSY Bar input API.
 
     Handles help overlay toggle and quit hotkeys.
     """
