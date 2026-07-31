@@ -308,9 +308,13 @@ class _UpdateClient:
         return types.SuccessResponse(result="OK")
 
 
-def _check(status: str, version: str | None = None) -> types.UpdateStatus:
+def _check(
+    status: str, version: str | None = None, event: str | None = None
+) -> types.UpdateStatus:
     return types.UpdateStatus(
-        check=types.UpdateCheckStatus(status=status, available_version=version)
+        check=types.UpdateCheckStatus(
+            status=status, available_version=version, event=event
+        )
     )
 
 
@@ -567,3 +571,48 @@ async def test_wifi_step_falls_back_to_manual_ssid_when_scan_is_refused() -> Non
     await WifiStep().run(client, prompt)  # type: ignore[arg-type]
 
     assert client.config.ssid == "HomeNet"
+
+
+@pytest.mark.asyncio
+async def test_stale_not_available_does_not_hide_a_real_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A leftover "not_available" must not be reported as this check's answer.
+
+    The device keeps the previous outcome until a new check lands, and the
+    check runs asynchronously, so the first poll can still show the old
+    verdict - which made setup announce "no update" while the bar was
+    offering one.
+    """
+    monkeypatch.setattr(operations, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    client = _UpdateClient(
+        [
+            # Left over from a check performed at boot.
+            _check("not_available", "", event="stop"),
+            _check("not_available", "", event="stop"),
+            _check("none", "", event="start"),
+            _check("available", "1.1.1", event="stop"),
+        ]
+    )
+
+    assert await operations.find_available_update(client) == "1.1.1"  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_a_genuinely_new_no_update_verdict_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Once the check has visibly run, "not_available" is the answer.
+    """
+    monkeypatch.setattr(operations, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    client = _UpdateClient(
+        [
+            _check("none", "", event="none"),
+            _check("none", "", event="start"),
+            _check("not_available", "", event="stop"),
+        ]
+    )
+
+    assert await operations.find_available_update(client) is None  # type: ignore[arg-type]

@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 # any other value means the check is still running or found nothing.
 CHECK_STATUS_AVAILABLE = "available"
 CHECK_STATUS_TERMINAL_NO_UPDATE = frozenset({"not_available", "failure"})
+CHECK_EVENT_START = "start"
+# How many polls to wait for the device to show it started checking before
+# accepting whatever state it already reports.
+UNCHANGED_POLLS_BEFORE_TRUSTING_STATE = 3
 
 UPDATE_POLL_INTERVAL_SECONDS = 3.0
 UPDATE_TIMEOUT_SECONDS = 600.0
@@ -85,6 +89,20 @@ async def _firmware_version_from_status(client: AsyncBusyBar) -> str | None:
     return None
 
 
+def _check_state(status: types.UpdateStatus) -> tuple[str, str, str]:
+    """
+    Reduce an update status to the parts that identify a check result.
+    """
+    check = status.check
+    if check is None:
+        return ("", "", "")
+    return (
+        (check.status or "").lower(),
+        (check.event or "").lower(),
+        check.available_version or "",
+    )
+
+
 async def find_available_update(
     client: AsyncBusyBar,
     *,
@@ -95,23 +113,51 @@ async def find_available_update(
     Ask the device to check for an update and wait for the verdict.
 
     Returns the offered version, or None when the check finishes with
-    nothing to install. `available_version` alone isn't enough to act on: it
-    keeps the version from an earlier check, so the device's current status
-    has to read "available" before an install is accepted.
+    nothing to install.
+
+    The device keeps the previous check's outcome until a new one lands, and
+    the check it performs on request is asynchronous, so the state has to be
+    read carefully in both directions. A stale `available_version` must not
+    be installed - the device rejects that with 400 "Update not available" -
+    and a stale `not_available` must not be reported as the answer, which
+    would hide an update the bar is actually offering. So the state from
+    before the request is recorded, and a verdict is only accepted once the
+    device has moved on from it or has visibly started checking - falling
+    back to the reported state after a few polls, so a firmware that never
+    exposes the transition doesn't stall the whole timeout.
     """
+    try:
+        before = _check_state(await client.update_status())
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("setup: could not read update state before checking: %s", exc)
+        before = ("", "", "")
+
     await client.update_check()
+    seen_running = False
+    unchanged_polls = 0
 
     started = time.monotonic()
     while time.monotonic() - started < timeout:
-        status = await client.update_status()
-        check = status.check
-        if check is not None:
-            result = (check.status or "").lower()
-            if result == CHECK_STATUS_AVAILABLE and check.available_version:
-                return check.available_version
-            if result in CHECK_STATUS_TERMINAL_NO_UPDATE:
-                return None
         await asyncio.sleep(poll_interval)
+
+        status = await client.update_status()
+        result, event, version = _check_state(status)
+
+        if event == CHECK_EVENT_START:
+            seen_running = True
+
+        if not seen_running and (result, event, version) == before:
+            # Nothing has moved yet. Give the device a few polls to start,
+            # then take the state at face value rather than waiting out the
+            # whole timeout - some firmware never exposes the transition.
+            unchanged_polls += 1
+            if unchanged_polls < UNCHANGED_POLLS_BEFORE_TRUSTING_STATE:
+                continue
+
+        if result == CHECK_STATUS_AVAILABLE and version:
+            return version
+        if result in CHECK_STATUS_TERMINAL_NO_UPDATE:
+            return None
     return None
 
 
