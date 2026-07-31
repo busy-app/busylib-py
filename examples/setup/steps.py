@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,6 +11,8 @@ from busylib.client import AsyncBusyBar
 from busylib.devices import BUSYBAR_DEFAULT_NAME
 
 from examples.setup.prompts import Prompt, SetupCancelled
+from examples.shared.device_name import validate_device_name
+from examples.shared.timezones import resolve_timezone
 
 # Factory bars ship on firmware 1.0.2, which serves API 24.3.0 while this
 # library targets 25.0.0. Updating is therefore the first thing a new owner
@@ -114,8 +117,11 @@ class FirmwareStep(SetupStep):
         means the check hasn't produced a result yet, so polling has to
         continue rather than concluding there's no update.
         """
-        deadline = UPDATE_TIMEOUT_SECONDS
-        while deadline > 0:
+        # Measure real elapsed time: counting only the sleeps ignored how
+        # long update_status() itself took, so the effective timeout drifted
+        # well past UPDATE_TIMEOUT_SECONDS.
+        started = time.monotonic()
+        while time.monotonic() - started < UPDATE_TIMEOUT_SECONDS:
             status = await client.update_status()
             check = status.check
             if check is not None:
@@ -124,7 +130,6 @@ class FirmwareStep(SetupStep):
                 if (check.status or "").lower() in CHECK_STATUS_TERMINAL_NO_UPDATE:
                     return None
             await asyncio.sleep(UPDATE_POLL_INTERVAL_SECONDS)
-            deadline -= UPDATE_POLL_INTERVAL_SECONDS
         return None
 
 
@@ -220,8 +225,6 @@ class TimezoneStep(SetupStep):
         """
         Set the timezone, defaulting to this machine's IANA name.
         """
-        from examples.remote.commands.timezone_set import resolve_timezone
-
         default = _local_timezone_name()
         value = await prompt.text(
             "Timezone (IANA name, city, or UTC offset)",
@@ -258,8 +261,6 @@ class NameStep(SetupStep):
         """
         Validate a new name locally, then apply it.
         """
-        from examples.remote.commands.name_set import validate_device_name
-
         value = await prompt.text("Device name")
         error = validate_device_name(value)
         if error is not None:
@@ -338,9 +339,8 @@ def _local_timezone_name() -> str | None:
     """
     Best-effort IANA name for this machine, or None if it can't be determined.
 
-    An offset is only offered as a fallback when it lands on a whole hour,
-    because `resolve_timezone` rejects offsets with minutes - suggesting
-    "+5" to somebody in +05:30 would be worse than suggesting nothing.
+    Falls back to `_whole_hour_offset_label`, which declines to guess when
+    the offset has minutes.
     """
     local = datetime.now().astimezone()
 

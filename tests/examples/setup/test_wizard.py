@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any
+
 from datetime import datetime, timedelta
 
 import pytest
 
 from busylib import types, versioning
-from examples.setup.prompts import SetupCancelled
+from examples.setup.prompts import SetupAborted, SetupCancelled
 from examples.setup import steps
 from examples.setup.steps import (
     CloudStep,
@@ -56,14 +58,14 @@ class RecordingPrompt:
     Prompt that records output and replays scripted answers.
     """
 
-    def __init__(self, answers: list[object] | None = None) -> None:
+    def __init__(self, answers: list[Any] | None = None) -> None:
         self.lines: list[str] = []
-        self._answers = list(answers or [])
+        self._answers: list[Any] = list(answers or [])
 
     def info(self, message: str) -> None:
         self.lines.append(message)
 
-    def _next(self) -> object:
+    def _next(self) -> Any:
         if not self._answers:
             raise SetupCancelled
         return self._answers.pop(0)
@@ -368,3 +370,49 @@ def test_offset_label_skips_offsets_with_minutes(
     somebody in +05:30 would be actively misleading.
     """
     assert steps._whole_hour_offset_label(offset) == expected
+
+
+@pytest.mark.asyncio
+async def test_aborting_leaves_the_wizard_instead_of_skipping_one_step() -> None:
+    """
+    Ctrl+C or Escape must quit rather than advance to the next step.
+
+    Treating an abort as a per-step skip meant a user had to press Ctrl+C
+    once for every remaining step to get out of the wizard.
+    """
+
+    class _Aborting(_StubStep):
+        async def run(self, client, prompt) -> None:
+            self.ran = True
+            raise SetupAborted
+
+    aborting = _Aborting("alpha", done=False)
+    following = _StubStep("beta", done=False)
+
+    prompt = RecordingPrompt()
+    with pytest.raises(SetupAborted):
+        await run_setup(FakeClient(), prompt, steps=[aborting, following])  # type: ignore[arg-type]
+
+    assert aborting.ran is True
+    assert following.ran is False
+
+
+@pytest.mark.asyncio
+async def test_a_skipped_step_still_lets_the_others_run() -> None:
+    """
+    SetupCancelled remains a per-step skip.
+    """
+
+    class _Skipping(_StubStep):
+        async def run(self, client, prompt) -> None:
+            self.ran = True
+            raise SetupCancelled
+
+    skipping = _Skipping("alpha", done=False)
+    following = _StubStep("beta", done=False)
+
+    prompt = RecordingPrompt()
+    await run_setup(FakeClient(), prompt, steps=[skipping, following])  # type: ignore[arg-type]
+
+    assert following.ran is True
+    assert any("Skipped" in line for line in prompt.lines)

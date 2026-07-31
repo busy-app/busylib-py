@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from busylib.client import AsyncBusyBar
 
-from examples.setup.prompts import Prompt, SetupCancelled
+from examples.setup.prompts import Prompt, SetupAborted, SetupCancelled
 from examples.setup.steps import SetupStep, StepStatus, default_steps
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,9 @@ class StepReport:
         Render one checklist line.
         """
         if self.error is not None:
-            return f"  {MARK_UNKNOWN} {self.step.title:<14} could not read ({self.error})"
+            return (
+                f"  {MARK_UNKNOWN} {self.step.title:<14} could not read ({self.error})"
+            )
         assert self.status is not None
         mark = MARK_DONE if self.status.done else MARK_PENDING
         return f"  {mark} {self.step.title:<14} {self.status.summary}"
@@ -107,7 +109,13 @@ async def run_setup(
         try:
             await report.step.run(client, prompt)
         except SetupCancelled:
+            # A step declined itself; carry on with the remaining ones.
             prompt.info(f"Skipped {report.step.title}.")
+        except SetupAborted:
+            # The user asked to leave, so don't immediately prompt again
+            # for the next step - propagate and let the caller exit.
+            prompt.info("Setup cancelled.")
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.exception("setup: step %s failed", report.step.key)
             prompt.info(f"{report.step.title} failed: {exc}")

@@ -10,7 +10,7 @@ from busylib.client import AsyncBusyBar
 
 from examples.remote.command_core import CommandArgumentParser, CommandBase
 from examples.remote.commands.record_audio import InputCapture
-from examples.setup.prompts import SetupCancelled
+from examples.setup.prompts import SetupAborted
 from examples.setup.steps import default_steps
 from examples.setup.wizard import collect_status, run_setup
 
@@ -20,6 +20,12 @@ KEY_ENTER = (10, 13)
 KEY_ESCAPE = 27
 KEY_BACKSPACE = (8, 127)
 KEY_CTRL_C = 3
+# Escape introduces a control sequence (arrows send ESC [ A and friends),
+# so a bare ESC only counts as "quit" once nothing follows it.
+ESC_SEQUENCE_INTRODUCERS = (0x5B, 0x4F)  # '[' and 'O'
+# How long to wait for the rest of a sequence before treating ESC as a
+# standalone key press.
+ESC_SEQUENCE_TIMEOUT_SECONDS = 0.05
 
 
 class CapturePrompt:
@@ -100,7 +106,9 @@ class CapturePrompt:
         """
         Read one line of raw input, echoing progress to the status line.
 
-        Enter submits, Escape or Ctrl+C cancels via `SetupCancelled`.
+        Enter submits. A bare Escape or Ctrl+C leaves the wizard via
+        `SetupAborted`; escape sequences such as arrow keys are swallowed
+        rather than being mistaken for a quit.
         """
         loop = asyncio.get_running_loop()
         future: asyncio.Future[str] = loop.create_future()
@@ -115,15 +123,59 @@ class CapturePrompt:
             shown = "*" * len(buffer) if secret else "".join(buffer)
             self._status_line(f"{message}{hint}: {shown}")
 
+        pending_escape = False
+        skip_sequence = False
+        escape_timer: asyncio.TimerHandle | None = None
+
+        def abort() -> None:
+            if not future.done():
+                future.set_exception(SetupAborted())
+
+        def cancel_escape_timer() -> None:
+            nonlocal escape_timer
+            if escape_timer is not None:
+                escape_timer.cancel()
+                escape_timer = None
+
+        def on_escape_timeout() -> None:
+            # Nothing followed the ESC, so it really was a bare key press.
+            nonlocal pending_escape
+            if pending_escape:
+                pending_escape = False
+                abort()
+
         def on_input(data: bytes) -> bool:
+            nonlocal pending_escape, skip_sequence, escape_timer
             for byte in data:
+                if pending_escape:
+                    cancel_escape_timer()
+                    # ESC followed by '[' or 'O' is an arrow or function key,
+                    # not a quit: swallow the rest of the sequence.
+                    pending_escape = False
+                    if byte in ESC_SEQUENCE_INTRODUCERS:
+                        skip_sequence = True
+                        continue
+                    abort()
+                    return True
+
+                if skip_sequence:
+                    # Sequences end on a final byte in the @-~ range.
+                    if 0x40 <= byte <= 0x7E:
+                        skip_sequence = False
+                    continue
+
                 if byte in KEY_ENTER:
                     if not future.done():
                         future.set_result("".join(buffer))
                     return True
-                if byte == KEY_ESCAPE or byte == KEY_CTRL_C:
-                    if not future.done():
-                        future.set_exception(SetupCancelled())
+                if byte == KEY_ESCAPE:
+                    pending_escape = True
+                    escape_timer = loop.call_later(
+                        ESC_SEQUENCE_TIMEOUT_SECONDS, on_escape_timeout
+                    )
+                    continue
+                if byte == KEY_CTRL_C:
+                    abort()
                     return True
                 if byte in KEY_BACKSPACE:
                     if buffer:
@@ -143,6 +195,7 @@ class CapturePrompt:
             async with self._input_capture.capture(on_input):
                 return await future
         finally:
+            cancel_escape_timer()
             self._status_line(None)
 
 
@@ -231,7 +284,7 @@ class SetupCommand(CommandBase):
                 only=args.only,
                 redo=args.redo,
             )
-        except SetupCancelled:
+        except SetupAborted:
             self._status_message("setup: cancelled")
         except Exception as exc:  # noqa: BLE001
             logger.exception("command:setup failed")

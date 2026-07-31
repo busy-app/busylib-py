@@ -7,8 +7,8 @@ import sys
 
 from busylib.client import AsyncBusyBar
 
-from examples.remote.discovery import resolve_connection
-from examples.setup.prompts import SetupCancelled, TerminalPrompt
+from examples.shared.discovery import resolve_connection
+from examples.setup.prompts import SetupAborted, TerminalPrompt
 from examples.setup.steps import default_steps
 from examples.setup.wizard import run_setup
 
@@ -25,7 +25,9 @@ def parse_args() -> argparse.Namespace:
             "already satisfies are shown as done and skipped."
         ),
     )
-    parser.add_argument("addr_positional", nargs="?", default=None, help="Device address")
+    parser.add_argument(
+        "addr_positional", nargs="?", default=None, help="Device address"
+    )
     parser.add_argument("--addr", dest="addr", default=None, help="Device address")
     parser.add_argument("--token", default=None, help="Device access key")
     parser.add_argument(
@@ -75,13 +77,12 @@ def main() -> None:
     Entry point for the standalone setup wizard.
     """
     args = parse_args()
-    logging.basicConfig(level=args.log_level.upper())
-    if args.addr is None:
-        args.addr, args.token = resolve_connection(args.token)
-
     try:
+        logging.basicConfig(level=args.log_level.upper())
+        if args.addr is None:
+            args.addr, args.token = resolve_connection(args.token)
         asyncio.run(_run(args))
-    except (KeyboardInterrupt, SetupCancelled):
+    except (KeyboardInterrupt, SetupAborted):
         print("\nSetup cancelled.")
         sys.exit(130)
     except Exception as exc:  # noqa: BLE001

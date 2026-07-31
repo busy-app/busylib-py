@@ -5,7 +5,7 @@ import asyncio
 import sys
 from typing import Literal, get_args, get_origin
 
-from examples.remote.discovery import resolve_connection
+from examples.shared.discovery import resolve_connection
 from examples.remote.runner import _run as runner
 from examples.remote.constants import (
     DEFAULT_LOG_LEVEL,

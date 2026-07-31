@@ -6,7 +6,7 @@ import pytest
 
 from examples.remote.commands.record_audio import InputCapture
 from examples.remote.commands.setup import CapturePrompt
-from examples.setup.prompts import SetupCancelled
+from examples.setup.prompts import SetupAborted
 
 
 class Harness:
@@ -60,13 +60,42 @@ async def test_backspace_removes_last_character() -> None:
 
 
 @pytest.mark.asyncio
-async def test_escape_cancels() -> None:
+async def test_bare_escape_aborts_the_wizard() -> None:
     """
-    Escape aborts the prompt with SetupCancelled.
+    A standalone Escape leaves the wizard.
+
+    It is only treated as a quit after nothing follows it, so the decision
+    waits out the escape-sequence timeout.
     """
     h = Harness()
-    with pytest.raises(SetupCancelled):
+    with pytest.raises(SetupAborted):
         await h.feed(h.prompt.text("SSID"), b"ho", b"\x1b")
+
+
+@pytest.mark.asyncio
+async def test_ctrl_c_aborts_the_wizard() -> None:
+    """
+    Ctrl+C leaves the wizard immediately.
+    """
+    h = Harness()
+    with pytest.raises(SetupAborted):
+        await h.feed(h.prompt.text("SSID"), b"\x03")
+
+
+@pytest.mark.asyncio
+async def test_arrow_keys_do_not_abort() -> None:
+    """
+    Arrow keys must not be mistaken for Escape.
+
+    Every arrow starts with ESC, and in a full-screen TUI arrows are the
+    first thing a user reaches for - treating them as a quit silently
+    skipped the step.
+    """
+    h = Harness()
+    value = await h.feed(
+        h.prompt.text("SSID"), b"ho", b"\x1b[A", b"\x1b[B", b"me", b"\r"
+    )
+    assert value == "home"
 
 
 @pytest.mark.asyncio
@@ -120,7 +149,9 @@ async def test_confirm_reads_explicit_answer() -> None:
     An explicit y/n answer overrides the default.
     """
     h = Harness()
-    assert await h.feed(h.prompt.confirm("Install?", default=False), b"y", b"\r") is True
+    assert (
+        await h.feed(h.prompt.confirm("Install?", default=False), b"y", b"\r") is True
+    )
 
 
 @pytest.mark.asyncio
@@ -164,7 +195,5 @@ async def test_multibyte_character_split_across_chunks() -> None:
     """
     h = Harness()
     encoded = "ж".encode()
-    value = await h.feed(
-        h.prompt.text("SSID"), encoded[:1], encoded[1:], b"\r"
-    )
+    value = await h.feed(h.prompt.text("SSID"), encoded[:1], encoded[1:], b"\r")
     assert value == "ж"

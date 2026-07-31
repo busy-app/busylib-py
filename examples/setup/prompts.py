@@ -6,7 +6,16 @@ from typing import Protocol, runtime_checkable
 
 class SetupCancelled(Exception):
     """
-    Raised when the user aborts the wizard at a prompt.
+    Raised to skip the current step and move on to the next one.
+    """
+
+
+class SetupAborted(Exception):
+    """
+    Raised to leave the wizard entirely.
+
+    Kept separate from `SetupCancelled` so that Ctrl+C or Escape quits
+    instead of skipping one step and immediately prompting for the next.
     """
 
 
@@ -69,7 +78,7 @@ class TerminalPrompt:
         try:
             value = input(f"{message}{suffix}: ").strip()
         except (EOFError, KeyboardInterrupt) as exc:
-            raise SetupCancelled from exc
+            raise SetupAborted from exc
         if not value and default is not None:
             return default
         return value
@@ -81,7 +90,7 @@ class TerminalPrompt:
         try:
             return getpass.getpass(f"{message}: ").strip()
         except (EOFError, KeyboardInterrupt) as exc:
-            raise SetupCancelled from exc
+            raise SetupAborted from exc
 
     async def confirm(self, message: str, *, default: bool = True) -> bool:
         """
@@ -91,7 +100,7 @@ class TerminalPrompt:
         try:
             answer = input(f"{message} [{hint}]: ").strip().lower()
         except (EOFError, KeyboardInterrupt) as exc:
-            raise SetupCancelled from exc
+            raise SetupAborted from exc
         if not answer:
             return default
         return answer in ("y", "yes")
