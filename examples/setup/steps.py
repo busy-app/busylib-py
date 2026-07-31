@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from busylib import types, versioning
 from busylib.client import AsyncBusyBar
@@ -15,6 +16,10 @@ from examples.setup.prompts import Prompt, SetupCancelled
 # needs, and every other step reads better once it's out of the way.
 UPDATE_POLL_INTERVAL_SECONDS = 3.0
 UPDATE_TIMEOUT_SECONDS = 600.0
+
+# `check.status` values that mean the check finished without an update. Any
+# other value (notably "none") means it is still running.
+CHECK_STATUS_TERMINAL_NO_UPDATE = frozenset({"not_available", "failure"})
 DEFAULT_DEVICE_NAME = BUSYBAR_DEFAULT_NAME.decode()
 
 
@@ -101,16 +106,23 @@ class FirmwareStep(SetupStep):
 
     async def _await_check_result(self, client: AsyncBusyBar) -> str | None:
         """
-        Poll update status until the check reports a version or settles.
+        Poll update status until the check reports a version or finishes.
+
+        The device reports `check.status` as one of `available`,
+        `not_available`, `failure`, or `none`, and `check.event` as `start`,
+        `stop`, or `none`. Only the first two statuses are terminal: `none`
+        means the check hasn't produced a result yet, so polling has to
+        continue rather than concluding there's no update.
         """
         deadline = UPDATE_TIMEOUT_SECONDS
         while deadline > 0:
             status = await client.update_status()
             check = status.check
-            if check is not None and check.available_version:
-                return check.available_version
-            if check is not None and check.status not in (None, "", "IDLE"):
-                return None
+            if check is not None:
+                if check.available_version:
+                    return check.available_version
+                if (check.status or "").lower() in CHECK_STATUS_TERMINAL_NO_UPDATE:
+                    return None
             await asyncio.sleep(UPDATE_POLL_INTERVAL_SECONDS)
             deadline -= UPDATE_POLL_INTERVAL_SECONDS
         return None
@@ -322,14 +334,45 @@ def _format_offset(offset: timedelta | None) -> str:
     return f"UTC{sign}{hours:02d}:{minutes:02d}"
 
 
-def _local_timezone_name() -> str:
+def _local_timezone_name() -> str | None:
     """
-    Best-effort IANA name for this machine, falling back to its offset.
+    Best-effort IANA name for this machine, or None if it can't be determined.
+
+    An offset is only offered as a fallback when it lands on a whole hour,
+    because `resolve_timezone` rejects offsets with minutes - suggesting
+    "+5" to somebody in +05:30 would be worse than suggesting nothing.
     """
     local = datetime.now().astimezone()
+
+    key = getattr(local.tzinfo, "key", None)
+    if isinstance(key, str) and key:
+        return key
+
     name = local.tzname()
     if name and "/" in name:
         return name
-    offset = local.utcoffset() or timedelta(0)
-    hours = int(offset.total_seconds() // 3600)
+
+    try:
+        resolved = Path("/etc/localtime").resolve()
+        parts = resolved.parts
+        if "zoneinfo" in parts:
+            return "/".join(parts[parts.index("zoneinfo") + 1 :])
+    except OSError:
+        pass
+
+    return _whole_hour_offset_label(local.utcoffset() or timedelta(0))
+
+
+def _whole_hour_offset_label(offset: timedelta) -> str | None:
+    """
+    Render a UTC offset as a `resolve_timezone`-compatible label.
+
+    Returns None when the offset has minutes, because `resolve_timezone`
+    rejects those - suggesting "+5" to somebody in +05:30 would be worse
+    than suggesting nothing at all.
+    """
+    total_minutes = int(offset.total_seconds() // 60)
+    if total_minutes % 60:
+        return None
+    hours = total_minutes // 60
     return f"{'+' if hours >= 0 else ''}{hours}"

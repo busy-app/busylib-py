@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
 from busylib import types, versioning
 from examples.setup.prompts import SetupCancelled
+from examples.setup import steps
 from examples.setup.steps import (
     CloudStep,
     FirmwareStep,
@@ -279,3 +280,91 @@ async def test_run_setup_reports_step_failure_without_aborting() -> None:
 
     assert following.ran is True
     assert any("failed: nope" in line for line in prompt.lines)
+
+
+class _UpdateClient:
+    """
+    Replays a sequence of `/api/update/status` responses.
+    """
+
+    def __init__(self, sequence: list[types.UpdateStatus]) -> None:
+        self._sequence = list(sequence)
+        self.checks = 0
+
+    async def update_check(self):
+        self.checks += 1
+        return types.SuccessResponse(result="OK")
+
+    async def update_status(self):
+        if len(self._sequence) > 1:
+            return self._sequence.pop(0)
+        return self._sequence[0]
+
+    async def update_install(self, version: str):
+        self.installed = version
+        return types.SuccessResponse(result="OK")
+
+
+def _check(status: str, version: str | None = None) -> types.UpdateStatus:
+    return types.UpdateStatus(
+        check=types.UpdateCheckStatus(status=status, available_version=version)
+    )
+
+
+@pytest.mark.asyncio
+async def test_firmware_keeps_polling_while_the_check_is_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A check still in progress must not be read as "no update available".
+
+    The device reports status "none" until the check produces a result, so
+    treating any non-idle status as terminal skipped the first-run update.
+    """
+    monkeypatch.setattr(steps, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    client = _UpdateClient(
+        [_check("none"), _check("none"), _check("available", "1.1.1")]
+    )
+
+    prompt = RecordingPrompt([True])
+    await FirmwareStep().run(client, prompt)  # type: ignore[arg-type]
+
+    assert any("1.1.1" in line for line in prompt.lines)
+
+
+@pytest.mark.asyncio
+async def test_firmware_stops_on_a_terminal_no_update_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    `not_available` ends the poll without offering an install.
+    """
+    monkeypatch.setattr(steps, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    client = _UpdateClient([_check("not_available")])
+
+    prompt = RecordingPrompt()
+    await FirmwareStep().run(client, prompt)  # type: ignore[arg-type]
+
+    assert any("No update is offered" in line for line in prompt.lines)
+
+
+@pytest.mark.parametrize(
+    "offset,expected",
+    [
+        (timedelta(hours=3), "+3"),
+        (timedelta(0), "+0"),
+        (timedelta(hours=-8), "-8"),
+        (timedelta(hours=5, minutes=30), None),
+        (timedelta(hours=12, minutes=45), None),
+    ],
+)
+def test_offset_label_skips_offsets_with_minutes(
+    offset: timedelta, expected: str | None
+) -> None:
+    """
+    Only whole-hour offsets are offered as a timezone default.
+
+    `resolve_timezone` rejects offsets with minutes, so suggesting "+5" to
+    somebody in +05:30 would be actively misleading.
+    """
+    assert steps._whole_hour_offset_label(offset) == expected

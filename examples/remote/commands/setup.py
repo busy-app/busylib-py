@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import codecs
 import logging
 from collections.abc import Callable
 
@@ -105,6 +106,10 @@ class CapturePrompt:
         future: asyncio.Future[str] = loop.create_future()
         buffer: list[str] = []
         hint = f" [{default}]" if default else ""
+        # Raw stdin delivers UTF-8 one byte at a time, so multi-byte
+        # characters have to be reassembled - chr(byte) per byte would
+        # mangle any non-ASCII SSID or password typed here.
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
         def paint() -> None:
             shown = "*" * len(buffer) if secret else "".join(buffer)
@@ -125,7 +130,11 @@ class CapturePrompt:
                         buffer.pop()
                     continue
                 if byte >= 32:
-                    buffer.append(chr(byte))
+                    # Continuation bytes decode to "" until the character
+                    # is complete, so nothing lands in the buffer yet.
+                    text = decoder.decode(bytes([byte]))
+                    if text:
+                        buffer.append(text)
             paint()
             return True
 

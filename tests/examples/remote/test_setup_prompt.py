@@ -131,3 +131,40 @@ async def test_choose_returns_selected_index() -> None:
     h = Harness()
     index = await h.feed(h.prompt.choose("Network:", ["a", "b", "c"]), b"2", b"\r")
     assert index == 1
+
+
+@pytest.mark.asyncio
+async def test_multibyte_utf8_input_is_reassembled() -> None:
+    """
+    Non-ASCII input arrives byte by byte and must survive intact.
+
+    A Wi-Fi SSID or password with non-ASCII characters would otherwise be
+    mangled into one Latin-1 character per byte.
+    """
+    h = Harness()
+    ssid = "Кафе-Wi-Fi"
+    value = await h.feed(h.prompt.text("SSID"), ssid.encode("utf-8"), b"\r")
+    assert value == ssid
+
+
+@pytest.mark.asyncio
+async def test_backspace_removes_a_whole_multibyte_character() -> None:
+    """
+    Backspace deletes a character, not a single UTF-8 byte.
+    """
+    h = Harness()
+    value = await h.feed(h.prompt.text("SSID"), "документ".encode(), b"\x7f", b"\r")
+    assert value == "докумен"
+
+
+@pytest.mark.asyncio
+async def test_multibyte_character_split_across_chunks() -> None:
+    """
+    A character split across two reads is still assembled correctly.
+    """
+    h = Harness()
+    encoded = "ж".encode()
+    value = await h.feed(
+        h.prompt.text("SSID"), encoded[:1], encoded[1:], b"\r"
+    )
+    assert value == "ж"
