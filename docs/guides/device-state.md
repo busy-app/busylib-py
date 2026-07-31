@@ -74,4 +74,6 @@ store.on_diff(on_diff)
 ```
 
 Because the frame describes its own encoding, no guessing by payload size is
-involved — see `busylib.display.decode_frame_data`.
+involved — see `busylib.display.decode_frame_data`. A decoded frame whose size
+doesn't match the target display is logged and dropped rather than stored, so a
+malformed update can't reach a renderer.
