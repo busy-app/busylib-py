@@ -24,33 +24,31 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12state/update.proto\x12\nBSB_Update\"\"\n\x0fUpdateAvailable\x12\x0f\n\x07version\x18\x01 \x01(\t\";\n\x11UpdateUnavailable\x12&\n\x06reason\x18\x01 \x01(\x0e\x32\x16.BSB_Update.CheckError\"\x89\x01\n\x0bUpdateState\x12&\n\x05\x65vent\x18\x01 \x01(\x0e\x32\x17.BSB_Update.UpdateEvent\x12(\n\x06\x61\x63tion\x18\x02 \x01(\x0e\x32\x18.BSB_Update.UpdateAction\x12(\n\x06status\x18\x03 \x01(\x0e\x32\x18.BSB_Update.UpdateStatus\"\xa5\x01\n\nCheckState\x12%\n\x05\x65vent\x18\x03 \x01(\x0e\x32\x16.BSB_Update.CheckEvent\x12\x30\n\tavailable\x18\x01 \x01(\x0b\x32\x1b.BSB_Update.UpdateAvailableH\x00\x12\x34\n\x0bunavailable\x18\x02 \x01(\x0b\x32\x1d.BSB_Update.UpdateUnavailableH\x00\x42\x08\n\x06status\"0\n\x12\x41utoUpdateInterval\x12\r\n\x05start\x18\x01 \x01(\r\x12\x0b\n\x03\x65nd\x18\x02 \x01(\r\"T\n\x0f\x41utoUpdateState\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\x12\x30\n\x08interval\x18\x02 \x01(\x0b\x32\x1e.BSB_Update.AutoUpdateInterval*\x8d\x01\n\x0bUpdateEvent\x12\x11\n\rSESSION_START\x10\x00\x12\x10\n\x0cSESSION_STOP\x10\x01\x12\x10\n\x0c\x41\x43TION_BEGIN\x10\x02\x12\x0f\n\x0b\x41\x43TION_DONE\x10\x03\x12\x11\n\rDETAIL_CHANGE\x10\x04\x12\x13\n\x0f\x41\x43TION_PROGRESS\x10\x05\x12\x0e\n\nEVENT_NONE\x10\x06*\x81\x01\n\x0cUpdateAction\x12\x0c\n\x08\x44OWNLOAD\x10\x00\x12\x14\n\x10SHA_VERIFICATION\x10\x01\x12\n\n\x06UNPACK\x10\x02\x12\x18\n\x14INSTALLATION_PREPARE\x10\x03\x12\x16\n\x12INSTALLATION_APPLY\x10\x04\x12\x0f\n\x0b\x41\x43TION_NONE\x10\x05*\xb2\x03\n\x0cUpdateStatus\x12\x06\n\x02OK\x10\x00\x12\x0f\n\x0b\x42\x41TTERY_LOW\x10\x01\x12\x08\n\x04\x42USY\x10\x02\x12\x14\n\x10\x44OWNLOAD_FAILURE\x10\x03\x12\x12\n\x0e\x44OWNLOAD_ABORT\x10\x04\x12\x10\n\x0cSHA_MISMATCH\x10\x05\x12+\n\'UNPACK_CREATE_STAGING_DIRECTORY_FAILURE\x10\x06\x12\x1f\n\x1bUNPACK_ARCHIVE_OPEN_FAILURE\x10\x07\x12!\n\x1dUNPACK_ARCHIVE_UNPACK_FAILURE\x10\x08\x12+\n\'INSTALLATION_PREPARE_MANIFEST_NOT_FOUND\x10\t\x12)\n%INSTALLATION_PREPARE_MANIFEST_INVALID\x10\n\x12\x35\n1INSTALLATION_PREPARE_SESSION_CONFIG_SETUP_FAILURE\x10\x0b\x12.\n*INSTALLATION_PREPARE_POINTER_SETUP_FAILURE\x10\x0c\x12\x13\n\x0fUNKNOWN_FAILURE\x10\r*6\n\nCheckError\x12\x11\n\rNOT_AVAILABLE\x10\x00\x12\x0b\n\x07\x46\x41ILURE\x10\x01\x12\x08\n\x04IDLE\x10\x02*+\n\nCheckEvent\x12\t\n\x05START\x10\x00\x12\x08\n\x04STOP\x10\x01\x12\x08\n\x04NONE\x10\x02\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12state/update.proto\x12\nBSB_Update\"\"\n\x0fUpdateAvailable\x12\x0f\n\x07version\x18\x01 \x01(\t\";\n\x11UpdateUnavailable\x12&\n\x06reason\x18\x01 \x01(\x0e\x32\x16.BSB_Update.CheckError\"\x89\x01\n\x0bUpdateState\x12&\n\x05\x65vent\x18\x01 \x01(\x0e\x32\x17.BSB_Update.UpdateEvent\x12(\n\x06\x61\x63tion\x18\x02 \x01(\x0e\x32\x18.BSB_Update.UpdateAction\x12(\n\x06status\x18\x03 \x01(\x0e\x32\x18.BSB_Update.UpdateStatus\"~\n\nCheckState\x12\x30\n\tavailable\x18\x01 \x01(\x0b\x32\x1b.BSB_Update.UpdateAvailableH\x00\x12\x34\n\x0bunavailable\x18\x02 \x01(\x0b\x32\x1d.BSB_Update.UpdateUnavailableH\x00\x42\x08\n\x06status\"0\n\x12\x41utoUpdateInterval\x12\r\n\x05start\x18\x01 \x01(\r\x12\x0b\n\x03\x65nd\x18\x02 \x01(\r\"T\n\x0f\x41utoUpdateState\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\x12\x30\n\x08interval\x18\x02 \x01(\x0b\x32\x1e.BSB_Update.AutoUpdateInterval*\x8d\x01\n\x0bUpdateEvent\x12\x11\n\rSESSION_START\x10\x00\x12\x10\n\x0cSESSION_STOP\x10\x01\x12\x10\n\x0c\x41\x43TION_BEGIN\x10\x02\x12\x0f\n\x0b\x41\x43TION_DONE\x10\x03\x12\x11\n\rDETAIL_CHANGE\x10\x04\x12\x13\n\x0f\x41\x43TION_PROGRESS\x10\x05\x12\x0e\n\nEVENT_NONE\x10\x06*\x81\x01\n\x0cUpdateAction\x12\x0c\n\x08\x44OWNLOAD\x10\x00\x12\x14\n\x10SHA_VERIFICATION\x10\x01\x12\n\n\x06UNPACK\x10\x02\x12\x18\n\x14INSTALLATION_PREPARE\x10\x03\x12\x16\n\x12INSTALLATION_APPLY\x10\x04\x12\x0f\n\x0b\x41\x43TION_NONE\x10\x05*\xb2\x03\n\x0cUpdateStatus\x12\x06\n\x02OK\x10\x00\x12\x0f\n\x0b\x42\x41TTERY_LOW\x10\x01\x12\x08\n\x04\x42USY\x10\x02\x12\x14\n\x10\x44OWNLOAD_FAILURE\x10\x03\x12\x12\n\x0e\x44OWNLOAD_ABORT\x10\x04\x12\x10\n\x0cSHA_MISMATCH\x10\x05\x12+\n\'UNPACK_CREATE_STAGING_DIRECTORY_FAILURE\x10\x06\x12\x1f\n\x1bUNPACK_ARCHIVE_OPEN_FAILURE\x10\x07\x12!\n\x1dUNPACK_ARCHIVE_UNPACK_FAILURE\x10\x08\x12+\n\'INSTALLATION_PREPARE_MANIFEST_NOT_FOUND\x10\t\x12)\n%INSTALLATION_PREPARE_MANIFEST_INVALID\x10\n\x12\x35\n1INSTALLATION_PREPARE_SESSION_CONFIG_SETUP_FAILURE\x10\x0b\x12.\n*INSTALLATION_PREPARE_POINTER_SETUP_FAILURE\x10\x0c\x12\x13\n\x0fUNKNOWN_FAILURE\x10\r*6\n\nCheckError\x12\x11\n\rNOT_AVAILABLE\x10\x00\x12\x0b\n\x07\x46\x41ILURE\x10\x01\x12\x08\n\x04IDLE\x10\x02\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'state.update_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_UPDATEEVENT']._serialized_start=576
-  _globals['_UPDATEEVENT']._serialized_end=717
-  _globals['_UPDATEACTION']._serialized_start=720
-  _globals['_UPDATEACTION']._serialized_end=849
-  _globals['_UPDATESTATUS']._serialized_start=852
-  _globals['_UPDATESTATUS']._serialized_end=1286
-  _globals['_CHECKERROR']._serialized_start=1288
-  _globals['_CHECKERROR']._serialized_end=1342
-  _globals['_CHECKEVENT']._serialized_start=1344
-  _globals['_CHECKEVENT']._serialized_end=1387
+  _globals['_UPDATEEVENT']._serialized_start=536
+  _globals['_UPDATEEVENT']._serialized_end=677
+  _globals['_UPDATEACTION']._serialized_start=680
+  _globals['_UPDATEACTION']._serialized_end=809
+  _globals['_UPDATESTATUS']._serialized_start=812
+  _globals['_UPDATESTATUS']._serialized_end=1246
+  _globals['_CHECKERROR']._serialized_start=1248
+  _globals['_CHECKERROR']._serialized_end=1302
   _globals['_UPDATEAVAILABLE']._serialized_start=34
   _globals['_UPDATEAVAILABLE']._serialized_end=68
   _globals['_UPDATEUNAVAILABLE']._serialized_start=70
   _globals['_UPDATEUNAVAILABLE']._serialized_end=129
   _globals['_UPDATESTATE']._serialized_start=132
   _globals['_UPDATESTATE']._serialized_end=269
-  _globals['_CHECKSTATE']._serialized_start=272
-  _globals['_CHECKSTATE']._serialized_end=437
-  _globals['_AUTOUPDATEINTERVAL']._serialized_start=439
-  _globals['_AUTOUPDATEINTERVAL']._serialized_end=487
-  _globals['_AUTOUPDATESTATE']._serialized_start=489
-  _globals['_AUTOUPDATESTATE']._serialized_end=573
+  _globals['_CHECKSTATE']._serialized_start=271
+  _globals['_CHECKSTATE']._serialized_end=397
+  _globals['_AUTOUPDATEINTERVAL']._serialized_start=399
+  _globals['_AUTOUPDATEINTERVAL']._serialized_end=447
+  _globals['_AUTOUPDATESTATE']._serialized_start=449
+  _globals['_AUTOUPDATESTATE']._serialized_end=533
 # @@protoc_insertion_point(module_scope)
