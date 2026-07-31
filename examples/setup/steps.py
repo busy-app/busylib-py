@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -22,8 +23,18 @@ UPDATE_TIMEOUT_SECONDS = 600.0
 
 # `check.status` values that mean the check finished without an update. Any
 # other value (notably "none") means it is still running.
+CLOUD_DASHBOARD_URL = "https://cloud.busy.app/dashboard"
+CLOUD_LINK_POLL_INTERVAL_SECONDS = 3.0
+CLOUD_LINK_TIMEOUT_SECONDS = 600.0
+# Ask for a new code slightly before the old one lapses, so the user is never
+# looking at one that has just gone stale.
+CLOUD_CODE_RENEW_MARGIN_SECONDS = 10
+
+CHECK_STATUS_AVAILABLE = "available"
 CHECK_STATUS_TERMINAL_NO_UPDATE = frozenset({"not_available", "failure"})
 DEFAULT_DEVICE_NAME = BUSYBAR_DEFAULT_NAME.decode()
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -68,6 +79,12 @@ class FirmwareStep(SetupStep):
     async def status(self, client: AsyncBusyBar) -> StepStatus:
         """
         Compare the device's API version against the library's target.
+
+        `/api/version` only ever reports `api_semver` - the firmware's own
+        version string lives under `/api/status` in the `firmware` section -
+        so the two are read separately. The status call is best-effort: an
+        unreachable or unauthorised endpoint costs the version label, not
+        the compatibility verdict.
         """
         info = await client.version()
         device_api = info.api_semver or "unknown"
@@ -75,13 +92,35 @@ class FirmwareStep(SetupStep):
             library_version=versioning.API_VERSION,
             device_version=device_api,
         )
-        summary = f"{info.version or '?'} (API {device_api})"
+
+        firmware_version = info.version or await self._firmware_version(client)
+        summary = (
+            f"{firmware_version} (API {device_api})"
+            if firmware_version
+            else f"API {device_api}"
+        )
         if error is None:
             return StepStatus(done=True, summary=f"{summary} - supported")
         return StepStatus(
             done=False,
             summary=f"{summary} - library targets API {versioning.API_VERSION}",
         )
+
+    @staticmethod
+    async def _firmware_version(client: AsyncBusyBar) -> str | None:
+        """
+        Read the firmware version from `/api/status`, or None if unavailable.
+        """
+        try:
+            status = await client.status()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("setup: could not read firmware version: %s", exc)
+            return None
+        if status.firmware is not None and status.firmware.version:
+            return status.firmware.version
+        if status.system is not None and status.system.version:
+            return status.system.version
+        return None
 
     async def run(self, client: AsyncBusyBar, prompt: Prompt) -> None:
         """
@@ -125,9 +164,14 @@ class FirmwareStep(SetupStep):
             status = await client.update_status()
             check = status.check
             if check is not None:
-                if check.available_version:
+                result = (check.status or "").lower()
+                # The device only accepts an install while its own check
+                # state says "available". `available_version` alone isn't
+                # enough: it keeps the version from an earlier check, so
+                # acting on it mid-check gets a 400 "Update not available".
+                if result == CHECK_STATUS_AVAILABLE and check.available_version:
                     return check.available_version
-                if (check.status or "").lower() in CHECK_STATUS_TERMINAL_NO_UPDATE:
+                if result in CHECK_STATUS_TERMINAL_NO_UPDATE:
                     return None
             await asyncio.sleep(UPDATE_POLL_INTERVAL_SECONDS)
         return None
@@ -155,8 +199,17 @@ class WifiStep(SetupStep):
         Scan for networks, then join the one the user picks.
         """
         prompt.info("Scanning for networks...")
-        found = await client.wifi_networks()
-        networks = [n for n in (found.networks or []) if n.ssid]
+        try:
+            found = await client.wifi_networks()
+            networks = [n for n in (found.networks or []) if n.ssid]
+        except Exception as exc:  # noqa: BLE001
+            # The device refuses to scan while associated, answering
+            # 400 "Scan not possible when connected" - which is exactly the
+            # case when this step is re-run with --redo. Fall back to typing
+            # the SSID rather than failing the step.
+            logger.info("setup: network scan unavailable (%s)", exc)
+            prompt.info(f"Could not scan for networks: {exc}")
+            networks = []
 
         if networks:
             labels = [
@@ -290,17 +343,41 @@ class CloudStep(SetupStep):
 
     async def run(self, client: AsyncBusyBar, prompt: Prompt) -> None:
         """
-        Request a pairing code and wait for the user to redeem it.
+        Show a pairing code and keep it fresh until the bar is linked.
+
+        Codes expire, usually sooner than it takes to find the dashboard and
+        sign in, so this polls for the link and fetches a new code whenever
+        the current one lapses instead of printing a stale one once. Answer
+        "no" at the prompt to skip linking for now.
         """
-        link = await client.account_link()
-        if not link.code:
-            prompt.info("The device did not return a linking code.")
+        prompt.info(f"Link this bar at {CLOUD_DASHBOARD_URL} or in the BUSY App.")
+        if not await prompt.confirm("Link it now?", default=True):
+            # Skip just this step - the rest of the wizard carries on.
             raise SetupCancelled
 
-        prompt.info(f"Enter this code in the BUSY App to link the bar: {link.code}")
-        if link.expires_at:
-            prompt.info(f"The code expires at {link.expires_at}.")
-        prompt.info("Re-run setup afterwards to confirm the link.")
+        deadline = time.monotonic() + CLOUD_LINK_TIMEOUT_SECONDS
+        shown_code: str | None = None
+        expires_at: int | None = None
+
+        while time.monotonic() < deadline:
+            if shown_code is None or _code_expired(expires_at):
+                link = await client.account_link()
+                if not link.code:
+                    prompt.info("The device did not return a linking code.")
+                    raise SetupCancelled
+                shown_code = link.code
+                expires_at = link.expires_at
+                prompt.info(f"Code: {shown_code}{_expiry_suffix(expires_at)}")
+
+            await asyncio.sleep(CLOUD_LINK_POLL_INTERVAL_SECONDS)
+
+            info = await client.account_info()
+            if info.linked:
+                prompt.info(f"Linked to {info.email or 'your account'}.")
+                return
+
+        prompt.info("Gave up waiting for the bar to be linked.")
+        raise SetupCancelled
 
 
 def default_steps() -> list[SetupStep]:
@@ -308,6 +385,25 @@ def default_steps() -> list[SetupStep]:
     Return the setup steps in the order a new owner should do them.
     """
     return [FirmwareStep(), WifiStep(), TimezoneStep(), NameStep(), CloudStep()]
+
+
+def _code_expired(expires_at: int | None) -> bool:
+    """
+    Whether a pairing code is at or near its expiry.
+    """
+    if expires_at is None:
+        return False
+    return time.time() >= expires_at - CLOUD_CODE_RENEW_MARGIN_SECONDS
+
+
+def _expiry_suffix(expires_at: int | None) -> str:
+    """
+    Render the expiry as local time rather than a raw unix timestamp.
+    """
+    if expires_at is None:
+        return ""
+    local = datetime.fromtimestamp(expires_at).astimezone()
+    return f" (valid until {local:%H:%M:%S})"
 
 
 def _parse_offset(timestamp: str | None) -> timedelta | None:

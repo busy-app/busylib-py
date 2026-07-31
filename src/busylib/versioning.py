@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable
-from typing import Literal, TypeVar
+from functools import wraps
+from typing import Literal, TypeVar, cast
 
 from . import exceptions
 
@@ -15,7 +16,10 @@ F = TypeVar("F", bound=Callable[..., object])
 
 class MethodCompatibility(dict[str, str]):
     """
-    Dictionary metadata describing when a client helper appeared in OpenAPI.
+    Dictionary metadata describing a client helper's OpenAPI compatibility.
+
+    Carries either the minimum `version` a helper targets, or `status`
+    `"removed"` with the `replacement` to use instead.
     """
 
 
@@ -47,6 +51,47 @@ def requires_openapi(
             ),
         )
         return func
+
+    return decorator
+
+
+def removed_endpoint(
+    *,
+    path: str,
+    method: str,
+    replacement: str | None = None,
+) -> Callable[[F], F]:
+    """
+    Mark a helper whose device endpoint no longer exists in any firmware.
+
+    `requires_openapi` declares a *minimum* version, which can't express an
+    endpoint that has been withdrawn: there is no newer firmware where the
+    call starts working again. Marked helpers raise immediately with the
+    replacement to use, instead of letting an opaque 404 come back from the
+    device.
+    """
+
+    def decorator(func: F) -> F:
+        setattr(
+            func,
+            "__busy_openapi__",
+            MethodCompatibility(
+                path=path,
+                method=method,
+                status="removed",
+                **({"replacement": replacement} if replacement else {}),
+            ),
+        )
+
+        @wraps(func)
+        def wrapper(*args: object, **kwargs: object) -> object:
+            raise exceptions.BusyBarRemovedEndpointError(
+                path=path,
+                method=method,
+                replacement=replacement,
+            )
+
+        return cast(F, wrapper)
 
     return decorator
 

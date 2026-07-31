@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import time
 from datetime import datetime, timedelta
 
 import pytest
@@ -416,3 +417,153 @@ async def test_a_skipped_step_still_lets_the_others_run() -> None:
 
     assert following.ran is True
     assert any("Skipped" in line for line in prompt.lines)
+
+
+@pytest.mark.asyncio
+async def test_firmware_version_comes_from_status_when_version_omits_it() -> None:
+    """
+    `/api/version` only reports api_semver, so the label needs `/api/status`.
+
+    Reading the firmware version from `version()` alone rendered every bar as
+    "Firmware ?" - the first thing a new owner sees.
+    """
+
+    class _Client(FakeClient):
+        async def status(self):
+            return types.Status(firmware=types.StatusFirmware(version="1.0.2"))
+
+    client = _Client(version=types.VersionInfo(api_semver="24.3.0"))
+    status = await FirmwareStep().status(client)  # type: ignore[arg-type]
+
+    assert status.summary.startswith("1.0.2 (API 24.3.0)")
+
+
+@pytest.mark.asyncio
+async def test_firmware_label_omits_version_when_status_is_unavailable() -> None:
+    """
+    An unreachable status endpoint costs the label, not the verdict.
+    """
+
+    class _Client(FakeClient):
+        async def status(self):
+            raise RuntimeError("403")
+
+    client = _Client(version=types.VersionInfo(api_semver="24.3.0"))
+    status = await FirmwareStep().status(client)  # type: ignore[arg-type]
+
+    assert status.summary.startswith("API 24.3.0")
+    assert "?" not in status.summary
+
+
+@pytest.mark.asyncio
+async def test_stale_available_version_is_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A version left over from an earlier check must not trigger an install.
+
+    The device only accepts an install while its own check state reads
+    "available"; acting on `available_version` alone got a 400 "Update not
+    available" back from a real bar.
+    """
+    monkeypatch.setattr(steps, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    client = _UpdateClient([_check("none", "1.1.1"), _check("not_available", "1.1.1")])
+
+    assert await FirmwareStep()._await_check_result(client) is None  # type: ignore[arg-type]
+
+
+def test_expiry_is_rendered_as_local_time() -> None:
+    """
+    Pairing codes show a readable local time, not a unix timestamp.
+    """
+    suffix = steps._expiry_suffix(1785515110)
+
+    assert "1785515110" not in suffix
+    assert "valid until" in suffix
+
+
+def test_expiry_suffix_is_empty_without_a_deadline() -> None:
+    """
+    A code with no expiry renders no expiry text.
+    """
+    assert steps._expiry_suffix(None) == ""
+
+
+def test_code_is_renewed_slightly_before_it_lapses() -> None:
+    """
+    A code within the renewal margin counts as expired.
+    """
+    import time as _time
+
+    now = int(_time.time())
+    assert steps._code_expired(now + 1) is True
+    assert steps._code_expired(now + 3600) is False
+    assert steps._code_expired(None) is False
+
+
+@pytest.mark.asyncio
+async def test_cloud_step_can_be_skipped() -> None:
+    """
+    Declining the prompt skips linking without ending the wizard.
+    """
+    prompt = RecordingPrompt([False])
+
+    with pytest.raises(SetupCancelled):
+        await CloudStep().run(FakeClient(), prompt)  # type: ignore[arg-type]
+
+    assert any(steps.CLOUD_DASHBOARD_URL in line for line in prompt.lines)
+
+
+@pytest.mark.asyncio
+async def test_cloud_step_renews_the_code_until_linked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    An expired code is replaced rather than left on screen.
+    """
+    monkeypatch.setattr(steps, "CLOUD_LINK_POLL_INTERVAL_SECONDS", 0)
+    issued: list[str] = []
+
+    class _Linking:
+        def __init__(self) -> None:
+            self.polls = 0
+
+        async def account_link(self):
+            code = f"COD{len(issued)}"
+            issued.append(code)
+            return types.AccountLink(code=code, expires_at=int(time.time()))
+
+        async def account_info(self):
+            self.polls += 1
+            return types.AccountInfo(linked=self.polls >= 3, email="user@example.com")
+
+    prompt = RecordingPrompt([True])
+    await CloudStep().run(_Linking(), prompt)  # type: ignore[arg-type]
+
+    assert len(issued) > 1, "expired code should have been replaced"
+    assert any("user@example.com" in line for line in prompt.lines)
+
+
+@pytest.mark.asyncio
+async def test_wifi_step_falls_back_to_manual_ssid_when_scan_is_refused() -> None:
+    """
+    The device refuses to scan while connected, answering 400.
+
+    That happens whenever this step is re-run with --redo, so the scan
+    failing must not fail the step.
+    """
+
+    class _Connected:
+        async def wifi_networks(self):
+            raise RuntimeError("400 Scan not possible when connected")
+
+        async def wifi_connect(self, config):
+            self.config = config
+            return types.SuccessResponse(result="OK")
+
+    client = _Connected()
+    prompt = RecordingPrompt(["HomeNet", "hunter2"])
+
+    await WifiStep().run(client, prompt)  # type: ignore[arg-type]
+
+    assert client.config.ssid == "HomeNet"

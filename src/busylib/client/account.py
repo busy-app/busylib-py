@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,11 @@ class AccountMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.removed_endpoint(
+        path="/api/account/profile",
+        method="GET",
+        replacement="account_backend()",
+    )
     def account_profile(self) -> types.AccountProfile:
         """
         Fetch legacy MQTT profile via GET /api/account/profile.
@@ -84,6 +89,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/profile")
         return types.AccountProfile.model_validate(data)
 
+    @versioning.removed_endpoint(
+        path="/api/account/profile",
+        method="POST",
+        replacement="account_backend_set()",
+    )
     def account_profile_set(
         self,
         profile: AccountProfileName,
@@ -169,6 +179,11 @@ class AsyncAccountMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.removed_endpoint(
+        path="/api/account/profile",
+        method="GET",
+        replacement="account_backend()",
+    )
     async def account_profile(self) -> types.AccountProfile:
         """
         Fetch legacy MQTT profile via GET /api/account/profile.
@@ -177,6 +192,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/profile")
         return types.AccountProfile.model_validate(data)
 
+    @versioning.removed_endpoint(
+        path="/api/account/profile",
+        method="POST",
+        replacement="account_backend_set()",
+    )
     async def account_profile_set(
         self,
         profile: AccountProfileName,

@@ -15,8 +15,13 @@ bb = BusyBar("192.168.1.20")       # over Wi-Fi
 
 ## Access keys
 
-If the bar's HTTP access mode is set to `key`, every request needs a token and
-unauthenticated calls come back as `403 Forbidden`:
+The access key is only enforced on connections arriving over Wi-Fi. USB (and
+localhost) traffic bypasses the check entirely, so a bar reached at
+`10.0.4.20` never needs a token no matter which access mode it is in.
+
+Over Wi-Fi, if the access mode is set to `key`, every request needs that token
+and unauthenticated calls come back as `403 Forbidden`. The key is a 4–10
+digit PIN:
 
 ```python
 bb = BusyBar("10.0.4.20", token="your-access-key")
@@ -76,4 +81,25 @@ longer timeout:
 
 ```python
 bb.assets_upload("my-app", "big.png", data, timeout=60.0)
+```
+
+## Helpers for endpoints that no longer exist
+
+A few helpers target device endpoints that current firmware doesn't serve at
+all. They fail immediately with `BusyBarRemovedEndpointError` and name their
+replacement, rather than letting an opaque `404` come back:
+
+| Helper | Use instead |
+| --- | --- |
+| `account_profile()`, `account_profile_set()` | `account_backend()`, `account_backend_set()` |
+| `wifi_enable()`, `wifi_disable()` | `wifi_connect()`, `wifi_disconnect()` |
+
+This is deliberately distinct from `BusyBarAPIVersionError`: updating the
+firmware won't help, because the endpoint was withdrawn rather than added
+later. `method_compatibility()` reports the same information:
+
+```python
+bb.method_compatibility("account_profile")
+# {'path': '/api/account/profile', 'method': 'GET',
+#  'status': 'removed', 'replacement': 'account_backend()'}
 ```

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -14,11 +14,21 @@ class WifiMixin(SyncClientBase):
     Wi-Fi control helpers: enable, connect, scan, and status.
     """
 
+    @versioning.removed_endpoint(
+        path="/api/wifi/enable",
+        method="POST",
+        replacement="wifi_connect() / wifi_disconnect()",
+    )
     def wifi_enable(self) -> types.SuccessResponse:
         logger.info("wifi_enable")
         data = self._request("POST", "/api/wifi/enable")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.removed_endpoint(
+        path="/api/wifi/disable",
+        method="POST",
+        replacement="wifi_connect() / wifi_disconnect()",
+    )
     def wifi_disable(self) -> types.SuccessResponse:
         logger.info("wifi_disable")
         data = self._request("POST", "/api/wifi/disable")
@@ -57,6 +67,14 @@ class WifiMixin(SyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     def wifi_networks(self) -> types.NetworkResponse:
+        """
+        Scan for nearby networks via GET /api/wifi/networks.
+
+        The device cannot scan while it is associated: doing so returns
+        `400 "Scan not possible when connected"` as a `BusyBarAPIError`.
+        Disconnect first with `wifi_disconnect()`, or skip the scan and pass
+        the SSID to `wifi_connect()` directly.
+        """
         logger.info("wifi_networks")
         data = self._request("GET", "/api/wifi/networks")
         return types.NetworkResponse.model_validate(data)
@@ -67,11 +85,21 @@ class AsyncWifiMixin(AsyncClientBase):
     Async Wi-Fi control helpers: enable, connect, scan, and status.
     """
 
+    @versioning.removed_endpoint(
+        path="/api/wifi/enable",
+        method="POST",
+        replacement="wifi_connect() / wifi_disconnect()",
+    )
     async def wifi_enable(self) -> types.SuccessResponse:
         logger.info("async wifi_enable")
         data = await self._request("POST", "/api/wifi/enable")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.removed_endpoint(
+        path="/api/wifi/disable",
+        method="POST",
+        replacement="wifi_connect() / wifi_disconnect()",
+    )
     async def wifi_disable(self) -> types.SuccessResponse:
         logger.info("async wifi_disable")
         data = await self._request("POST", "/api/wifi/disable")
@@ -111,6 +139,14 @@ class AsyncWifiMixin(AsyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     async def wifi_networks(self) -> types.NetworkResponse:
+        """
+        Scan for nearby networks via GET /api/wifi/networks.
+
+        The device cannot scan while it is associated: doing so returns
+        `400 "Scan not possible when connected"` as a `BusyBarAPIError`.
+        Disconnect first with `wifi_disconnect()`, or skip the scan and pass
+        the SSID to `wifi_connect()` directly.
+        """
         logger.info("async wifi_networks")
         data = await self._request("GET", "/api/wifi/networks")
         return types.NetworkResponse.model_validate(data)
