@@ -23,7 +23,7 @@ def _prompt_device_choice(devices: list[BusyBarDevice]) -> BusyBarDevice:
     """
     Print a numbered menu of discovered devices and prompt for a selection.
     """
-    print("Found multiple Busy Bar devices:")
+    print("Found multiple BUSY Bar devices:")
     for index, device in enumerate(devices, start=1):
         addr = _device_address(device) or "no usable address"
         print(f"  {index}. {device.name} ({addr})")
@@ -38,7 +38,7 @@ def _prompt_device_choice(devices: list[BusyBarDevice]) -> BusyBarDevice:
 def _select_device(devices: list[BusyBarDevice]) -> BusyBarDevice:
     if len(devices) == 1:
         device = devices[0]
-        print(f"Found one Busy Bar device: {device.name}")
+        print(f"Found one BUSY Bar device: {device.name}")
         return device
     return _prompt_device_choice(devices)
 
@@ -63,14 +63,14 @@ def resolve_connection(
     timeout: float = DISCOVERY_TIMEOUT_SECONDS,
 ) -> tuple[str, str | None]:
     """
-    Discover Busy Bar devices on the network and resolve address + token.
+    Discover BUSY Bar devices on the network and resolve address + token.
 
     Used when the user did not pass --addr explicitly: finds devices via
     mDNS, lets the user pick one by name if more than one is found, and
     prompts for an access key/PIN when the selected device requires one and
     no --token was given.
     """
-    print("No --addr given; discovering Busy Bar devices on the network...")
+    print("No --addr given; discovering BUSY Bar devices on the network...")
     devices = BusyBarDevices.discover(timeout=timeout)
 
     if devices:
@@ -92,7 +92,7 @@ def resolve_connection(
     if access_info is None:
         if not devices:
             raise SystemExit(
-                "No Busy Bar devices found via mDNS, and the USB fallback "
+                "No BUSY Bar devices found via mDNS, and the USB fallback "
                 f"address {USB_FALLBACK_ADDRESS} isn't reachable either. "
                 "Pass --addr explicitly."
             )

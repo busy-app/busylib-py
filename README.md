@@ -4,11 +4,11 @@
 [![Python versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/busylib/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/busy-app/busylib-py/blob/main/LICENSE)
 
-A Python client for the Busy Bar API. Draw on both displays, play audio, manage
+A Python client for the BUSY Bar API. Draw on both displays, play audio, manage
 files and assets, read device state, and forward input — from a script instead
 of the device UI.
 
-## You just unboxed a Busy Bar
+## You just unboxed a BUSY Bar
 
 This guide takes you from a bar still in its box to a small working app.
 
@@ -77,7 +77,7 @@ uv run python -m examples.setup.main 10.0.4.20
 ```
 
 ```
-Busy Bar setup
+BUSY Bar setup
   [ ] Firmware       1.0.2 (API 24.3.0) - library targets API 25.0.0
   [ ] Wi-Fi          disconnected
   [ ] Timezone       UTC+00:00 - this computer is UTC+03:00
@@ -86,7 +86,7 @@ Busy Bar setup
 ```
 
 It walks through firmware update, Wi-Fi, timezone, device name, and linking the
-bar to a Busy cloud account. Steps already done are marked `[x]` and skipped, so
+bar to a BUSY cloud account. Steps already done are marked `[x]` and skipped, so
 it's safe to re-run at any time — for example after the bar reboots into new
 firmware.
 
@@ -272,7 +272,7 @@ uv run python -m examples.remote.main 10.0.4.20
 
 ## Going further
 
-Client method names follow Busy Bar API path segments instead of generic
+Client method names follow BUSY Bar API path segments instead of generic
 `get_*`/`set_*` prefixes. For example, `/api/display/draw` maps to
 `display_draw`, `/api/audio/play` maps to `audio_play`, and
 `/api/storage/remove` maps to `storage_remove`.
@@ -336,7 +336,7 @@ for device in BusyBarDevices.discover():
     print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
 
 # Example output:
-# Device: "Anna's Busy Bar"
+# Device: "Anna's BUSY Bar"
 #   Over USB: 10.0.4.20
 #   Over Wi-Fi: 192.168.100.2
 ```
@@ -440,15 +440,14 @@ shim:
 
 This repository includes
 [`AGENTS.md`](https://github.com/busy-app/busylib-py/blob/main/AGENTS.md), a compact guide for coding
-Busy Bar scripts and small apps with AI coding agents. It covers how to inspect
+BUSY Bar scripts and small apps with AI coding agents. It covers how to inspect
 the installed `busylib` API before coding, avoid invented methods or payloads,
 reuse clients safely, keep device effects bounded, and structure non-trivial
 scripts with dry-run support.
 
 ## Links
 
-- Documentation: https://busylib.readthedocs.io
-- Documentation (GitHub Pages mirror): https://busy-app.github.io/busylib-py/
+- Documentation: https://busy-app.github.io/busylib-py/
 - Source: https://github.com/busy-app/busylib-py
 - PyPI: https://pypi.org/project/busylib/
 

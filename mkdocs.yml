@@ -1,12 +1,19 @@
 site_name: busylib
-site_description: Python library for Busy Bar API
-site_url: https://busylib.readthedocs.io/
+site_description: Python library for BUSY Bar API
+site_url: https://busy-app.github.io/busylib-py/
 repo_url: https://github.com/busy-app/busylib-py
 repo_name: busy-app/busylib-py
 edit_uri: edit/main/docs/
 
 theme:
   name: material
+  # Brand kit, section 02 - Typography: Inter is the system font, listed for
+  # "apps and web interfaces, documentation, long-form content"; Geist Mono
+  # is the technical monospace face. Pragmatica Next is reserved for brand
+  # and hero surfaces, so it isn't used here.
+  font:
+    text: Inter
+    code: Geist Mono
   features:
     - content.code.copy
     - navigation.sections
@@ -24,6 +31,10 @@ theme:
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
+
+# BUSY Bar palette (black/white/red/grey) rather than Material's default.
+extra_css:
+  - stylesheets/busybar.css
 
 plugins:
   - search
@@ -59,7 +70,12 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - API reference:
+  - Guides:
+      - Connecting to a bar: guides/connecting.md
+      - Drawing on the displays: guides/displays.md
+      - Assets and storage: guides/assets-and-storage.md
+      - Reading device state: guides/device-state.md
+  - Reference:
       - Clients: api/clients.md
       - Device discovery: api/discovery.md
       - Displays and frames: api/display.md

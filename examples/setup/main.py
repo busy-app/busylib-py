@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="setup",
         description=(
-            "Walk a Busy Bar through first-time setup: firmware, Wi-Fi, "
+            "Walk a BUSY Bar through first-time setup: firmware, Wi-Fi, "
             "timezone, device name, and cloud account. Steps the device "
             "already satisfies are shown as done and skipped."
         ),

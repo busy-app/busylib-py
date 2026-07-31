@@ -28,23 +28,23 @@ def get_available_commands(controller):
 
 def main():
     """
-    Run the Busy Bar telnet CLI wrapper.
+    Run the BUSY Bar telnet CLI wrapper.
 
     The command list is discovered dynamically from the controller instance.
     """
-    parser = argparse.ArgumentParser(description="Busy Bar USB Control CLI")
+    parser = argparse.ArgumentParser(description="BUSY Bar USB Control CLI")
     parser.add_argument(
         "-H",
         "--host",
         default="10.0.4.20",
-        help="Telnet host for the Busy Bar CLI",
+        help="Telnet host for the BUSY Bar CLI",
     )
     parser.add_argument(
         "-p",
         "--port",
         type=int,
         default=23,
-        help="Telnet port for the Busy Bar CLI",
+        help="Telnet port for the BUSY Bar CLI",
     )
 
     # Introspection-based command structure
