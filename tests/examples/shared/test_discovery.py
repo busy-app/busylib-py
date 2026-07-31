@@ -4,7 +4,7 @@ import pytest
 
 from busylib.devices import BusyBarAddress, BusyBarAddressAffinity, BusyBarDevice
 from busylib.types import HttpAccessInfo
-from examples.remote import discovery
+from examples.shared import discovery
 
 
 def _device(name: str, ip: str, temporary_id: str = "id") -> BusyBarDevice:

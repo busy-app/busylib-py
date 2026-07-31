@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+
+from examples.remote.commands.record_audio import InputCapture
+from examples.remote.commands.setup import CapturePrompt
+from examples.setup.prompts import SetupAborted
+
+
+class Harness:
+    """
+    Drives a CapturePrompt by feeding raw bytes into its input capture.
+    """
+
+    def __init__(self) -> None:
+        self.capture = InputCapture()
+        self.messages: list[str] = []
+        self.status_lines: list[str | None] = []
+        self.prompt = CapturePrompt(
+            self.capture,
+            self.messages.append,
+            self.status_lines.append,
+        )
+
+    async def feed(self, coro, *chunks: bytes):
+        """
+        Await `coro` while feeding it raw input chunks.
+        """
+        task = asyncio.ensure_future(coro)
+        for chunk in chunks:
+            for _ in range(100):
+                if self.capture.handle(chunk):
+                    break
+                await asyncio.sleep(0)
+            else:
+                raise AssertionError("capture never became active")
+        return await task
+
+
+@pytest.mark.asyncio
+async def test_text_reads_a_line() -> None:
+    """
+    Printable bytes accumulate and Enter submits the line.
+    """
+    h = Harness()
+    value = await h.feed(h.prompt.text("SSID"), b"home", b"\r")
+    assert value == "home"
+
+
+@pytest.mark.asyncio
+async def test_backspace_removes_last_character() -> None:
+    """
+    Both backspace codes delete the previous character.
+    """
+    h = Harness()
+    value = await h.feed(h.prompt.text("SSID"), b"homez", b"\x7f", b"\r")
+    assert value == "home"
+
+
+@pytest.mark.asyncio
+async def test_bare_escape_aborts_the_wizard() -> None:
+    """
+    A standalone Escape leaves the wizard.
+
+    It is only treated as a quit after nothing follows it, so the decision
+    waits out the escape-sequence timeout.
+    """
+    h = Harness()
+    with pytest.raises(SetupAborted):
+        await h.feed(h.prompt.text("SSID"), b"ho", b"\x1b")
+
+
+@pytest.mark.asyncio
+async def test_ctrl_c_aborts_the_wizard() -> None:
+    """
+    Ctrl+C leaves the wizard immediately.
+    """
+    h = Harness()
+    with pytest.raises(SetupAborted):
+        await h.feed(h.prompt.text("SSID"), b"\x03")
+
+
+@pytest.mark.asyncio
+async def test_arrow_keys_do_not_abort() -> None:
+    """
+    Arrow keys must not be mistaken for Escape.
+
+    Every arrow starts with ESC, and in a full-screen TUI arrows are the
+    first thing a user reaches for - treating them as a quit silently
+    skipped the step.
+    """
+    h = Harness()
+    value = await h.feed(
+        h.prompt.text("SSID"), b"ho", b"\x1b[A", b"\x1b[B", b"me", b"\r"
+    )
+    assert value == "home"
+
+
+@pytest.mark.asyncio
+async def test_empty_input_falls_back_to_default() -> None:
+    """
+    Submitting nothing keeps the offered default.
+    """
+    h = Harness()
+    value = await h.feed(h.prompt.text("Timezone", default="Europe/Moscow"), b"\r")
+    assert value == "Europe/Moscow"
+
+
+@pytest.mark.asyncio
+async def test_secret_is_masked_in_the_status_line() -> None:
+    """
+    A secret is echoed as asterisks and never in cleartext.
+    """
+    h = Harness()
+    value = await h.feed(h.prompt.secret("Password"), b"hunter2", b"\r")
+    assert value == "hunter2"
+    painted = [line for line in h.status_lines if line]
+    assert any("*******" in line for line in painted)
+    assert not any("hunter2" in line for line in painted)
+
+
+@pytest.mark.asyncio
+async def test_status_line_is_cleared_afterwards() -> None:
+    """
+    The transient status line is reset once the prompt finishes.
+    """
+    h = Harness()
+    await h.feed(h.prompt.text("SSID"), b"x", b"\r")
+    assert h.status_lines[-1] is None
+
+
+@pytest.mark.asyncio
+async def test_confirm_defaults_on_empty_answer() -> None:
+    """
+    Enter alone accepts the default answer.
+    """
+    h = Harness()
+    assert await h.feed(h.prompt.confirm("Install?", default=True), b"\r") is True
+
+    h2 = Harness()
+    assert await h2.feed(h2.prompt.confirm("Install?", default=False), b"\r") is False
+
+
+@pytest.mark.asyncio
+async def test_confirm_reads_explicit_answer() -> None:
+    """
+    An explicit y/n answer overrides the default.
+    """
+    h = Harness()
+    assert (
+        await h.feed(h.prompt.confirm("Install?", default=False), b"y", b"\r") is True
+    )
+
+
+@pytest.mark.asyncio
+async def test_choose_returns_selected_index() -> None:
+    """
+    A numbered selection maps to a zero-based index.
+    """
+    h = Harness()
+    index = await h.feed(h.prompt.choose("Network:", ["a", "b", "c"]), b"2", b"\r")
+    assert index == 1
+
+
+@pytest.mark.asyncio
+async def test_multibyte_utf8_input_is_reassembled() -> None:
+    """
+    Non-ASCII input arrives byte by byte and must survive intact.
+
+    A Wi-Fi SSID or password with non-ASCII characters would otherwise be
+    mangled into one Latin-1 character per byte.
+    """
+    h = Harness()
+    ssid = "Кафе-Wi-Fi"
+    value = await h.feed(h.prompt.text("SSID"), ssid.encode("utf-8"), b"\r")
+    assert value == ssid
+
+
+@pytest.mark.asyncio
+async def test_backspace_removes_a_whole_multibyte_character() -> None:
+    """
+    Backspace deletes a character, not a single UTF-8 byte.
+    """
+    h = Harness()
+    value = await h.feed(h.prompt.text("SSID"), "документ".encode(), b"\x7f", b"\r")
+    assert value == "докумен"
+
+
+@pytest.mark.asyncio
+async def test_multibyte_character_split_across_chunks() -> None:
+    """
+    A character split across two reads is still assembled correctly.
+    """
+    h = Harness()
+    encoded = "ж".encode()
+    value = await h.feed(h.prompt.text("SSID"), encoded[:1], encoded[1:], b"\r")
+    assert value == "ж"
