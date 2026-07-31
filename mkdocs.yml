@@ -1,6 +1,6 @@
 site_name: busylib
 site_description: Python library for BUSY Bar API
-site_url: https://busylib.readthedocs.io/
+site_url: https://busy-app.github.io/busylib-py/
 repo_url: https://github.com/busy-app/busylib-py
 repo_name: busy-app/busylib-py
 edit_uri: edit/main/docs/

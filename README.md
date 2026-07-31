@@ -447,8 +447,7 @@ scripts with dry-run support.
 
 ## Links
 
-- Documentation: https://busylib.readthedocs.io
-- Documentation (GitHub Pages mirror): https://busy-app.github.io/busylib-py/
+- Documentation: https://busy-app.github.io/busylib-py/
 - Source: https://github.com/busy-app/busylib-py
 - PyPI: https://pypi.org/project/busylib/
 
