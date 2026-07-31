@@ -6,10 +6,15 @@ from typing import TypeAlias
 
 from .types import DisplayName
 
-_PIXEL_FORMAT_BLOCK_SIZE = {
+# Block size the RLE codec compares for repeats, per pixel format. This is
+# NOT bytes-per-pixel: it mirrors the firmware's screen streamer, which uses
+# `blk_size = display_id == Front ? 3 : 2` in
+# applications/services/state_publisher/screen_streamer.c - so L4 (the back
+# display, 2 pixels packed per byte) is compared in 2-byte blocks.
+_RLE_BLOCK_SIZE = {
     "RGB888": 3,
     "L8": 1,
-    "L4": 1,  # packed, 2 pixels per byte
+    "L4": 2,
 }
 
 
@@ -136,7 +141,7 @@ def decode_frame_data(encoding: str, pixel_format: str, data: bytes) -> bytes:
     protobuf message (`PLAIN`/`RUN_LENGTH`/`DEFLATE`/`DEFLATE_RUN_LENGTH` and
     `RGB888`/`L8`/`L4`), so no guessing based on frame byte length is needed.
     """
-    block_size = _PIXEL_FORMAT_BLOCK_SIZE.get(pixel_format)
+    block_size = _RLE_BLOCK_SIZE.get(pixel_format)
     if block_size is None:
         raise ValueError(f"Unsupported frame pixel_format: {pixel_format}")
 

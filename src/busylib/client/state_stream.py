@@ -138,7 +138,7 @@ class AsyncStateStreamMixin(AsyncClientBase):
             if status_code in (401, 403):
                 raise exceptions.BusyBarWebSocketError(
                     "Status WebSocket streaming failed: authentication required "
-                    f"(HTTP {status_code}). Pass a valid --token",
+                    f"(HTTP {status_code}). Provide a valid API token",
                     path="/api/status/ws",
                     original=exc,
                 ) from exc

@@ -20,7 +20,7 @@ from examples.remote.commands.name_set import (
         "x" * MAX_NAME_LENGTH,
         "Anna's Busy Bar",
         "!()-_=+;:,.?'|@#$%^&",
-        "*[]{}/\\\"<>",
+        '*[]{}/\\"<>',
     ],
 )
 def test_validate_device_name_accepts_valid_names(name: str) -> None:

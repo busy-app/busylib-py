@@ -273,6 +273,10 @@ def _apply_frame_update(snapshot: DeviceSnapshot, frame: dict[str, object]) -> N
     pixel_format = frame.get("pixel_format", "RGB888")
     if not isinstance(encoding, str) or not isinstance(pixel_format, str):
         return
+
+    screen = frame.get("screen", "FRONT")
+    spec = display.get_display_spec(1 if screen == "BACK" else 0)
+
     try:
         # `validate=True` matters: without it b64decode silently discards
         # characters outside the alphabet, turning a corrupted frame into
@@ -282,11 +286,28 @@ def _apply_frame_update(snapshot: DeviceSnapshot, frame: dict[str, object]) -> N
             pixel_format,
             base64.b64decode(raw_data, validate=True),
         )
-    except (ValueError, TypeError) as exc:
+    except Exception as exc:  # noqa: BLE001
+        # Deliberately broad: this is a trust boundary for device input, and
+        # decoding reaches zlib, which raises zlib.error straight off
+        # Exception rather than ValueError. Letting that escape would kill
+        # the whole state-stream task over one bad frame.
         logger.warning("Failed to decode screen frame update: %s", exc)
         return
 
-    screen = frame.get("screen", "FRONT")
+    expected = spec.width * spec.height * 3
+    if len(decoded) != expected:
+        # The frame carries its own width/height, but a mismatched payload
+        # would reach the renderer and fail there while unpacking pixels.
+        logger.warning(
+            "Ignoring %s frame update: got %d bytes, expected %d for %dx%d",
+            spec.name.value,
+            len(decoded),
+            expected,
+            spec.width,
+            spec.height,
+        )
+        return
+
     if screen == "BACK":
         snapshot.screen_back = decoded
     else:

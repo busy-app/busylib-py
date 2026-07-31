@@ -623,6 +623,27 @@ def test_decode_frame_data_deflate_rgb888() -> None:
     assert decoded == raw
 
 
+def test_decode_frame_data_run_length_l4_uses_two_byte_blocks() -> None:
+    """
+    L4 frames are RLE-compressed in 2-byte blocks, not 1.
+
+    The firmware's screen streamer picks the block size per display -
+    `blk_size = display_id == Front ? 3 : 2` - so decoding L4 with a 1-byte
+    block would silently produce wrong pixels rather than an error.
+    """
+    # One repeat block: 3 copies of the 2-byte pair 0x21 0x43.
+    rle = bytes([3, 0x21, 0x43])
+
+    decoded = display.decode_frame_data("RUN_LENGTH", "L4", rle)
+
+    # 3 blocks x 2 bytes x 2 pixels/byte = 12 pixels, each expanded to RGB.
+    assert len(decoded) == 12 * 3
+    assert decoded[:3] == bytes([17, 17, 17])  # low nibble of 0x21
+    assert decoded[3:6] == bytes([34, 34, 34])  # high nibble of 0x21
+    assert decoded[6:9] == bytes([51, 51, 51])  # low nibble of 0x43
+    assert decoded[9:12] == bytes([68, 68, 68])  # high nibble of 0x43
+
+
 def test_decode_frame_data_deflate_run_length_l8() -> None:
     """
     DEFLATE_RUN_LENGTH first inflates, then RLE-decodes the result.
@@ -630,9 +651,7 @@ def test_decode_frame_data_deflate_run_length_l8() -> None:
     import zlib
 
     rle = bytes([3, 42])  # repeat single L8 byte 3 times
-    decoded = display.decode_frame_data(
-        "DEFLATE_RUN_LENGTH", "L8", zlib.compress(rle)
-    )
+    decoded = display.decode_frame_data("DEFLATE_RUN_LENGTH", "L8", zlib.compress(rle))
     assert decoded == bytes([42, 42, 42] * 3)
 
 

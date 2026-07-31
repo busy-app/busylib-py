@@ -48,9 +48,7 @@ def test_arrow_keys_are_inverted_to_match_firmware_encoder_semantics(
         (b" ", InputKey.START),
     ],
 )
-def test_non_arrow_bindings_are_unchanged(
-    sequence: bytes, expected: InputKey
-) -> None:
+def test_non_arrow_bindings_are_unchanged(sequence: bytes, expected: InputKey) -> None:
     """
     Only the vertical arrows are inverted; other bindings map directly.
     """

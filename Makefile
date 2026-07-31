@@ -124,7 +124,8 @@ proto-sync:
 	@echo "Rewriting protoc-generated absolute imports to package-relative imports"
 	@find "$(PROTO_OUT_DIR)" -name '*_pb2.py' -exec sed -i.bak \
 		-E 's/^import ([a-z_]+_pb2) as /from . import \1 as /; s/^from (state|util) import/from .\1 import/' \
-		{} + -exec rm -f {}.bak \;
+		{} +
+	@find "$(PROTO_OUT_DIR)" -name '*_pb2.py.bak' -delete
 
 # Run example by directory name via uv.
 # Usage: make run-example remote -- --flag value
