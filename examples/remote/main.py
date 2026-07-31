@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from typing import Literal, get_args, get_origin
 
+from examples.remote.discovery import resolve_connection
 from examples.remote.runner import _run as runner
 from examples.remote.constants import (
     DEFAULT_LOG_LEVEL,
@@ -45,9 +47,23 @@ def _select_icon_set(mode: str) -> dict[str, str]:
 ICONS = _select_icon_set(settings.icon_mode)
 
 
+def _field_options(name: str, annotation: object) -> tuple[str, ...] | None:
+    """
+    Return valid choices for a settings field, if it has a fixed set.
+
+    `icon_mode` is intentionally typed as plain `str` (not `Literal`) since
+    its valid values come from `ICON_SETS`, not a fixed enum in the model.
+    """
+    if name == "icon_mode":
+        return tuple(sorted(ICON_SETS))
+    if get_origin(annotation) is Literal:
+        return tuple(str(option) for option in get_args(annotation))
+    return None
+
+
 def _build_env_help_epilog() -> str:
     """
-    Build `-h` epilog with supported env variables and default values.
+    Build `-h` epilog with supported env variables, defaults, and options.
 
     The list is derived from `RemoteSettings` fields and env prefix.
     """
@@ -56,7 +72,11 @@ def _build_env_help_epilog() -> str:
     for name, field in RemoteSettings.model_fields.items():
         env_name = f"{env_prefix}{name}".upper()
         default_value = field.get_default(call_default_factory=True)
-        lines.append(f"  {env_name} (default: {default_value!r})")
+        line = f"  {env_name} (default: {default_value!r})"
+        options = _field_options(name, field.annotation)
+        if options:
+            line += f" [options: {', '.join(options)}]"
+        lines.append(line)
     return "\n".join(lines)
 
 
@@ -70,7 +90,8 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_build_env_help_epilog(),
     )
-    parser.add_argument("--addr", default=None, help=TEXT_ARG_ADDR)
+    parser.add_argument("addr_positional", nargs="?", default=None, help=TEXT_ARG_ADDR)
+    parser.add_argument("--addr", dest="addr", default=None, help=TEXT_ARG_ADDR)
     parser.add_argument("--token", default=None, help=TEXT_ARG_TOKEN)
     parser.add_argument(
         "--http-poll-interval",
@@ -111,7 +132,10 @@ def parse_args() -> argparse.Namespace:
         default=settings.frame_mode,
         help=TEXT_ARG_FRAME,
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.addr is None:
+        args.addr = args.addr_positional
+    return args
 
 
 async def _run(args: argparse.Namespace) -> None:
@@ -141,6 +165,8 @@ def main() -> None:
     args = None
     try:
         args = parse_args()
+        if args.addr is None:
+            args.addr, args.token = resolve_connection(args.token)
         asyncio.run(_run(args))
     except KeyboardInterrupt as exc:
         prefix, message = _format_error_message(exc)

@@ -97,8 +97,17 @@ def _encode_human_key(spec: str) -> bytes:
 
 
 _DEFAULT_KEYMAP_HUMAN: dict[str, InputKey] = {
-    "up": InputKey.UP,
-    "down": InputKey.DOWN,
+    # The firmware's `up`/`down` are encoder directions, not visual cursor
+    # movement: across every GUI widget `InputKeyUp` focuses the *next* item
+    # (moving the highlight visually down) and `InputKeyDown` focuses the
+    # previous one. Map the arrows inverted so the highlight follows the
+    # arrow actually pressed.
+    #
+    # Trade-off: the same encoder direction also edits values, where the
+    # firmware's `up` increments - so with this mapping the arrows are
+    # inverted while editing sliders/settings.
+    "up": InputKey.DOWN,
+    "down": InputKey.UP,
     "right": InputKey.OK,
     "enter": InputKey.OK,
     "return": InputKey.OK,

@@ -28,15 +28,10 @@ from examples.remote.constants import (
     TEXT_INIT_START,
     TEXT_INIT_STREAMING,
     TEXT_INIT_WAIT_FRAME,
-    TEXT_INIT_WS,
     TEXT_POLL_FAIL,
     TEXT_POLL_LEN,
     TEXT_STOPPED,
-    TEXT_STREAM_EMPTY,
-    TEXT_STREAM_LEN,
     TEXT_STREAMING_INFO,
-    TEXT_WS_STREAM,
-    TEXT_WS_STREAM_VERBOSE,
 )
 from .periodic_tasks import (
     build_periodic_tasks,
@@ -369,56 +364,6 @@ async def _run_command_queue(
         await task()
 
 
-async def _stream_ws(
-    client: AsyncBusyBar,
-    spec: display.DisplaySpec,
-    stop_event: asyncio.Event,
-    renderer: TerminalRenderer,
-    status_message: Callable[[str], None],
-) -> None:
-    """
-    Stream screen frames over WebSocket and render them.
-
-    Exceptions are re-raised so the caller can report failures.
-    """
-    base_addr = client.base_url
-    expected_len = spec.width * spec.height * 3
-
-    logger.info(TEXT_WS_STREAM_VERBOSE.format(base=base_addr))
-    status_message(TEXT_INIT_WS)
-    status_message(TEXT_INIT_WAIT_FRAME)
-    first_frame = True
-    try:
-        # screen_ws yields bytes | str
-        async for message in client.screen_ws(spec):
-            if stop_event.is_set():
-                break
-            if not message:
-                logger.debug(TEXT_STREAM_EMPTY)
-                continue
-
-            if isinstance(message, str):
-                logger.debug("Server message: %s", message)
-                continue
-            if first_frame:
-                status_message(TEXT_INIT_STREAMING)
-                first_frame = False
-
-            if len(message) != expected_len:
-                logger.debug(
-                    TEXT_STREAM_LEN.format(
-                        size=len(message),
-                        expected=expected_len,
-                    )
-                )
-            renderer.render(message)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("WebSocket stream error: %s", exc)
-        raise
-    finally:
-        stop_event.set()
-
-
 async def _poll_http(
     client: AsyncBusyBar,
     spec: display.DisplaySpec,
@@ -540,6 +485,13 @@ async def _run(
         if getattr(client, "is_cloud", False):
             if poll_interval is None or poll_interval < 1.0:
                 poll_interval = 1.0
+        # Firmware on API v18.0.0+ removed the dedicated `/api/screen/ws`
+        # WebSocket entirely; front-display frames now arrive embedded in the
+        # same `/api/status/ws` protobuf state stream instead (see
+        # `stream_dashboard_state(render_screen=True)` below). Explicit
+        # `--http-poll-interval` still selects the legacy raw HTTP polling
+        # path for firmware that lacks frame-in-state updates.
+        use_state_stream_screen = poll_interval is None or poll_interval <= 0
         parsed_addr = urlparse(base_url)
         if poll_interval is not None and poll_interval > 0:
             protocol = parsed_addr.scheme or "http"
@@ -605,11 +557,14 @@ async def _run(
                     client=client,
                     renderer=renderer,
                     initial_snapshot=initial_snapshot,
+                    render_screen=use_state_stream_screen,
                 )
             )
         )
 
-        if poll_interval is not None and poll_interval > 0:
+        if use_state_stream_screen:
+            logger.info("Streaming screen frames via /api/status/ws: %s", base_url)
+        else:
             logger.info(
                 TEXT_HTTP_POLL.format(
                     interval=poll_interval,
@@ -625,19 +580,6 @@ async def _run(
                         stop_event=stop_event,
                         renderer=renderer,
                         clear_screen=clear_screen,
-                        status_message=_emit_status,
-                    )
-                )
-            )
-        else:
-            logger.info(TEXT_WS_STREAM.format(addr=base_url))
-            tasks.append(
-                asyncio.create_task(
-                    _stream_ws(
-                        client=client,
-                        spec=spec,
-                        stop_event=stop_event,
-                        renderer=renderer,
                         status_message=_emit_status,
                     )
                 )

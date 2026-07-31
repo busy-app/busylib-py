@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
@@ -8,7 +9,7 @@ from typing import TypeAlias, TypeVar, cast
 
 from pydantic import BaseModel, Field
 
-from busylib import types
+from busylib import display, types
 from busylib.client import AsyncBusyBar
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,8 @@ class DeviceSnapshot(BaseModel):
     update_available_version: str | None = None
     field_errors: dict[str, str] = Field(default_factory=dict)
     raw_time: object | None = Field(default=None, exclude=True)
+    screen_front: bytes | None = Field(default=None, exclude=True)
+    screen_back: bytes | None = Field(default=None, exclude=True)
 
     model_config = {"extra": "ignore"}
 
@@ -248,7 +251,67 @@ def apply_state_stream_update(
             # Keep latest timezone payload in raw_time for diagnostics.
             next_snapshot.raw_time = timezone
 
+        frame = update.get("frame")
+        if isinstance(frame, dict):
+            _apply_frame_update(next_snapshot, frame)
+
     return next_snapshot
+
+
+def _apply_frame_update(snapshot: DeviceSnapshot, frame: dict[str, object]) -> None:
+    """
+    Decode one `BSB_Frame.Frame` state update and store it on the snapshot.
+
+    `screen`/`encoding`/`pixel_format` are enum names (protobuf JSON mapping
+    default) and `data` is base64-encoded bytes; malformed frames are logged
+    and skipped rather than corrupting the current snapshot.
+    """
+    raw_data = frame.get("data")
+    if not isinstance(raw_data, str):
+        return
+    encoding = frame.get("encoding", "PLAIN")
+    pixel_format = frame.get("pixel_format", "RGB888")
+    if not isinstance(encoding, str) or not isinstance(pixel_format, str):
+        return
+
+    screen = frame.get("screen", "FRONT")
+    spec = display.get_display_spec(1 if screen == "BACK" else 0)
+
+    try:
+        # `validate=True` matters: without it b64decode silently discards
+        # characters outside the alphabet, turning a corrupted frame into
+        # plausible-looking but wrong pixels instead of an error we can skip.
+        decoded = display.decode_frame_data(
+            encoding,
+            pixel_format,
+            base64.b64decode(raw_data, validate=True),
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Deliberately broad: this is a trust boundary for device input, and
+        # decoding reaches zlib, which raises zlib.error straight off
+        # Exception rather than ValueError. Letting that escape would kill
+        # the whole state-stream task over one bad frame.
+        logger.warning("Failed to decode screen frame update: %s", exc)
+        return
+
+    expected = spec.width * spec.height * 3
+    if len(decoded) != expected:
+        # The frame carries its own width/height, but a mismatched payload
+        # would reach the renderer and fail there while unpacking pixels.
+        logger.warning(
+            "Ignoring %s frame update: got %d bytes, expected %d for %dx%d",
+            spec.name.value,
+            len(decoded),
+            expected,
+            spec.width,
+            spec.height,
+        )
+        return
+
+    if screen == "BACK":
+        snapshot.screen_back = decoded
+    else:
+        snapshot.screen_front = decoded
 
 
 def _snapshot_changed_fields(

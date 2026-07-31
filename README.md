@@ -109,7 +109,8 @@ shim:
 
 ## Agent-Assisted Scripts
 
-This repository includes [`AGENTS.md`](AGENTS.md), a compact guide for coding
+This repository includes
+[`AGENTS.md`](https://github.com/busy-app/busylib-py/blob/main/AGENTS.md), a compact guide for coding
 Busy Bar scripts and small apps with AI coding agents. It covers how to inspect
 the installed `busylib` API before coding, avoid invented methods or payloads,
 reuse clients safely, keep device effects bounded, and structure non-trivial
@@ -259,6 +260,22 @@ for device in BusyBarDevices.discover():
 #   Over Wi-Fi: 192.168.100.2
 ```
 
+The `remote` example (`make run-example remote`, or
+`uv run python -m examples.remote.main`) uses this automatically when no
+`--addr`/address is given: it discovers devices via mDNS, lets you pick one
+by name if more than one is found, and prompts for the access key/PIN
+(masked, via `getpass`) if the selected device requires one and no
+`--token` was given. Shipped firmware doesn't advertise `_busybar._tcp` for
+mDNS discovery yet, so if nothing is found it falls back to the well-known
+static USB address (`10.0.4.20`) that a USB-connected bar is reachable at.
+
+```bash
+uv run python -m examples.remote.main
+# No --addr given; discovering Busy Bar devices on the network...
+# Found one Busy Bar device: "Anna's Busy Bar"
+# Enter access key/PIN for "Anna's Busy Bar" (leave blank if none):
+```
+
 ### Preparing and Executing Requests Separately
 
 You can prepare a low-level request first and execute it later, optionally
@@ -308,6 +325,7 @@ response = bb.storage_remove(path="/my-app/data.txt")
 ## Links
 
 - Documentation: https://busylib.readthedocs.io
+- Documentation (GitHub Pages mirror): https://busy-app.github.io/busylib-py/
 - Source: https://github.com/busy-app/busylib-py
 - PyPI: https://pypi.org/project/busylib/
 

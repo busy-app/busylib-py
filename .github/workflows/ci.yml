@@ -30,3 +30,82 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+  # Lint and type checks ran only in pre-commit hooks, so formatting and
+  # typing drifted for anyone who committed without them installed.
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e . --group dev
+
+      - name: Check lint rules
+        run: python -m ruff check src/busylib tests examples
+
+      - name: Check formatting
+        run: python -m ruff format --check src/busylib tests examples
+
+      - name: Check pyproject formatting
+        run: python -m pyproject_fmt --check pyproject.toml
+
+      - name: Check types
+        run: python -m pyright src/busylib tests
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          # Keep in sync with the Python version in .readthedocs.yaml so a
+          # build that passes here also passes on Read the Docs.
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e '.[docs]'
+
+      - name: Build documentation
+        run: mkdocs build --strict
+
+      - name: Upload documentation artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  # Publishes the site built above to GitHub Pages. Requires Pages to be
+  # enabled once in the repository settings with "GitHub Actions" as the
+  # source; until then this job fails and the rest of CI is unaffected.
+  deploy-docs:
+    needs: docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

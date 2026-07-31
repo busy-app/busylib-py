@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-cov lint typecheck quality format clean build upload docs run-example proto-sync
+.PHONY: help install install-dev test test-cov lint typecheck quality format clean build upload docs docs-serve run-example proto-sync
 
 PROTO_REPO ?= https://github.com/flipperdevices/bsb-protobuf
 PROTO_DIR ?= .cache/bsb-protobuf
@@ -39,7 +39,8 @@ help:
 	@echo "  clean       - Clean build artifacts"
 	@echo "  build       - Build package"
 	@echo "  upload      - Upload to PyPI"
-	@echo "  docs        - Generate documentation"
+	@echo "  docs        - Build the documentation site into ./site"
+	@echo "  docs-serve  - Serve the documentation locally with live reload"
 	@echo "  proto-sync  - Pull proto schema from flipperdevices/bsb-protobuf and regenerate state stream Python files"
 	@echo "  run-example - Run example main module via uv (usage: make run-example <name> [args...])"
 
@@ -95,9 +96,13 @@ build: clean
 upload: build
 	uv run twine upload dist/*
 
-# Generate documentation (placeholder)
+# Build the documentation site into ./site
 docs:
-	@echo "Documentation generation not implemented yet"
+	uv run --extra docs mkdocs build --strict
+
+# Serve the documentation locally with live reload
+docs-serve:
+	uv run --extra docs mkdocs serve
 
 # Regenerate protobuf models for status websocket stream support.
 # By default this target keeps a local checkout in .cache/bsb-protobuf.
@@ -116,6 +121,11 @@ proto-sync:
 	@command -v uv >/dev/null 2>&1 || (echo "uv not found in PATH" && exit 1)
 	@mkdir -p "$(PROTO_OUT_DIR)"
 	uv run python -m grpc_tools.protoc -I "$(PROTO_DIR)" --python_out="$(PROTO_OUT_DIR)" $(addprefix $(PROTO_DIR)/,$(PROTO_FILES))
+	@echo "Rewriting protoc-generated absolute imports to package-relative imports"
+	@find "$(PROTO_OUT_DIR)" -name '*_pb2.py' -exec sed -i.bak \
+		-E 's/^import ([a-z_]+_pb2) as /from . import \1 as /; s/^from (state|util) import/from .\1 import/' \
+		{} +
+	@find "$(PROTO_OUT_DIR)" -name '*_pb2.py.bak' -delete
 
 # Run example by directory name via uv.
 # Usage: make run-example remote -- --flag value

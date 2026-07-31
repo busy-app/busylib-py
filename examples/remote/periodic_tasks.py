@@ -36,15 +36,26 @@ async def stream_dashboard_state(
     renderer: TerminalRenderer,
     *,
     initial_snapshot: DeviceSnapshot,
+    render_screen: bool = False,
 ) -> None:
     """
     Keep dashboard info in sync from `/api/status/ws` protobuf updates.
 
     The initial snapshot is collected via HTTP once. After that, only
-    websocket state updates are applied.
+    websocket state updates are applied. Firmware without a separate screen
+    WebSocket embeds decoded front-display frames directly in this same
+    state stream (`BSB_Frame.Frame` updates); pass `render_screen=True` to
+    forward those onto the renderer as they arrive.
     """
     store = DeviceStateStore(initial_snapshot)
     store.on_state(lambda snapshot: renderer.update_info(snapshot=snapshot))
+    if render_screen:
+
+        def _on_diff(changed: set[str], snapshot: DeviceSnapshot) -> None:
+            if "screen_front" in changed and snapshot.screen_front is not None:
+                renderer.render(snapshot.screen_front)
+
+        store.on_diff(_on_diff)
     renderer.update_info(snapshot=store.snapshot)
     async for message in client.stream_status_ws():
         if not isinstance(message, dict):
