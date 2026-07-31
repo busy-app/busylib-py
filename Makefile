@@ -32,7 +32,7 @@ help:
 	@echo "  install-dev - Install in development mode with dev dependencies"
 	@echo "  test        - Run tests"
 	@echo "  test-cov    - Run tests with coverage"
-	@echo "  lint        - Run pre-commit style lint checks (ruff + pyproject-fmt --check)"
+	@echo "  lint        - Run lint checks over src, tests and examples (ruff + pyproject-fmt)"
 	@echo "  typecheck   - Run pyright for src/busylib and tests"
 	@echo "  quality     - Run full local quality gates (lint + typecheck + test)"
 	@echo "  format      - Format code with ruff"
@@ -60,10 +60,10 @@ test:
 test-cov:
 	uv run pytest -q --cov=src/busylib --cov-report=term --cov-report=html
 
-# Run linting
+# Run linting (same scope as the CI lint job)
 lint:
-	uv run ruff check src/busylib tests
-	uv run ruff format --check src/busylib tests
+	uv run ruff check src/busylib tests examples
+	uv run ruff format --check src/busylib tests examples
 	uv run pyproject-fmt --check pyproject.toml
 
 # Run static typing checks
