@@ -20,6 +20,12 @@ class WifiMixin(SyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     def wifi_enable(self) -> types.SuccessResponse:
+        """
+        Removed from the device API.
+
+        No supported firmware serves POST /api/wifi/enable, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `wifi_connect() / wifi_disconnect()` instead.
+        """
         # Unreachable: the decorator raises before the body runs.
         ...
 
@@ -29,6 +35,12 @@ class WifiMixin(SyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     def wifi_disable(self) -> types.SuccessResponse:
+        """
+        Removed from the device API.
+
+        No supported firmware serves POST /api/wifi/disable, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `wifi_connect() / wifi_disconnect()` instead.
+        """
         # Unreachable: the decorator raises before the body runs.
         ...
 
@@ -89,6 +101,12 @@ class AsyncWifiMixin(AsyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     async def wifi_enable(self) -> types.SuccessResponse:
+        """
+        Removed from the device API.
+
+        No supported firmware serves POST /api/wifi/enable, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `wifi_connect() / wifi_disconnect()` instead.
+        """
         # Unreachable: the decorator raises before the body runs.
         ...
 
@@ -98,6 +116,12 @@ class AsyncWifiMixin(AsyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     async def wifi_disable(self) -> types.SuccessResponse:
+        """
+        Removed from the device API.
+
+        No supported firmware serves POST /api/wifi/disable, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `wifi_connect() / wifi_disconnect()` instead.
+        """
         # Unreachable: the decorator raises before the body runs.
         ...
 

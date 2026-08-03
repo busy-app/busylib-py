@@ -113,7 +113,10 @@ class AccountMixin(SyncClientBase):
     )
     def account_profile(self) -> types.AccountProfile:
         """
-        Fetch legacy MQTT profile via GET /api/account/profile.
+        Removed from the device API.
+
+        No supported firmware serves GET /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend()` instead.
         """
         # Unreachable: the decorator raises before the body runs.
         ...
@@ -129,7 +132,10 @@ class AccountMixin(SyncClientBase):
         custom_url: str | None = None,
     ) -> types.SuccessResponse:
         """
-        Set legacy MQTT profile via POST /api/account/profile.
+        Removed from the device API.
+
+        No supported firmware serves POST /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend_set()` instead.
         """
         # Unreachable: the decorator raises before the body runs.
         ...
@@ -237,7 +243,10 @@ class AsyncAccountMixin(AsyncClientBase):
     )
     async def account_profile(self) -> types.AccountProfile:
         """
-        Fetch legacy MQTT profile via GET /api/account/profile.
+        Removed from the device API.
+
+        No supported firmware serves GET /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend()` instead.
         """
         # Unreachable: the decorator raises before the body runs.
         ...
@@ -253,7 +262,10 @@ class AsyncAccountMixin(AsyncClientBase):
         custom_url: str | None = None,
     ) -> types.SuccessResponse:
         """
-        Set legacy MQTT profile via POST /api/account/profile.
+        Removed from the device API.
+
+        No supported firmware serves POST /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend_set()` instead.
         """
         # Unreachable: the decorator raises before the body runs.
         ...

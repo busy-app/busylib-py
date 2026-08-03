@@ -75,13 +75,6 @@ def removed_endpoint(
     device.
     """
 
-    note = (
-        f"\n\nRemoved from the device API: no supported firmware serves "
-        f"{method} {path}, so calling this raises "
-        f"`BusyBarRemovedEndpointError`."
-        + (f" Use `{replacement}` instead." if replacement else "")
-    )
-
     def decorator(func: F) -> F:
         metadata = MethodCompatibility(
             path=path,
@@ -114,8 +107,6 @@ def removed_endpoint(
 
             wrapper = sync_wrapper
 
-        # Say so in the rendered API reference, not only in the guide.
-        wrapper.__doc__ = (func.__doc__ or "").rstrip() + note
         setattr(wrapper, "__busy_openapi__", metadata)
         return cast(F, wrapper)
 
