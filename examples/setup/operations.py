@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from busylib import types, versioning
+from busylib import exceptions, types, versioning
 from busylib.client import AsyncBusyBar
 
 logger = logging.getLogger(__name__)
@@ -113,7 +113,9 @@ async def find_available_update(
     Ask the device to check for an update and wait for the verdict.
 
     Returns the offered version, or None when the check finishes with
-    nothing to install.
+    nothing to install. Raises `TimeoutError` if the device never reports a
+    verdict - that is not the same as "no update", and saying so would
+    repeat the mistake this function exists to avoid.
 
     The device keeps the previous check's outcome until a new one lands, and
     the check it performs on request is asynchronous, so the state has to be
@@ -144,7 +146,11 @@ async def find_available_update(
         result, event, version = _check_state(status)
 
         if event == CHECK_EVENT_START:
+            # The device is telling us the check has begun, so whatever
+            # verdict this same response carries is still the previous
+            # one. Note that it ran, and wait for an answer.
             seen_running = True
+            continue
 
         if not seen_running and (result, event, version) == before:
             # Nothing has moved yet. Give the device a few polls to start,
@@ -158,7 +164,10 @@ async def find_available_update(
             return version
         if result in CHECK_STATUS_TERMINAL_NO_UPDATE:
             return None
-    return None
+
+    raise TimeoutError(
+        f"The device did not finish checking for an update within {timeout:.0f}s"
+    )
 
 
 async def install_update(client: AsyncBusyBar, version: str) -> None:
@@ -187,7 +196,9 @@ async def scan_networks(client: AsyncBusyBar) -> list[types.Network]:
     """
     try:
         found = await client.wifi_networks()
-    except Exception as exc:  # noqa: BLE001
+    except exceptions.BusyBarAPIError as exc:
+        # Narrow on purpose: this covers the device refusing to scan, not a
+        # bad token or a dropped connection, which the caller should see.
         logger.info("setup: network scan unavailable (%s)", exc)
         return []
     return [n for n in (found.networks or []) if n.ssid]

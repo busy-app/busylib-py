@@ -95,7 +95,13 @@ class FirmwareStep(SetupStep):
         Check for an update and install it, waiting for the device to apply it.
         """
         prompt.info("Checking for a firmware update...")
-        available = await operations.find_available_update(client)
+        try:
+            available = await operations.find_available_update(client)
+        except TimeoutError as exc:
+            # Distinct from "nothing to install": the check never finished,
+            # so reporting no update would be inventing an answer.
+            prompt.info(f"{exc}. Try again, or update from the device UI.")
+            return
         if not available:
             prompt.info(
                 "No update is offered by the device. If the API version is "

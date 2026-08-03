@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import inspect
 from collections.abc import Callable
 from functools import wraps
 from typing import Literal, TypeVar, cast
@@ -74,26 +75,48 @@ def removed_endpoint(
     device.
     """
 
+    note = (
+        f"\n\nRemoved from the device API: no supported firmware serves "
+        f"{method} {path}, so calling this raises "
+        f"`BusyBarRemovedEndpointError`."
+        + (f" Use `{replacement}` instead." if replacement else "")
+    )
+
     def decorator(func: F) -> F:
-        setattr(
-            func,
-            "__busy_openapi__",
-            MethodCompatibility(
-                path=path,
-                method=method,
-                status="removed",
-                **({"replacement": replacement} if replacement else {}),
-            ),
+        metadata = MethodCompatibility(
+            path=path,
+            method=method,
+            status="removed",
+            **({"replacement": replacement} if replacement else {}),
         )
 
-        @wraps(func)
-        def wrapper(*args: object, **kwargs: object) -> object:
+        def fail() -> None:
             raise exceptions.BusyBarRemovedEndpointError(
                 path=path,
                 method=method,
                 replacement=replacement,
             )
 
+        if inspect.iscoroutinefunction(func):
+            # Keep the async signature, or the exception surfaces when the
+            # coroutine is created rather than awaited - which leaves any
+            # sibling coroutines in the same gather() un-awaited.
+            @wraps(func)
+            async def async_wrapper(*args: object, **kwargs: object) -> object:
+                fail()
+
+            wrapper: Callable[..., object] = async_wrapper
+        else:
+
+            @wraps(func)
+            def sync_wrapper(*args: object, **kwargs: object) -> object:
+                fail()
+
+            wrapper = sync_wrapper
+
+        # Say so in the rendered API reference, not only in the guide.
+        wrapper.__doc__ = (func.__doc__ or "").rstrip() + note
+        setattr(wrapper, "__busy_openapi__", metadata)
         return cast(F, wrapper)
 
     return decorator

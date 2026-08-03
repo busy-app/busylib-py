@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class WifiMixin(SyncClientBase):
     """
-    Wi-Fi control helpers: enable, connect, scan, and status.
+    Wi-Fi control helpers: connect, disconnect, scan, and status.
     """
 
     @versioning.removed_endpoint(
@@ -20,9 +20,8 @@ class WifiMixin(SyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     def wifi_enable(self) -> types.SuccessResponse:
-        logger.info("wifi_enable")
-        data = self._request("POST", "/api/wifi/enable")
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
     @versioning.removed_endpoint(
         path="/api/wifi/disable",
@@ -30,9 +29,8 @@ class WifiMixin(SyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     def wifi_disable(self) -> types.SuccessResponse:
-        logger.info("wifi_disable")
-        data = self._request("POST", "/api/wifi/disable")
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
     def wifi_status(self) -> types.StatusResponse:
         logger.info("wifi_status")
@@ -82,7 +80,7 @@ class WifiMixin(SyncClientBase):
 
 class AsyncWifiMixin(AsyncClientBase):
     """
-    Async Wi-Fi control helpers: enable, connect, scan, and status.
+    Async Wi-Fi control helpers: connect, disconnect, scan, and status.
     """
 
     @versioning.removed_endpoint(
@@ -91,9 +89,8 @@ class AsyncWifiMixin(AsyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     async def wifi_enable(self) -> types.SuccessResponse:
-        logger.info("async wifi_enable")
-        data = await self._request("POST", "/api/wifi/enable")
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
     @versioning.removed_endpoint(
         path="/api/wifi/disable",
@@ -101,9 +98,8 @@ class AsyncWifiMixin(AsyncClientBase):
         replacement="wifi_connect() / wifi_disconnect()",
     )
     async def wifi_disable(self) -> types.SuccessResponse:
-        logger.info("async wifi_disable")
-        data = await self._request("POST", "/api/wifi/disable")
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
     async def wifi_status(self) -> types.StatusResponse:
         logger.info("async wifi_status")

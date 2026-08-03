@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from busylib import types, versioning
+from busylib import exceptions, types, versioning
 from examples.setup.prompts import SetupAborted, SetupCancelled
 from examples.setup import operations, steps
 from examples.setup.steps import (
@@ -559,7 +559,13 @@ async def test_wifi_step_falls_back_to_manual_ssid_when_scan_is_refused() -> Non
 
     class _Connected:
         async def wifi_networks(self):
-            raise RuntimeError("400 Scan not possible when connected")
+            raise exceptions.BusyBarAPIError(
+                "Scan not possible when connected",
+                code=400,
+                status_code=400,
+                method="GET",
+                path="/api/wifi/networks",
+            )
 
         async def wifi_connect(self, config):
             self.config = config
@@ -616,3 +622,76 @@ async def test_a_genuinely_new_no_update_verdict_is_accepted(
     )
 
     assert await operations.find_available_update(client) is None  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_a_check_still_running_is_not_read_as_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    The response announcing the check started still carries the old verdict.
+
+    Treating it as this check's answer reintroduced the 400 "Update not
+    available" the earlier fix removed, in a narrower window.
+    """
+    monkeypatch.setattr(operations, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    client = _UpdateClient(
+        [
+            _check("available", "1.1.1", event="stop"),
+            _check("available", "1.1.1", event="start"),
+            _check("not_available", "", event="stop"),
+        ]
+    )
+
+    assert await operations.find_available_update(client) is None  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_a_check_that_never_finishes_raises_rather_than_lying(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A timeout is reported as a timeout, not as "no update available".
+    """
+    monkeypatch.setattr(operations, "UPDATE_POLL_INTERVAL_SECONDS", 0)
+    client = _UpdateClient([_check("none", "", event="start")])
+
+    with pytest.raises(TimeoutError):
+        await operations.find_available_update(client, timeout=0.05)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_firmware_step_reports_a_timeout_distinctly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    The step says the check didn't finish, not that there is no update.
+    """
+
+    async def _timeout(client, **kwargs):
+        raise TimeoutError("The device did not finish checking for an update")
+
+    monkeypatch.setattr(operations, "find_available_update", _timeout)
+
+    prompt = RecordingPrompt()
+    await FirmwareStep().run(FakeClient(), prompt)  # type: ignore[arg-type]
+
+    assert any("did not finish checking" in line for line in prompt.lines)
+    assert not any("No update is offered" in line for line in prompt.lines)
+
+
+@pytest.mark.asyncio
+async def test_a_transport_failure_during_scan_is_not_swallowed() -> None:
+    """
+    Only the device refusing to scan is absorbed, not any failure.
+
+    A bad token or a dropped connection surfacing as "no networks found"
+    would send the user hunting for an SSID that was never the problem.
+    """
+
+    class _Broken:
+        async def wifi_networks(self):
+            raise RuntimeError("connection reset")
+
+    with pytest.raises(RuntimeError):
+        await operations.scan_networks(_Broken())  # type: ignore[arg-type]

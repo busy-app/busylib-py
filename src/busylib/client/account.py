@@ -115,9 +115,8 @@ class AccountMixin(SyncClientBase):
         """
         Fetch legacy MQTT profile via GET /api/account/profile.
         """
-        logger.info("account_profile")
-        data = self._request("GET", "/api/account/profile")
-        return types.AccountProfile.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
     @versioning.removed_endpoint(
         path="/api/account/profile",
@@ -132,16 +131,8 @@ class AccountMixin(SyncClientBase):
         """
         Set legacy MQTT profile via POST /api/account/profile.
         """
-        logger.info("account_profile_set profile=%s", profile)
-        params: dict[str, str] = {"profile": profile}
-        if custom_url:
-            params["custom_url"] = custom_url
-        data = self._request(
-            "POST",
-            "/api/account/profile",
-            params=params,
-        )
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
 
 class AsyncAccountMixin(AsyncClientBase):
@@ -248,9 +239,8 @@ class AsyncAccountMixin(AsyncClientBase):
         """
         Fetch legacy MQTT profile via GET /api/account/profile.
         """
-        logger.info("async account_profile")
-        data = await self._request("GET", "/api/account/profile")
-        return types.AccountProfile.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
     @versioning.removed_endpoint(
         path="/api/account/profile",
@@ -265,13 +255,5 @@ class AsyncAccountMixin(AsyncClientBase):
         """
         Set legacy MQTT profile via POST /api/account/profile.
         """
-        logger.info("async account_profile_set profile=%s", profile)
-        params: dict[str, str] = {"profile": profile}
-        if custom_url:
-            params["custom_url"] = custom_url
-        data = await self._request(
-            "POST",
-            "/api/account/profile",
-            params=params,
-        )
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
