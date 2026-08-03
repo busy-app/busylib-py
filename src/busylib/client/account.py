@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,11 @@ class AccountMixin(SyncClientBase):
     Account linking and MQTT backend helpers.
     """
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account",
+        method="DELETE",
+    )
     def account_unlink(self) -> types.SuccessResponse:
         """
         Unlink the device from the account via DELETE /api/account.
@@ -24,6 +29,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("DELETE", "/api/account")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account/link",
+        method="POST",
+    )
     def account_link(self) -> types.AccountLink:
         """
         Request an account link code via POST /api/account/link.
@@ -32,6 +42,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("POST", "/api/account/link")
         return types.AccountLink.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/info",
+        method="GET",
+    )
     def account_info(self) -> types.AccountInfo:
         """
         Fetch linked account info via GET /api/account/info.
@@ -40,6 +55,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/info")
         return types.AccountInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/status",
+        method="GET",
+    )
     def account_status(self) -> types.AccountState:
         """
         Fetch MQTT status info via GET /api/account/status.
@@ -48,6 +68,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/status")
         return types.AccountState.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="GET",
+    )
     def account_backend(self) -> types.AccountBackend:
         """
         Fetch MQTT backend settings via GET /api/account/backend.
@@ -56,6 +81,11 @@ class AccountMixin(SyncClientBase):
         data = self._request("GET", "/api/account/backend")
         return types.AccountBackend.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="PUT",
+    )
     def account_backend_set(
         self,
         backend: types.AccountBackend | dict[str, object],
@@ -76,32 +106,41 @@ class AccountMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
+        path="/api/account/profile",
+        method="GET",
+        replacement="account_backend()",
+    )
     def account_profile(self) -> types.AccountProfile:
         """
-        Fetch legacy MQTT profile via GET /api/account/profile.
-        """
-        logger.info("account_profile")
-        data = self._request("GET", "/api/account/profile")
-        return types.AccountProfile.model_validate(data)
+        Removed from the device API.
 
+        No supported firmware serves GET /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend()` instead.
+        """
+        # Unreachable: the decorator raises before the body runs.
+        ...
+
+    @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
+        path="/api/account/profile",
+        method="POST",
+        replacement="account_backend_set()",
+    )
     def account_profile_set(
         self,
         profile: AccountProfileName,
         custom_url: str | None = None,
     ) -> types.SuccessResponse:
         """
-        Set legacy MQTT profile via POST /api/account/profile.
+        Removed from the device API.
+
+        No supported firmware serves POST /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend_set()` instead.
         """
-        logger.info("account_profile_set profile=%s", profile)
-        params: dict[str, str] = {"profile": profile}
-        if custom_url:
-            params["custom_url"] = custom_url
-        data = self._request(
-            "POST",
-            "/api/account/profile",
-            params=params,
-        )
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...
 
 
 class AsyncAccountMixin(AsyncClientBase):
@@ -109,6 +148,11 @@ class AsyncAccountMixin(AsyncClientBase):
     Async account linking and MQTT backend helpers.
     """
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account",
+        method="DELETE",
+    )
     async def account_unlink(self) -> types.SuccessResponse:
         """
         Unlink the device from the account via DELETE /api/account.
@@ -117,6 +161,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("DELETE", "/api/account")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/account/link",
+        method="POST",
+    )
     async def account_link(self) -> types.AccountLink:
         """
         Request an account link code via POST /api/account/link.
@@ -125,6 +174,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("POST", "/api/account/link")
         return types.AccountLink.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/info",
+        method="GET",
+    )
     async def account_info(self) -> types.AccountInfo:
         """
         Fetch linked account info via GET /api/account/info.
@@ -133,6 +187,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/info")
         return types.AccountInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/account/status",
+        method="GET",
+    )
     async def account_status(self) -> types.AccountState:
         """
         Fetch MQTT status info via GET /api/account/status.
@@ -141,6 +200,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/status")
         return types.AccountState.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="GET",
+    )
     async def account_backend(self) -> types.AccountBackend:
         """
         Fetch MQTT backend settings via GET /api/account/backend.
@@ -149,6 +213,11 @@ class AsyncAccountMixin(AsyncClientBase):
         data = await self._request("GET", "/api/account/backend")
         return types.AccountBackend.model_validate(data)
 
+    @versioning.requires_openapi(
+        "23.0.0",
+        path="/api/account/backend",
+        method="PUT",
+    )
     async def account_backend_set(
         self,
         backend: types.AccountBackend | dict[str, object],
@@ -169,29 +238,38 @@ class AsyncAccountMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
+        path="/api/account/profile",
+        method="GET",
+        replacement="account_backend()",
+    )
     async def account_profile(self) -> types.AccountProfile:
         """
-        Fetch legacy MQTT profile via GET /api/account/profile.
-        """
-        logger.info("async account_profile")
-        data = await self._request("GET", "/api/account/profile")
-        return types.AccountProfile.model_validate(data)
+        Removed from the device API.
 
+        No supported firmware serves GET /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend()` instead.
+        """
+        # Unreachable: the decorator raises before the body runs.
+        ...
+
+    @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
+        path="/api/account/profile",
+        method="POST",
+        replacement="account_backend_set()",
+    )
     async def account_profile_set(
         self,
         profile: AccountProfileName,
         custom_url: str | None = None,
     ) -> types.SuccessResponse:
         """
-        Set legacy MQTT profile via POST /api/account/profile.
+        Removed from the device API.
+
+        No supported firmware serves POST /api/account/profile, so calling this raises
+        `BusyBarRemovedEndpointError`. Use `account_backend_set()` instead.
         """
-        logger.info("async account_profile_set profile=%s", profile)
-        params: dict[str, str] = {"profile": profile}
-        if custom_url:
-            params["custom_url"] = custom_url
-        data = await self._request(
-            "POST",
-            "/api/account/profile",
-            params=params,
-        )
-        return types.SuccessResponse.model_validate(data)
+        # Unreachable: the decorator raises before the body runs.
+        ...

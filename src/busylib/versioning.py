@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import inspect
 from collections.abc import Callable
-from typing import Literal, TypeVar
+from functools import wraps
+from typing import Literal, TypeVar, cast
 
 from . import exceptions
 
@@ -15,7 +17,10 @@ F = TypeVar("F", bound=Callable[..., object])
 
 class MethodCompatibility(dict[str, str]):
     """
-    Dictionary metadata describing when a client helper appeared in OpenAPI.
+    Dictionary metadata describing a client helper's OpenAPI compatibility.
+
+    Carries either the minimum `version` a helper targets, or `status`
+    `"removed"` with the `replacement` to use instead.
     """
 
 
@@ -29,8 +34,11 @@ def requires_openapi(
     Attach declarative OpenAPI compatibility metadata to a client method.
 
     `version` is the minimum firmware OpenAPI version the current
-    implementation targets, not necessarily the version in which the
-    underlying device endpoint first appeared. When a method's request or
+    implementation targets. For most helpers that is the version in which
+    the device endpoint first appeared, taken from the firmware's own route
+    tables across release tags. Where a contract later changed in a
+    breaking way, the higher version wins - `log_dump` targets 25.0.0 even
+    though `/api/log_dump` exists from 24.3.0. When a method's request or
     response contract changes in a breaking, non-translatable way, bump this
     version to match the new contract rather than keeping the old value or
     adding a silent compatibility shim.
@@ -47,6 +55,60 @@ def requires_openapi(
             ),
         )
         return func
+
+    return decorator
+
+
+def removed_endpoint(
+    *,
+    path: str,
+    method: str,
+    replacement: str | None = None,
+) -> Callable[[F], F]:
+    """
+    Mark a helper whose device endpoint no longer exists in any firmware.
+
+    `requires_openapi` declares a *minimum* version, which can't express an
+    endpoint that has been withdrawn: there is no newer firmware where the
+    call starts working again. Marked helpers raise immediately with the
+    replacement to use, instead of letting an opaque 404 come back from the
+    device.
+    """
+
+    def decorator(func: F) -> F:
+        metadata = MethodCompatibility(
+            path=path,
+            method=method,
+            status="removed",
+            **({"replacement": replacement} if replacement else {}),
+        )
+
+        def fail() -> None:
+            raise exceptions.BusyBarRemovedEndpointError(
+                path=path,
+                method=method,
+                replacement=replacement,
+            )
+
+        if inspect.iscoroutinefunction(func):
+            # Keep the async signature, or the exception surfaces when the
+            # coroutine is created rather than awaited - which leaves any
+            # sibling coroutines in the same gather() un-awaited.
+            @wraps(func)
+            async def async_wrapper(*args: object, **kwargs: object) -> object:
+                fail()
+
+            wrapper: Callable[..., object] = async_wrapper
+        else:
+
+            @wraps(func)
+            def sync_wrapper(*args: object, **kwargs: object) -> object:
+                fail()
+
+            wrapper = sync_wrapper
+
+        setattr(wrapper, "__busy_openapi__", metadata)
+        return cast(F, wrapper)
 
     return decorator
 

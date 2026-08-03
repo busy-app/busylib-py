@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,11 @@ class UpdaterMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/check",
+        method="POST",
+    )
     def update_check(self) -> types.SuccessResponse:
         """
         Start asynchronous firmware update check.
@@ -33,6 +38,11 @@ class UpdaterMixin(SyncClientBase):
         data = self._request("POST", "/api/update/check")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/status",
+        method="GET",
+    )
     def update_status(self) -> types.UpdateStatus:
         """
         Get firmware update status with progress information.
@@ -41,6 +51,11 @@ class UpdaterMixin(SyncClientBase):
         data = self._request("GET", "/api/update/status")
         return types.UpdateStatus.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/changelog",
+        method="GET",
+    )
     def update_changelog(self, version: str) -> types.UpdateChangelogResponse:
         """
         Fetch update changelog for a specific version.
@@ -53,6 +68,11 @@ class UpdaterMixin(SyncClientBase):
         )
         return types.UpdateChangelogResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/install",
+        method="POST",
+    )
     def update_install(self, version: str) -> types.SuccessResponse:
         """
         Start firmware update installation by version.
@@ -65,6 +85,11 @@ class UpdaterMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/abort_download",
+        method="POST",
+    )
     def update_abort_download(self) -> types.SuccessResponse:
         """
         Abort an ongoing firmware download.
@@ -73,6 +98,11 @@ class UpdaterMixin(SyncClientBase):
         data = self._request("POST", "/api/update/abort_download")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/update/autoupdate",
+        method="GET",
+    )
     def update_autoupdate(self) -> types.AutoupdateSettings:
         """
         Fetch autoupdate settings via GET /api/update/autoupdate.
@@ -81,6 +111,11 @@ class UpdaterMixin(SyncClientBase):
         data = self._request("GET", "/api/update/autoupdate")
         return types.AutoupdateSettings.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/update/autoupdate",
+        method="POST",
+    )
     def update_autoupdate_set(
         self,
         settings: types.AutoupdateSettings | dict[str, object],
@@ -119,6 +154,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/check",
+        method="POST",
+    )
     async def update_check(self) -> types.SuccessResponse:
         """
         Start asynchronous firmware update check.
@@ -127,6 +167,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         data = await self._request("POST", "/api/update/check")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/status",
+        method="GET",
+    )
     async def update_status(self) -> types.UpdateStatus:
         """
         Get firmware update status with progress information.
@@ -135,6 +180,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         data = await self._request("GET", "/api/update/status")
         return types.UpdateStatus.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/changelog",
+        method="GET",
+    )
     async def update_changelog(self, version: str) -> types.UpdateChangelogResponse:
         """
         Fetch update changelog for a specific version.
@@ -147,6 +197,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         )
         return types.UpdateChangelogResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/install",
+        method="POST",
+    )
     async def update_install(self, version: str) -> types.SuccessResponse:
         """
         Start firmware update installation by version.
@@ -159,6 +214,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/update/abort_download",
+        method="POST",
+    )
     async def update_abort_download(self) -> types.SuccessResponse:
         """
         Abort an ongoing firmware download.
@@ -167,6 +227,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         data = await self._request("POST", "/api/update/abort_download")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/update/autoupdate",
+        method="GET",
+    )
     async def update_autoupdate(self) -> types.AutoupdateSettings:
         """
         Fetch autoupdate settings via GET /api/update/autoupdate.
@@ -175,6 +240,11 @@ class AsyncUpdaterMixin(AsyncClientBase):
         data = await self._request("GET", "/api/update/autoupdate")
         return types.AutoupdateSettings.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/update/autoupdate",
+        method="POST",
+    )
     async def update_autoupdate_set(
         self,
         settings: types.AutoupdateSettings | dict[str, object],

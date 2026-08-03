@@ -1,3 +1,12 @@
+"""
+The wizard's steps.
+
+Each step is a thin wrapper: it asks `operations` what the device currently
+reports, decides whether anything is left to do, and drives the prompts. All
+the actual client work lives in `examples.setup.operations`, so a step reads
+as the conversation with the user rather than a mix of both.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,20 +19,19 @@ from busylib import types, versioning
 from busylib.client import AsyncBusyBar
 from busylib.devices import BUSYBAR_DEFAULT_NAME
 
+from examples.setup import operations
 from examples.setup.prompts import Prompt, SetupCancelled
 from examples.shared.device_name import validate_device_name
 from examples.shared.timezones import resolve_timezone
 
-# Factory bars ship on firmware 1.0.2, which serves API 24.3.0 while this
-# library targets 25.0.0. Updating is therefore the first thing a new owner
-# needs, and every other step reads better once it's out of the way.
-UPDATE_POLL_INTERVAL_SECONDS = 3.0
-UPDATE_TIMEOUT_SECONDS = 600.0
-
-# `check.status` values that mean the check finished without an update. Any
-# other value (notably "none") means it is still running.
-CHECK_STATUS_TERMINAL_NO_UPDATE = frozenset({"not_available", "failure"})
 DEFAULT_DEVICE_NAME = BUSYBAR_DEFAULT_NAME.decode()
+
+CLOUD_DASHBOARD_URL = "https://cloud.busy.app/dashboard"
+CLOUD_LINK_POLL_INTERVAL_SECONDS = 3.0
+CLOUD_LINK_TIMEOUT_SECONDS = 600.0
+# Ask for a new code slightly before the old one lapses, so the user is never
+# looking at one that has just gone stale.
+CLOUD_CODE_RENEW_MARGIN_SECONDS = 10
 
 
 @dataclass(frozen=True)
@@ -69,18 +77,17 @@ class FirmwareStep(SetupStep):
         """
         Compare the device's API version against the library's target.
         """
-        info = await client.version()
-        device_api = info.api_semver or "unknown"
-        error = versioning.compatibility_error(
-            library_version=versioning.API_VERSION,
-            device_version=device_api,
+        state = await operations.read_firmware_state(client)
+        label = (
+            f"{state.firmware_version} (API {state.api_version})"
+            if state.firmware_version
+            else f"API {state.api_version}"
         )
-        summary = f"{info.version or '?'} (API {device_api})"
-        if error is None:
-            return StepStatus(done=True, summary=f"{summary} - supported")
+        if state.supported:
+            return StepStatus(done=True, summary=f"{label} - supported")
         return StepStatus(
             done=False,
-            summary=f"{summary} - library targets API {versioning.API_VERSION}",
+            summary=f"{label} - library targets API {versioning.API_VERSION}",
         )
 
     async def run(self, client: AsyncBusyBar, prompt: Prompt) -> None:
@@ -88,8 +95,13 @@ class FirmwareStep(SetupStep):
         Check for an update and install it, waiting for the device to apply it.
         """
         prompt.info("Checking for a firmware update...")
-        await client.update_check()
-        available = await self._await_check_result(client)
+        try:
+            available = await operations.find_available_update(client)
+        except TimeoutError as exc:
+            # Distinct from "nothing to install": the check never finished,
+            # so reporting no update would be inventing an answer.
+            prompt.info(f"{exc}. Try again, or update from the device UI.")
+            return
         if not available:
             prompt.info(
                 "No update is offered by the device. If the API version is "
@@ -101,36 +113,11 @@ class FirmwareStep(SetupStep):
             raise SetupCancelled
 
         prompt.info(f"Installing {available}; the device will reboot when done.")
-        await client.update_install(available)
+        await operations.install_update(client, available)
         prompt.info(
             "Update started. Re-run setup once the bar is back online to "
             "confirm the new version."
         )
-
-    async def _await_check_result(self, client: AsyncBusyBar) -> str | None:
-        """
-        Poll update status until the check reports a version or finishes.
-
-        The device reports `check.status` as one of `available`,
-        `not_available`, `failure`, or `none`, and `check.event` as `start`,
-        `stop`, or `none`. Only the first two statuses are terminal: `none`
-        means the check hasn't produced a result yet, so polling has to
-        continue rather than concluding there's no update.
-        """
-        # Measure real elapsed time: counting only the sleeps ignored how
-        # long update_status() itself took, so the effective timeout drifted
-        # well past UPDATE_TIMEOUT_SECONDS.
-        started = time.monotonic()
-        while time.monotonic() - started < UPDATE_TIMEOUT_SECONDS:
-            status = await client.update_status()
-            check = status.check
-            if check is not None:
-                if check.available_version:
-                    return check.available_version
-                if (check.status or "").lower() in CHECK_STATUS_TERMINAL_NO_UPDATE:
-                    return None
-            await asyncio.sleep(UPDATE_POLL_INTERVAL_SECONDS)
-        return None
 
 
 class WifiStep(SetupStep):
@@ -145,19 +132,17 @@ class WifiStep(SetupStep):
         """
         Report the current Wi-Fi association.
         """
-        info = await client.wifi_status()
-        if info.state == types.WifiState.CONNECTED:
-            return StepStatus(done=True, summary=info.ssid or "connected")
-        return StepStatus(done=False, summary=str(info.state or "not connected"))
+        connected, label = await operations.read_wifi_state(client)
+        return StepStatus(done=connected, summary=label)
 
     async def run(self, client: AsyncBusyBar, prompt: Prompt) -> None:
         """
         Scan for networks, then join the one the user picks.
         """
         prompt.info("Scanning for networks...")
-        found = await client.wifi_networks()
-        networks = [n for n in (found.networks or []) if n.ssid]
+        networks = await operations.scan_networks(client)
 
+        security: types.WifiSecurityMethod | None = None
         if networks:
             labels = [
                 f"{n.ssid} ({n.security.value if n.security else 'unknown'})"
@@ -170,10 +155,10 @@ class WifiStep(SetupStep):
                 ssid = chosen.ssid or ""
                 security = chosen.security
             else:
-                ssid, security = await prompt.text("SSID"), None
+                ssid = await prompt.text("SSID")
         else:
-            prompt.info("No networks found in the scan.")
-            ssid, security = await prompt.text("SSID"), None
+            prompt.info("No networks found; the device cannot scan while connected.")
+            ssid = await prompt.text("SSID")
 
         if not ssid:
             raise SetupCancelled
@@ -183,12 +168,9 @@ class WifiStep(SetupStep):
             password = await prompt.secret(f"Password for {ssid}") or None
 
         prompt.info(f"Connecting to {ssid}...")
-        config = types.ConnectRequestConfig(
-            ssid=ssid,
-            password=password,
-            security=security,
+        await operations.join_network(
+            client, ssid, password=password, security=security
         )
-        await client.wifi_connect(config)
         prompt.info(f"Connect request sent for {ssid}.")
 
 
@@ -203,12 +185,8 @@ class TimezoneStep(SetupStep):
     async def status(self, client: AsyncBusyBar) -> StepStatus:
         """
         Compare the device's UTC offset with this machine's.
-
-        There's no timezone-name getter in the API, so the offset is the only
-        thing that can be compared; a match is treated as "already set".
         """
-        info = await client.time()
-        device_offset = _parse_offset(info.timestamp)
+        device_offset = await operations.read_clock_offset(client)
         if device_offset is None:
             return StepStatus(done=False, summary="unknown")
 
@@ -225,17 +203,16 @@ class TimezoneStep(SetupStep):
         """
         Set the timezone, defaulting to this machine's IANA name.
         """
-        default = _local_timezone_name()
         value = await prompt.text(
             "Timezone (IANA name, city, or UTC offset)",
-            default=default,
+            default=_local_timezone_name(),
         )
         resolved, error = resolve_timezone(value)
         if error is not None or resolved is None:
             prompt.info(f"Could not resolve timezone: {error or 'unknown error'}")
             raise SetupCancelled
 
-        await client.time_timezone(resolved)
+        await operations.set_timezone(client, resolved)
         prompt.info(f"Timezone set to {resolved}.")
 
 
@@ -251,8 +228,7 @@ class NameStep(SetupStep):
         """
         Treat the factory default name as "not set yet".
         """
-        info = await client.name()
-        current = info.name or info.device or info.value or ""
+        current = await operations.read_device_name(client)
         if current and current != DEFAULT_DEVICE_NAME:
             return StepStatus(done=True, summary=current)
         return StepStatus(done=False, summary=f"{current or 'unset'} (factory default)")
@@ -267,7 +243,7 @@ class NameStep(SetupStep):
             prompt.info(f"Invalid name: {error}")
             raise SetupCancelled
 
-        await client.name_set(value)
+        await operations.rename_device(client, value)
         prompt.info(f"Device name set to {value}.")
 
 
@@ -283,24 +259,46 @@ class CloudStep(SetupStep):
         """
         Report whether the device is already linked.
         """
-        info = await client.account_info()
-        if info.linked:
-            return StepStatus(done=True, summary=info.email or "linked")
-        return StepStatus(done=False, summary="not linked")
+        linked, label = await operations.read_link_state(client)
+        return StepStatus(done=linked, summary=label)
 
     async def run(self, client: AsyncBusyBar, prompt: Prompt) -> None:
         """
-        Request a pairing code and wait for the user to redeem it.
+        Show a pairing code and keep it fresh until the bar is linked.
+
+        Codes expire, usually sooner than it takes to find the dashboard and
+        sign in, so this polls for the link and fetches a new code whenever
+        the current one lapses instead of printing a stale one once. Answer
+        "no" at the prompt to skip linking for now.
         """
-        link = await client.account_link()
-        if not link.code:
-            prompt.info("The device did not return a linking code.")
+        prompt.info(f"Link this bar at {CLOUD_DASHBOARD_URL} or in the BUSY App.")
+        if not await prompt.confirm("Link it now?", default=True):
+            # Skip just this step - the rest of the wizard carries on.
             raise SetupCancelled
 
-        prompt.info(f"Enter this code in the BUSY App to link the bar: {link.code}")
-        if link.expires_at:
-            prompt.info(f"The code expires at {link.expires_at}.")
-        prompt.info("Re-run setup afterwards to confirm the link.")
+        deadline = time.monotonic() + CLOUD_LINK_TIMEOUT_SECONDS
+        shown_code: str | None = None
+        expires_at: int | None = None
+
+        while time.monotonic() < deadline:
+            if shown_code is None or _code_expired(expires_at):
+                link = await operations.request_link_code(client)
+                if not link.code:
+                    prompt.info("The device did not return a linking code.")
+                    raise SetupCancelled
+                shown_code = link.code
+                expires_at = link.expires_at
+                prompt.info(f"Code: {shown_code}{_expiry_suffix(expires_at)}")
+
+            await asyncio.sleep(CLOUD_LINK_POLL_INTERVAL_SECONDS)
+
+            linked, label = await operations.read_link_state(client)
+            if linked:
+                prompt.info(f"Linked to {label}.")
+                return
+
+        prompt.info("Gave up waiting for the bar to be linked.")
+        raise SetupCancelled
 
 
 def default_steps() -> list[SetupStep]:
@@ -310,17 +308,23 @@ def default_steps() -> list[SetupStep]:
     return [FirmwareStep(), WifiStep(), TimezoneStep(), NameStep(), CloudStep()]
 
 
-def _parse_offset(timestamp: str | None) -> timedelta | None:
+def _code_expired(expires_at: int | None) -> bool:
     """
-    Extract the UTC offset from an ISO-8601 timestamp.
+    Whether a pairing code is at or near its expiry.
     """
-    if not timestamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(timestamp)
-    except ValueError:
-        return None
-    return parsed.utcoffset()
+    if expires_at is None:
+        return False
+    return time.time() >= expires_at - CLOUD_CODE_RENEW_MARGIN_SECONDS
+
+
+def _expiry_suffix(expires_at: int | None) -> str:
+    """
+    Render the expiry as local time rather than a raw unix timestamp.
+    """
+    if expires_at is None:
+        return ""
+    local = datetime.fromtimestamp(expires_at).astimezone()
+    return f" (valid until {local:%H:%M:%S})"
 
 
 def _format_offset(offset: timedelta | None) -> str:

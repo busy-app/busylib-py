@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -13,6 +13,11 @@ class TimeMixin(SyncClientBase):
     Device time and timezone helpers.
     """
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time/timezone",
+        method="GET",
+    )
     def time_timezone_info(self) -> types.TimezoneInfo:
         """
         Fetch current device timezone via GET /api/time/timezone.
@@ -21,6 +26,11 @@ class TimeMixin(SyncClientBase):
         data = self._request("GET", "/api/time/timezone")
         return types.TimezoneInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/time/tzlist",
+        method="GET",
+    )
     def time_timezone_list(self) -> types.TimezoneListResponse:
         """
         Fetch supported device timezones via GET /api/time/tzlist.
@@ -29,6 +39,11 @@ class TimeMixin(SyncClientBase):
         data = self._request("GET", "/api/time/tzlist")
         return types.TimezoneListResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time/timestamp",
+        method="POST",
+    )
     def time_timestamp(self, timestamp: str) -> types.SuccessResponse:
         """
         Set device time via POST /api/time/timestamp.
@@ -38,6 +53,11 @@ class TimeMixin(SyncClientBase):
         data = self._request("POST", "/api/time/timestamp", params=params)
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time/timezone",
+        method="POST",
+    )
     def time_timezone(self, timezone: str) -> types.SuccessResponse:
         """
         Set device timezone via POST /api/time/timezone.
@@ -53,6 +73,11 @@ class AsyncTimeMixin(AsyncClientBase):
     Async device time and timezone helpers.
     """
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time/timezone",
+        method="GET",
+    )
     async def time_timezone_info(self) -> types.TimezoneInfo:
         """
         Fetch current device timezone via GET /api/time/timezone.
@@ -61,6 +86,11 @@ class AsyncTimeMixin(AsyncClientBase):
         data = await self._request("GET", "/api/time/timezone")
         return types.TimezoneInfo.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/time/tzlist",
+        method="GET",
+    )
     async def time_timezone_list(self) -> types.TimezoneListResponse:
         """
         Fetch supported device timezones via GET /api/time/tzlist.
@@ -69,6 +99,11 @@ class AsyncTimeMixin(AsyncClientBase):
         data = await self._request("GET", "/api/time/tzlist")
         return types.TimezoneListResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time/timestamp",
+        method="POST",
+    )
     async def time_timestamp(self, timestamp: str) -> types.SuccessResponse:
         """
         Set device time via POST /api/time/timestamp.
@@ -78,6 +113,11 @@ class AsyncTimeMixin(AsyncClientBase):
         data = await self._request("POST", "/api/time/timestamp", params=params)
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time/timezone",
+        method="POST",
+    )
     async def time_timezone(self, timezone: str) -> types.SuccessResponse:
         """
         Set device timezone via POST /api/time/timezone.

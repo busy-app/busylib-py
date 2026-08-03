@@ -223,6 +223,32 @@ class BusyBarConversionError(BusyBarError):
         super().__init__(f"{message} ({path})")
 
 
+class BusyBarRemovedEndpointError(BusyBarError):
+    """
+    Raised when a helper targets a device endpoint that no longer exists.
+
+    Distinct from `BusyBarAPIVersionError`: updating the firmware will not
+    make the call work, because the endpoint was withdrawn rather than
+    added later.
+    """
+
+    def __init__(
+        self,
+        *,
+        path: str,
+        method: str,
+        replacement: str | None = None,
+    ) -> None:
+        self.path = path
+        self.method = method
+        self.replacement = replacement
+        hint = f" Use {replacement} instead." if replacement else ""
+        super().__init__(
+            f"{method} {path} was removed from the device API and is no "
+            f"longer served by any supported firmware.{hint}"
+        )
+
+
 class BusyBarWebSocketError(BusyBarError):
     """
     Raised when WebSocket connection or stream processing fails.

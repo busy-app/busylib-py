@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable, Iterator
 
-from .. import types
+from .. import types, versioning
 from ..converter import convert_for_storage
 from .base import AsyncClientBase, SyncClientBase
 
@@ -87,6 +87,11 @@ class StorageMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/storage/rename",
+        method="POST",
+    )
     def storage_rename(self, old_path: str, new_path: str) -> types.SuccessResponse:
         """
         Rename a storage entry via POST /api/storage/rename.
@@ -99,6 +104,11 @@ class StorageMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/storage/status",
+        method="GET",
+    )
     def storage_status(self) -> types.StorageStatus:
         logger.info("storage_status")
         data = self._request(
@@ -184,6 +194,11 @@ class AsyncStorageMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/storage/rename",
+        method="POST",
+    )
     async def storage_rename(
         self, old_path: str, new_path: str
     ) -> types.SuccessResponse:
@@ -198,6 +213,11 @@ class AsyncStorageMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/storage/status",
+        method="GET",
+    )
     async def storage_status(self) -> types.StorageStatus:
         logger.info("async storage_status")
         data = await self._request(

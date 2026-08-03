@@ -149,25 +149,6 @@ def test_account_info():
     assert result.email == "name@example.com"
 
 
-def test_account_profile_set() -> None:
-    """
-    Ensure account profile updates are sent as query params.
-    """
-    seen = {}
-
-    def responder(request: httpx.Request) -> httpx.Response:
-        seen["params"] = dict(request.url.params)
-        return httpx.Response(200, json={"result": "OK"})
-
-    client = make_client(responder)
-    resp = client.account_profile_set("custom", custom_url="mqtts://mqtt.example.com")
-    assert resp.result == "OK"
-    assert seen["params"] == {
-        "profile": "custom",
-        "custom_url": "mqtts://mqtt.example.com",
-    }
-
-
 def test_account_link():
     """
     Parse account link response from the client.
@@ -386,7 +367,7 @@ def test_request_carries_api_version_header():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder, api_version="1.1.0")
-    resp = client.wifi_enable()
+    resp = client.wifi_disconnect()
     assert resp.result == "OK"
     assert seen["header"] == "1.1.0"
 
@@ -406,7 +387,7 @@ def test_retry_on_transport_error():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder, max_retries=1, backoff=0.0)
-    resp = client.wifi_enable()
+    resp = client.wifi_disconnect()
     assert resp.result == "OK"
     assert calls["count"] == 2
 
@@ -763,8 +744,6 @@ def test_screen_accepts_a_display_spec():
         ("storage_remove", "/api/storage/remove"),
         ("storage_mkdir", "/api/storage/mkdir"),
         ("assets_delete", "/api/assets/upload"),
-        ("wifi_enable", "/api/wifi/enable"),
-        ("wifi_disable", "/api/wifi/disable"),
         ("wifi_disconnect", "/api/wifi/disconnect"),
         ("ble_enable", "/api/ble/enable"),
         ("ble_disable", "/api/ble/disable"),
@@ -974,3 +953,41 @@ def test_display_draw_color_tuple_alpha():
     assert resp.result == "OK"
     color = seen["body"]["elements"][0]["color"]
     assert color == "#FFFFFF64"
+
+
+@pytest.mark.parametrize(
+    "method_name",
+    ["account_profile", "account_profile_set", "wifi_enable", "wifi_disable"],
+)
+def test_removed_endpoints_raise_instead_of_calling_the_device(method_name: str):
+    """
+    Helpers for withdrawn endpoints fail fast with a usable message.
+
+    The firmware serves none of these on any supported version, so letting
+    the call through would only produce an opaque 404.
+    """
+    called: list[str] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        called.append(request.url.path)
+        return httpx.Response(404, json={"error": "Not Found"})
+
+    client = make_client(responder)
+    with pytest.raises(exceptions.BusyBarRemovedEndpointError) as exc:
+        getattr(client, method_name)()
+
+    assert called == [], "no request should reach the device"
+    assert exc.value.replacement
+
+
+def test_removed_endpoints_are_declared_in_compatibility_metadata():
+    """
+    `method_compatibility` reports the removal and what to use instead.
+    """
+    client = make_client(lambda _r: httpx.Response(200, json={"result": "OK"}))
+
+    metadata = client.method_compatibility("account_profile")
+
+    assert metadata is not None
+    assert metadata["status"] == "removed"
+    assert metadata["replacement"] == "account_backend()"

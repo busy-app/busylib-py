@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -23,11 +23,21 @@ class BleMixin(SyncClientBase):
         data = self._request("POST", "/api/ble/disable")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/ble/status",
+        method="GET",
+    )
     def ble_status(self) -> types.BleStatus:
         logger.info("ble_status")
         data = self._request("GET", "/api/ble/status")
         return types.BleStatus.model_validate(data)
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/ble/pairing",
+        method="DELETE",
+    )
     def ble_pairing_forget(self) -> types.SuccessResponse:
         logger.info("ble_pairing_forget")
         data = self._request("DELETE", "/api/ble/pairing")
@@ -49,11 +59,21 @@ class AsyncBleMixin(AsyncClientBase):
         data = await self._request("POST", "/api/ble/disable")
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/ble/status",
+        method="GET",
+    )
     async def ble_status(self) -> types.BleStatus:
         logger.info("async ble_status")
         data = await self._request("GET", "/api/ble/status")
         return types.BleStatus.model_validate(data)
 
+    @versioning.requires_openapi(
+        "1.0.0",
+        path="/api/ble/pairing",
+        method="DELETE",
+    )
     async def ble_pairing_forget(self) -> types.SuccessResponse:
         logger.info("async ble_pairing_forget")
         data = await self._request("DELETE", "/api/ble/pairing")

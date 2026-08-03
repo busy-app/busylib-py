@@ -48,15 +48,18 @@ bb = BusyBar("10.0.4.20")
 print(bb.version())
 ```
 
-If you get a `403 Forbidden`, the bar has an access key set. Pass it as a
-token — the same key the web UI asks for:
-
-```python
-bb = BusyBar("10.0.4.20", token="your-access-key")
-```
+Current firmware enforces its access key only on connections arriving over
+Wi-Fi, so a bar reached over USB usually needs no token. If you do get a
+`403 Forbidden` here, pass the key as a token the same way as below.
 
 Once the bar is on Wi-Fi you can use its Wi-Fi address instead, or let the
 library find it for you — see [Discovering devices](#discovering-devices-on-the-network).
+That path *can* answer `403 Forbidden`, which means an access key is set —
+a 4–10 digit PIN, the same one the web UI asks for:
+
+```python
+bb = BusyBar("192.168.1.20", token="1234")
+```
 
 ## Step 2 — First-time setup
 

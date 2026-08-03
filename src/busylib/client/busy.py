@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from .. import types
+from .. import types, versioning
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -13,6 +13,11 @@ class BusyMixin(SyncClientBase):
     Busy snapshot and profile helpers.
     """
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/busy/snapshot",
+        method="GET",
+    )
     def busy_snapshot(self) -> types.BusySnapshot:
         """
         Fetch busy snapshot via GET /api/busy/snapshot.
@@ -21,6 +26,11 @@ class BusyMixin(SyncClientBase):
         data = self._request("GET", "/api/busy/snapshot")
         return types.BusySnapshot.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/busy/snapshot",
+        method="PUT",
+    )
     def busy_snapshot_set(self, snapshot: types.BusySnapshot) -> types.SuccessResponse:
         """
         Set busy snapshot via PUT /api/busy/snapshot.
@@ -34,6 +44,11 @@ class BusyMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/busy/profiles/{slot}",
+        method="GET",
+    )
     def busy_profile(self, slot: types.BusyProfileSlot) -> types.BusyProfile:
         """
         Fetch a busy profile slot via GET /api/busy/profiles/{slot}.
@@ -42,6 +57,11 @@ class BusyMixin(SyncClientBase):
         data = self._request("GET", f"/api/busy/profiles/{slot}")
         return types.BusyProfile.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/busy/profiles/{slot}",
+        method="PUT",
+    )
     def busy_profile_set(
         self,
         slot: types.BusyProfileSlot,
@@ -69,6 +89,11 @@ class AsyncBusyMixin(AsyncClientBase):
     Async busy snapshot and profile helpers.
     """
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/busy/snapshot",
+        method="GET",
+    )
     async def busy_snapshot(self) -> types.BusySnapshot:
         """
         Fetch busy snapshot via GET /api/busy/snapshot.
@@ -77,6 +102,11 @@ class AsyncBusyMixin(AsyncClientBase):
         data = await self._request("GET", "/api/busy/snapshot")
         return types.BusySnapshot.model_validate(data)
 
+    @versioning.requires_openapi(
+        "4.1.0",
+        path="/api/busy/snapshot",
+        method="PUT",
+    )
     async def busy_snapshot_set(
         self, snapshot: types.BusySnapshot
     ) -> types.SuccessResponse:
@@ -92,6 +122,11 @@ class AsyncBusyMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/busy/profiles/{slot}",
+        method="GET",
+    )
     async def busy_profile(self, slot: types.BusyProfileSlot) -> types.BusyProfile:
         """
         Fetch a busy profile slot via GET /api/busy/profiles/{slot}.
@@ -100,6 +135,11 @@ class AsyncBusyMixin(AsyncClientBase):
         data = await self._request("GET", f"/api/busy/profiles/{slot}")
         return types.BusyProfile.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/busy/profiles/{slot}",
+        method="PUT",
+    )
     async def busy_profile_set(
         self,
         slot: types.BusyProfileSlot,

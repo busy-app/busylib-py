@@ -53,6 +53,11 @@ class FirmwareMixin(SyncClientBase):
             )
         return version_info
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/transport",
+        method="GET",
+    )
     def transport(self) -> types.NetworkInterfaceInfo:
         """
         Fetch active network transport via GET /api/transport.
@@ -69,6 +74,11 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/status")
         return types.Status.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/status/device",
+        method="GET",
+    )
     def status_device(self) -> types.StatusDevice:
         """
         Fetch device manufacturing status via GET /api/status/device.
@@ -77,6 +87,11 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/status/device")
         return types.StatusDevice.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/status/firmware",
+        method="GET",
+    )
     def status_firmware(self) -> types.StatusFirmware:
         """
         Fetch firmware status via GET /api/status/firmware.
@@ -129,6 +144,11 @@ class FirmwareMixin(SyncClientBase):
             return types.LogDumpResponse(result="OK")
         return types.LogDumpResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/name",
+        method="GET",
+    )
     def name(self) -> types.DeviceNameResponse:
         """
         Fetch device name via GET /api/name.
@@ -137,6 +157,11 @@ class FirmwareMixin(SyncClientBase):
         data = self._request("GET", "/api/name")
         return types.DeviceNameResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/name",
+        method="POST",
+    )
     def name_set(self, name: str) -> types.SuccessResponse:
         """
         Set device name via POST /api/name.
@@ -150,6 +175,11 @@ class FirmwareMixin(SyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time",
+        method="GET",
+    )
     def time(self) -> types.DeviceTimeResponse:
         """
         Fetch device time via GET /api/time.
@@ -180,6 +210,11 @@ class AsyncFirmwareMixin(AsyncClientBase):
             )
         return version_info
 
+    @versioning.requires_openapi(
+        "18.3.0",
+        path="/api/transport",
+        method="GET",
+    )
     async def transport(self) -> types.NetworkInterfaceInfo:
         """
         Fetch active network transport via GET /api/transport.
@@ -196,6 +231,11 @@ class AsyncFirmwareMixin(AsyncClientBase):
         data = await self._request("GET", "/api/status")
         return types.Status.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/status/device",
+        method="GET",
+    )
     async def status_device(self) -> types.StatusDevice:
         """
         Fetch device manufacturing status via GET /api/status/device.
@@ -204,6 +244,11 @@ class AsyncFirmwareMixin(AsyncClientBase):
         data = await self._request("GET", "/api/status/device")
         return types.StatusDevice.model_validate(data)
 
+    @versioning.requires_openapi(
+        "11.0.0",
+        path="/api/status/firmware",
+        method="GET",
+    )
     async def status_firmware(self) -> types.StatusFirmware:
         """
         Fetch firmware status via GET /api/status/firmware.
@@ -256,6 +301,11 @@ class AsyncFirmwareMixin(AsyncClientBase):
             return types.LogDumpResponse(result="OK")
         return types.LogDumpResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/name",
+        method="GET",
+    )
     async def name(self) -> types.DeviceNameResponse:
         """
         Fetch device name via GET /api/name.
@@ -264,6 +314,11 @@ class AsyncFirmwareMixin(AsyncClientBase):
         data = await self._request("GET", "/api/name")
         return types.DeviceNameResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/name",
+        method="POST",
+    )
     async def name_set(self, name: str) -> types.SuccessResponse:
         """
         Set device name via POST /api/name.
@@ -277,6 +332,11 @@ class AsyncFirmwareMixin(AsyncClientBase):
         )
         return types.SuccessResponse.model_validate(data)
 
+    @versioning.requires_openapi(
+        "0.3.0",
+        path="/api/time",
+        method="GET",
+    )
     async def time(self) -> types.DeviceTimeResponse:
         """
         Fetch device time via GET /api/time.

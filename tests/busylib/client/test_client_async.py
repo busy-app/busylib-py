@@ -157,7 +157,7 @@ async def test_async_retry_on_transport_error():
         return httpx.Response(200, json={"result": "OK"})
 
     client = make_client(responder, max_retries=1, backoff=0.0)
-    resp = await client.wifi_enable()
+    resp = await client.wifi_disconnect()
     assert resp.result == "OK"
     assert calls["count"] == 2
     await client.aclose()
