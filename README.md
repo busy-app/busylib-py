@@ -48,9 +48,9 @@ bb = BusyBar("10.0.4.20")
 print(bb.version())
 ```
 
-Over USB no token is needed: the firmware only enforces its access key on
-connections that arrive over Wi-Fi, so anything reaching `10.0.4.20` is
-already trusted.
+Current firmware enforces its access key only on connections arriving over
+Wi-Fi, so a bar reached over USB usually needs no token. If you do get a
+`403 Forbidden` here, pass the key as a token the same way as below.
 
 Once the bar is on Wi-Fi you can use its Wi-Fi address instead, or let the
 library find it for you — see [Discovering devices](#discovering-devices-on-the-network).

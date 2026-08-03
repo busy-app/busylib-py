@@ -15,6 +15,7 @@ class WifiMixin(SyncClientBase):
     """
 
     @versioning.removed_endpoint(
+        # Last served by firmware 0.2.0 (API 0.0.0); gone since 0.3.0.
         path="/api/wifi/enable",
         method="POST",
         replacement="wifi_connect() / wifi_disconnect()",
@@ -96,6 +97,7 @@ class AsyncWifiMixin(AsyncClientBase):
     """
 
     @versioning.removed_endpoint(
+        # Last served by firmware 0.2.0 (API 0.0.0); gone since 0.3.0.
         path="/api/wifi/enable",
         method="POST",
         replacement="wifi_connect() / wifi_disconnect()",

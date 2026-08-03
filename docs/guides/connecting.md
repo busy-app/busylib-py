@@ -15,9 +15,11 @@ bb = BusyBar("192.168.1.20")       # over Wi-Fi
 
 ## Access keys
 
-The access key is only enforced on connections arriving over Wi-Fi. USB (and
-localhost) traffic bypasses the check entirely, so a bar reached at
-`10.0.4.20` never needs a token no matter which access mode it is in.
+On current firmware the access key is enforced only on connections arriving
+over Wi-Fi — USB and localhost traffic skips the check — so a bar reached at
+`10.0.4.20` usually needs no token whatever access mode it is in. Treat that
+as an observation about the firmware in front of you rather than a guarantee,
+and handle a `403` on the USB path too.
 
 Over Wi-Fi, if the access mode is set to `key`, every request needs that token
 and unauthenticated calls come back as `403 Forbidden`. The key is a 4–10
@@ -93,6 +95,12 @@ replacement, rather than letting an opaque `404` come back:
 | --- | --- |
 | `account_profile()`, `account_profile_set()` | `account_backend()`, `account_backend_set()` |
 | `wifi_enable()`, `wifi_disable()` | `wifi_connect()`, `wifi_disconnect()` |
+
+These did exist once — `wifi/enable` and `wifi/disable` up to firmware 0.2.0,
+`account/profile` from 0.6.0-rc to 0.8.1 — but every firmware since serves
+none of them, and the library targets a far newer API than those bars run. To
+talk to firmware that old, pin a `busylib` version from the same era, as the
+versioning policy describes; `api_request()` remains the escape hatch.
 
 This is deliberately distinct from `BusyBarAPIVersionError`: updating the
 firmware won't help, because the endpoint was withdrawn rather than added

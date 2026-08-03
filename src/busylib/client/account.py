@@ -107,6 +107,7 @@ class AccountMixin(SyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
         path="/api/account/profile",
         method="GET",
         replacement="account_backend()",
@@ -122,6 +123,7 @@ class AccountMixin(SyncClientBase):
         ...
 
     @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
         path="/api/account/profile",
         method="POST",
         replacement="account_backend_set()",
@@ -237,6 +239,7 @@ class AsyncAccountMixin(AsyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
         path="/api/account/profile",
         method="GET",
         replacement="account_backend()",
@@ -252,6 +255,7 @@ class AsyncAccountMixin(AsyncClientBase):
         ...
 
     @versioning.removed_endpoint(
+        # Served by firmware 0.6.0-rc..0.8.1 (API 4.1.0..18.3.0); gone since 0.9.0-rc.
         path="/api/account/profile",
         method="POST",
         replacement="account_backend_set()",
