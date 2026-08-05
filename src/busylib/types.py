@@ -840,3 +840,26 @@ class SmartHomeSwitchState(BaseModel):
     startup: str | None = None
 
     model_config = ConfigDict(extra="ignore")
+
+
+class AccessToken(BaseModel):
+    short_id: str
+    display_id: str
+    name: str
+    created_at: int
+    last_used_at: int
+    token: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AccessTokensInfo(BaseModel):
+    tokens: list[AccessToken]
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccessTokenMintRequest(BaseModel):
+    name: str
+
+    model_config = ConfigDict(extra="ignore")

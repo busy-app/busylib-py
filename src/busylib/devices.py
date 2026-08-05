@@ -2,13 +2,16 @@ from __future__ import annotations
 from typing import Literal
 from dataclasses import dataclass
 from enum import Enum
-from time import sleep
+import asyncio
+
+from .client import AsyncBusyBar, BusyBar
 
 from zeroconf import (
     IPVersion,
     ServiceBrowser,
     ServiceStateChange,
     Zeroconf,
+    InterfaceChoice,
 )
 
 BUSYBAR_SERVICE = "_busybar._tcp.local."
@@ -31,17 +34,31 @@ class BusyBarAddress:
 @dataclass
 class BusyBarDevice:
     name: str
-    temporary_id: str
+    device_id: str
     addresses: set[BusyBarAddress]
 
     def get_address(
-        self, affinity: Literal["over_usb"] | Literal["over_wifi"]
+        self, affinity: Literal["over_usb"] | Literal["over_wifi"] | None = None
     ) -> str | None:
+        if affinity is None:
+            return self.get_address("over_usb") or self.get_address("over_wifi")
         for addr in self.addresses:
             if addr.affinity.value == affinity:
                 return addr.ip_address
+            
         return None
 
+    def to_sync_client(self, affinity: Literal["over_usb"]|Literal["over_wifi"]|None = None, **kwargs) -> BusyBar|None:
+        addr = self.get_address(affinity)
+        if not addr:
+            return None
+        return BusyBar(addr.ip_address, **kwargs)
+
+    def to_async_client(self, affinity: Literal["over_usb"]|Literal["over_wifi"]|None = None, **kwargs) -> AsyncBusyBar|None:
+        addr = self.get_address(affinity)
+        if not addr:
+            return None
+        return AsyncBusyBar(addr, **kwargs)
 
 class BusyBarDevices:
     @staticmethod
@@ -58,11 +75,15 @@ class BusyBarDevices:
         )
 
     @staticmethod
-    def discover(
-        timeout: float = TIMEOUT, zeroconf: Zeroconf | None = None
+    async def discover(
+        timeout: float = TIMEOUT,
+        zeroconf: Zeroconf | None = None
     ) -> list[BusyBarDevice]:
-        if not zeroconf:
-            zeroconf = Zeroconf()
+        internal_short_lived_zeroconf = not bool(zeroconf)
+        if internal_short_lived_zeroconf:
+            zeroconf = Zeroconf(InterfaceChoice.All)
+        else:
+            await zeroconf.async_update_interfaces(InterfaceChoice.All)
 
         devices_by_id: dict[str, BusyBarDevice] = {}
 
@@ -81,24 +102,24 @@ class BusyBarDevices:
             info = zeroconf.get_service_info(service_type, name)
             if not info:
                 return
-
-            temporary_id = info.name.split(".")[0]
+            
+            device_id = info.name.split(".")[0]
             addresses = info.ip_addresses_by_version(IPVersion.V4Only)
             addresses = (
                 BusyBarDevices._ip_address_to_our(addr.compressed) for addr in addresses
             )
 
             raw_name = info.properties.get(b"name") or BUSYBAR_DEFAULT_NAME
-            device_name = raw_name.decode("utf-8", errors="replace")
-            default_device = BusyBarDevice(
-                name=device_name, temporary_id=temporary_id, addresses=set()
-            )
-            device = devices_by_id.get(temporary_id, default_device)
+            device_name = raw_name.decode("utf-8", errors="replace").strip('"')
+            default_device = BusyBarDevice(name=device_name, device_id=device_id, addresses=set())
+            device = devices_by_id.get(device_id, default_device)
             device.addresses = device.addresses.union(addresses)
-            devices_by_id[temporary_id] = device
+            devices_by_id[device_id] = device
 
-        ServiceBrowser(zeroconf, BUSYBAR_SERVICE, handlers=[_on_service_state_change])
-        sleep(timeout)
-        zeroconf.close()
+        with ServiceBrowser(zeroconf, BUSYBAR_SERVICE, handlers=[_on_service_state_change]):
+            await asyncio.sleep(timeout)
+
+        if internal_short_lived_zeroconf:
+            zeroconf.close()
 
         return list(devices_by_id.values())

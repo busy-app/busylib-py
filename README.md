@@ -331,17 +331,21 @@ print(f"Volume: {volume.volume}")
 Instead of hardcoding an IP address, you can discover devices like so:
 
 ```python
+import asyncio
 from busylib import BusyBarDevices
 
-for device in BusyBarDevices.discover():
-    print(f"Device: {device.name}")
-    print(f"  Over USB: {device.get_address('over_usb')}")
-    print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
+async def main():
+    for device in await BusyBarDevices.discover():
+        print(f"Device: \"{device.name}\" (id \"{device.device_id}\")")
+        print(f"  Over USB: {device.get_address('over_usb')}")
+        print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
+
+asyncio.run(main())
 
 # Example output:
-# Device: "Anna's BUSY Bar"
+# Device: "Anna's Busy Bar" (id "aabbccddeeff")
 #   Over USB: 10.0.4.20
-#   Over Wi-Fi: 192.168.100.2
+#   Over Wi-Fi: 192.168.100.8
 ```
 
 Both the `remote` and `setup` examples use this automatically when no address is
