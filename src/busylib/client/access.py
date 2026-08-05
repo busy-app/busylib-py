@@ -54,6 +54,7 @@ class AccessMixin(SyncClientBase):
         data = self._request("DELETE", f"/api/access/tokens/{short_id}")
         return types.SuccessResponse.model_validate(data)
 
+
 class AsyncAccessMixin(AsyncClientBase):
     """
     Async HTTP access mode helpers.
