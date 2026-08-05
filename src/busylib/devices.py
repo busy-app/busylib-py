@@ -56,7 +56,7 @@ class BusyBarDevice:
         addr = self.get_address(affinity)
         if not addr:
             return None
-        return BusyBar(addr.ip_address, **kwargs)
+        return BusyBar(addr, **kwargs)
 
     def to_async_client(
         self,
