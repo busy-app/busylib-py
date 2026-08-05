@@ -7,10 +7,10 @@ from busylib.types import HttpAccessInfo
 from examples.shared import discovery
 
 
-def _device(name: str, ip: str, temporary_id: str = "id") -> BusyBarDevice:
+def _device(name: str, ip: str, device_id: str = "id") -> BusyBarDevice:
     return BusyBarDevice(
         name=name,
-        temporary_id=temporary_id,
+        device_id=device_id,
         addresses={
             BusyBarAddress(
                 ip_address=ip,
@@ -185,8 +185,8 @@ def test_resolve_connection_multiple_devices_prompts_selection(
     """
     Show a numbered menu and use the user's selection when multiple bars are found.
     """
-    first = _device("Front desk", "192.168.1.10", temporary_id="a")
-    second = _device("Kitchen", "192.168.1.11", temporary_id="b")
+    first = _device("Front desk", "192.168.1.10", device_id="a")
+    second = _device("Kitchen", "192.168.1.11", device_id="b")
     monkeypatch.setattr(
         discovery.BusyBarDevices, "discover", lambda timeout=1.5: [first, second]
     )
@@ -208,7 +208,7 @@ def test_resolve_connection_device_without_address_raises(
     """
     Raise a clear error when the selected device has no usable IP.
     """
-    device = BusyBarDevice(name="No IP", temporary_id="id", addresses=set())
+    device = BusyBarDevice(name="No IP", device_id="id", addresses=set())
     monkeypatch.setattr(
         discovery.BusyBarDevices, "discover", lambda timeout=1.5: [device]
     )
