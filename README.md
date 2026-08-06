@@ -334,13 +334,10 @@ Instead of hardcoding an IP address, you can discover devices like so:
 import asyncio
 from busylib import BusyBarDevices
 
-async def main():
-    for device in await BusyBarDevices.discover():
-        print(f"Device: \"{device.name}\" (id \"{device.device_id}\")")
-        print(f"  Over USB: {device.get_address('over_usb')}")
-        print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
-
-asyncio.run(main())
+for device in BusyBarDevices.discover():
+    print(f"Device: \"{device.name}\" (id \"{device.device_id}\")")
+    print(f"  Over USB: {device.get_address('over_usb')}")
+    print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
 
 # Example output:
 # Device: "Anna's Busy Bar" (id "aabbccddeeff")

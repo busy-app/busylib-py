@@ -39,7 +39,7 @@ class AccessMixin(SyncClientBase):
         return types.AccessTokensInfo.model_validate(data)
 
     def token_mint(self, name: str) -> types.AccessToken:
-        logger.info(f"token_mint name={name}")
+        logger.info("token_mint name=%s", name)
         payload = types.AccessTokenMintRequest(name=name).model_dump()
         data = self._request("POST", "/api/access/tokens", json_payload=payload)
         return types.AccessToken.model_validate(data)
@@ -50,7 +50,7 @@ class AccessMixin(SyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     def tokens_revoke(self, short_id: str) -> types.SuccessResponse:
-        logger.info(f"tokens_revoke short_id={short_id}")
+        logger.info("tokens_revoke short_id=%s", short_id)
         data = self._request("DELETE", f"/api/access/tokens/{short_id}")
         return types.SuccessResponse.model_validate(data)
 
@@ -83,7 +83,7 @@ class AsyncAccessMixin(AsyncClientBase):
         return types.AccessTokensInfo.model_validate(data)
 
     async def token_mint(self, name: str) -> types.AccessToken:
-        logger.info(f"token_mint name={name}")
+        logger.info("token_mint name=%s", name)
         payload = types.AccessTokenMintRequest(name=name).model_dump()
         data = await self._request("POST", "/api/access/tokens", json_payload=payload)
         return types.AccessToken.model_validate(data)
@@ -94,6 +94,6 @@ class AsyncAccessMixin(AsyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     async def tokens_revoke(self, short_id: str) -> types.SuccessResponse:
-        logger.info(f"tokens_revoke short_id={short_id}")
+        logger.info("tokens_revoke short_id=%s", short_id)
         data = await self._request("DELETE", f"/api/access/tokens/{short_id}")
         return types.SuccessResponse.model_validate(data)
