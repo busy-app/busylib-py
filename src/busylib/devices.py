@@ -118,7 +118,7 @@ class BusyBarDevices:
             )
 
             raw_name = info.properties.get(b"name") or BUSYBAR_DEFAULT_NAME
-            device_name = raw_name.decode("utf-8", errors="replace").strip('"')
+            device_name = raw_name.decode("utf-8", errors="replace")
             default_device = BusyBarDevice(
                 name=device_name, device_id=device_id, addresses=set()
             )
