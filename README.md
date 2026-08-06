@@ -273,6 +273,27 @@ device, and running setup:
 uv run python -m examples.remote.main 10.0.4.20
 ```
 
+### Post a message over the internet
+
+The examples above talk to a bar over USB or the LAN. `examples/cloud_message`
+shows a bar that is somewhere else entirely: requests travel through the BUSY
+cloud service, so the script does not need to share a network with the device.
+
+Create an API token at [cloud.busy.app](https://cloud.busy.app) with the
+**BUSY Bar** access scope, then:
+
+```bash
+export BUSY_BAR_TOKEN=...
+uv run python -m examples.cloud_message.main "Deploy running" --background red
+uv run python -m examples.cloud_message.main --clear
+```
+
+Cloud requests are authenticated with `Authorization: Bearer <token>` and are
+served under `https://api.busy.app/busybar/<endpoint>` rather than the
+on-device `/api/<endpoint>`, so the example builds calls with
+`prepare_request()` and executes them against a client bound to that base URL.
+An `account`-scoped token is rejected with `403`.
+
 ## Going further
 
 Client method names follow BUSY Bar API path segments instead of generic
