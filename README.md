@@ -331,7 +331,6 @@ print(f"Volume: {volume.volume}")
 Instead of hardcoding an IP address, you can discover devices like so:
 
 ```python
-import asyncio
 from busylib import BusyBarDevices
 
 for device in BusyBarDevices.discover():

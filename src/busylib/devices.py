@@ -71,11 +71,10 @@ class BusyBarDevice:
 
 
 class BusyBarDeviceDiscoverer:
-    _devices_by_id: dict[str, BusyBarDevice] = {}
-
     def __init__(self, zeroconf):
         self._user_provided_zeroconf = bool(zeroconf)
         self._zeroconf = zeroconf or Zeroconf(InterfaceChoice.All)
+        self._devices_by_id = {}
 
     def sync_setup(self):
         if self._user_provided_zeroconf:

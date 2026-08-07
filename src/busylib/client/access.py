@@ -34,23 +34,23 @@ class AccessMixin(SyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     def tokens_list(self) -> types.AccessTokensInfo:
-        logger.info("tokens_list")
+        logger.info("access_tokens_list")
         data = self._request("GET", "/api/access/tokens")
         return types.AccessTokensInfo.model_validate(data)
 
     def token_mint(self, name: str) -> types.AccessToken:
-        logger.info("token_mint name=%s", name)
+        logger.info("access_token_mint name=%s", name)
         payload = types.AccessTokenMintRequest(name=name).model_dump()
         data = self._request("POST", "/api/access/tokens", json_payload=payload)
         return types.AccessToken.model_validate(data)
 
     def tokens_delete_all(self) -> types.SuccessResponse:
-        logger.info("tokens_delete")
+        logger.info("access_tokens_delete")
         data = self._request("DELETE", "/api/access/tokens")
         return types.SuccessResponse.model_validate(data)
 
     def tokens_revoke(self, short_id: str) -> types.SuccessResponse:
-        logger.info("tokens_revoke short_id=%s", short_id)
+        logger.info("access_tokens_revoke short_id=%s", short_id)
         data = self._request("DELETE", f"/api/access/tokens/{short_id}")
         return types.SuccessResponse.model_validate(data)
 
@@ -78,22 +78,22 @@ class AsyncAccessMixin(AsyncClientBase):
         return types.SuccessResponse.model_validate(data)
 
     async def tokens_list(self) -> types.AccessTokensInfo:
-        logger.info("tokens_list")
+        logger.info("async access_tokens_list")
         data = await self._request("GET", "/api/access/tokens")
         return types.AccessTokensInfo.model_validate(data)
 
     async def token_mint(self, name: str) -> types.AccessToken:
-        logger.info("token_mint name=%s", name)
+        logger.info("async access_token_mint name=%s", name)
         payload = types.AccessTokenMintRequest(name=name).model_dump()
         data = await self._request("POST", "/api/access/tokens", json_payload=payload)
         return types.AccessToken.model_validate(data)
 
     async def tokens_delete_all(self) -> types.SuccessResponse:
-        logger.info("tokens_delete")
+        logger.info("async access_tokens_delete")
         data = await self._request("DELETE", "/api/access/tokens")
         return types.SuccessResponse.model_validate(data)
 
     async def tokens_revoke(self, short_id: str) -> types.SuccessResponse:
-        logger.info("tokens_revoke short_id=%s", short_id)
+        logger.info("async access_tokens_revoke short_id=%s", short_id)
         data = await self._request("DELETE", f"/api/access/tokens/{short_id}")
         return types.SuccessResponse.model_validate(data)
