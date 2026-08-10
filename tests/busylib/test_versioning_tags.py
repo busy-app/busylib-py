@@ -47,3 +47,69 @@ def test_endpoints_present_since_the_first_api_are_left_untagged(
     """
     for name in ("display_draw", "audio_play", "storage_write", "version"):
         assert versioning.get_method_compatibility(getattr(client, name)) is None
+
+
+EXPERIMENTAL = [
+    "access_tokens_list",
+    "access_token_mint",
+    "access_tokens_delete_all",
+    "access_tokens_revoke",
+]
+
+
+@pytest.mark.parametrize("name", EXPERIMENTAL)
+@pytest.mark.parametrize("client", [BusyBar, AsyncBusyBar])
+def test_endpoints_ahead_of_released_firmware_are_marked(
+    client: type, name: str
+) -> None:
+    """
+    Helpers for unreleased endpoints say so instead of claiming a version.
+
+    No released firmware serves these, so a version floor would have to be
+    invented; the marker records that and names the firmware work, so it can
+    be swapped for a real floor once that ships.
+    """
+    metadata = versioning.get_method_compatibility(getattr(client, name))
+
+    assert metadata is not None
+    assert metadata["status"] == "experimental"
+    assert "886" in metadata["note"]
+
+
+@pytest.mark.parametrize("name", EXPERIMENTAL)
+def test_experimental_helpers_still_call_the_device(name: str) -> None:
+    """
+    Marking is documentation, not a block: the call still goes out.
+
+    Unlike a removed endpoint, this one works against firmware that has it.
+    """
+    import httpx
+
+    seen: list[str] = []
+
+    bodies = {
+        "access_tokens_list": {"tokens": []},
+        "access_token_mint": {
+            "short_id": "ab",
+            "display_id": "abcd",
+            "name": "x",
+            "created_at": 0,
+            "last_used_at": 0,
+        },
+        "access_tokens_delete_all": {"result": "OK"},
+        "access_tokens_revoke": {"result": "OK"},
+    }
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(200, json=bodies[name])
+
+    client = BusyBar(
+        addr="http://device.local", transport=httpx.MockTransport(responder)
+    )
+    getattr(client, name)("x") if name in (
+        "access_token_mint",
+        "access_tokens_revoke",
+    ) else getattr(client, name)()
+
+    assert seen and seen[0].startswith("/api/access/tokens")

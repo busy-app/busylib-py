@@ -19,8 +19,9 @@ class MethodCompatibility(dict[str, str]):
     """
     Dictionary metadata describing a client helper's OpenAPI compatibility.
 
-    Carries either the minimum `version` a helper targets, or `status`
-    `"removed"` with the `replacement` to use instead.
+    Carries the minimum `version` a helper targets, or a `status`:
+    `"removed"` with the `replacement` to use instead, or `"experimental"`
+    with a `note` about the firmware that introduces the endpoint.
     """
 
 
@@ -109,6 +110,42 @@ def removed_endpoint(
 
         setattr(wrapper, "__busy_openapi__", metadata)
         return cast(F, wrapper)
+
+    return decorator
+
+
+def experimental_endpoint(
+    *,
+    path: str,
+    method: str,
+    note: str,
+) -> Callable[[F], F]:
+    """
+    Mark a helper whose device endpoint is not in released firmware yet.
+
+    The counterpart to `requires_openapi`, for the other end of an endpoint's
+    life: there is no minimum API version to state because no released
+    firmware serves it, so a version floor would have to be invented. The
+    call is left working - it succeeds against firmware that does have the
+    endpoint - and the situation is recorded in the metadata instead, where
+    `method_compatibility()` and the API reference can show it.
+
+    `note` says which firmware work introduces the endpoint, so the marker
+    can be replaced with a real version once that ships.
+    """
+
+    def decorator(func: F) -> F:
+        setattr(
+            func,
+            "__busy_openapi__",
+            MethodCompatibility(
+                path=path,
+                method=method,
+                status="experimental",
+                note=note,
+            ),
+        )
+        return func
 
     return decorator
 
