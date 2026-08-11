@@ -22,6 +22,24 @@ README = Path(__file__).resolve().parents[1] / "README.md"
 SKIP_MARKERS = ("BusyBarDevices", "asyncio.run")
 
 
+def test_readme_onboarding_separates_terminal_and_python() -> None:
+    """
+    Keep the first Windows path explicit about where each command runs.
+
+    This protects against a regression reported by a user who pasted the
+    source-only `uv run` command into both a Python file and an interactive
+    prompt after the README did not distinguish terminal commands from Python.
+    """
+    readme = README.read_text(encoding="utf-8")
+
+    assert "Windows (PowerShell)" in readme
+    assert "Do not\n  paste terminal commands" in readme
+    assert "py -m pip install --upgrade busylib" in readme
+    assert "Connected to BUSY Bar. API" in readme
+    assert "uv run python -m examples.setup.main" not in readme
+    assert "does not run Python examples from this guide" in readme
+
+
 def _responder(request: httpx.Request) -> httpx.Response:
     """
     Answer the endpoints the README touches with realistic payloads.
