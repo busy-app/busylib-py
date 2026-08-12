@@ -1,3 +1,10 @@
+<p class="repository-hero" align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/busylib-py-hero-dark.png">
+    <img alt="BUSY Bar: official Python library for connecting, controlling, and automating." src="assets/brand/busylib-py-hero-light.png">
+  </picture>
+</p>
+
 # busylib
 
 [![PyPI version](https://img.shields.io/pypi/v/busylib.svg?label=PyPI)](https://pypi.org/project/busylib/)
