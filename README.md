@@ -1,7 +1,8 @@
 <p class="repository-hero" align="center">
   <picture>
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/busylib-py-hero-light.png">
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/busylib-py-hero-dark.png">
-    <img alt="BUSY Bar: official Python library for connecting, controlling, and automating." src="assets/brand/busylib-py-hero-light.png">
+    <img alt="BUSY Bar: official Python library for connecting, controlling, and automating." width="830" height="218" src="assets/brand/busylib-py-hero-light.png">
   </picture>
 </p>
 
