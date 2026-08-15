@@ -23,7 +23,7 @@ classifiers = [
 ]
 dynamic = [ "version" ]
 dependencies = [
-  "httpx>=0.28.1",
+  "httpx2>=2",
   "pillow>=12",
   "protobuf>=6.31.1",
   "pydantic>=2.9",

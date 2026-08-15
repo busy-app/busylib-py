@@ -141,7 +141,7 @@ if __name__ == "__main__":
 ## Tests And Checks
 
 - Add tests for parsing, scheduling, retries, payload generation, and error handling.
-- Test display/audio payloads with `httpx.MockTransport` before hitting a real device.
+- Test display/audio payloads with `httpx2.MockTransport` before hitting a real device.
 - Test repeated failures and recovery paths for watchers.
 - Run checks available in the current project. In this repository, prefer:
 

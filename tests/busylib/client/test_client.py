@@ -1,13 +1,13 @@
 import json
 from collections.abc import Callable
 
-import httpx
+import httpx2
 import pytest
 from pydantic import ValidationError
 
 from busylib import BusyBar, exceptions, types
 
-Responder = Callable[[httpx.Request], httpx.Response]
+Responder = Callable[[httpx2.Request], httpx2.Response]
 
 
 def make_client(responder: Responder, **kwargs) -> BusyBar:
@@ -16,7 +16,7 @@ def make_client(responder: Responder, **kwargs) -> BusyBar:
 
     Keeps transport setup consistent across tests.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return BusyBar(addr="http://device.local", transport=transport, **kwargs)
 
 
@@ -28,7 +28,7 @@ def test_init_defaults_local():
     """
     client = BusyBar()
     assert client.base_url == "http://10.0.4.20"
-    assert client.client.base_url == httpx.URL("http://10.0.4.20")
+    assert client.client.base_url == httpx2.URL("http://10.0.4.20")
 
 
 def test_init_token_sets_cloud_base_and_header():
@@ -49,9 +49,9 @@ def test_version_success():
     Confirms the version and branch fields are mapped.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/version"
-        return httpx.Response(
+        return httpx2.Response(
             200,
             json={
                 "api_semver": "1.2.0",
@@ -73,9 +73,9 @@ def test_version_default_api_version_remains_device_semver() -> None:
     """
     seen: dict[str, str | None] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["header"] = request.headers.get("x-busy-api-version")
-        return httpx.Response(200, json={"api_semver": "25.0.0"})
+        return httpx2.Response(200, json={"api_semver": "25.0.0"})
 
     client = make_client(responder)
     result = client.version()
@@ -91,12 +91,12 @@ def test_name_and_time():
     Verifies both responses are parsed correctly.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/api/name":
-            return httpx.Response(200, json={"name": "BusyBar"})
+            return httpx2.Response(200, json={"name": "BusyBar"})
         if request.url.path == "/api/time":
-            return httpx.Response(200, json={"timestamp": "2024-01-01T10:00:00"})
-        return httpx.Response(404, json={"error": "missing", "code": 404})
+            return httpx2.Response(200, json={"timestamp": "2024-01-01T10:00:00"})
+        return httpx2.Response(404, json={"error": "missing", "code": 404})
 
     client = make_client(responder)
     name = client.name()
@@ -111,11 +111,11 @@ def test_name_set() -> None:
     """
     seen: dict[str, object] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["method"] = request.method
         seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     resp = client.name_set("Busy Desk")
@@ -129,7 +129,7 @@ def test_name_set_rejects_empty() -> None:
     """
     Reject empty device names before sending request.
     """
-    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    client = make_client(lambda _request: httpx2.Response(200, json={"result": "OK"}))
     with pytest.raises(ValueError):
         client.name_set("")
 
@@ -139,9 +139,9 @@ def test_account_info():
     Parse linked account info from the client.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/account/info"
-        return httpx.Response(200, json={"linked": True, "email": "name@example.com"})
+        return httpx2.Response(200, json={"linked": True, "email": "name@example.com"})
 
     client = make_client(responder)
     result = client.account_info()
@@ -154,9 +154,9 @@ def test_account_link():
     Parse account link response from the client.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/account/link"
-        return httpx.Response(200, json={"code": "ABCD", "expires_at": 1700000000})
+        return httpx2.Response(200, json={"code": "ABCD", "expires_at": 1700000000})
 
     client = make_client(responder)
     result = client.account_link()
@@ -171,8 +171,8 @@ def test_error_response_raises_api_error():
     Ensures error payload is surfaced through the exception.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def responder(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             500,
             json={"error": "fail", "code": 500},
             headers={"X-Request-ID": "req-500"},
@@ -195,9 +195,9 @@ def test_api_error_has_truncated_excerpt() -> None:
     Keep response excerpt compact for diagnostic fields in API errors.
     """
 
-    def responder(_request: httpx.Request) -> httpx.Response:
+    def responder(_request: httpx2.Request) -> httpx2.Response:
         long_text = "x" * 400
-        return httpx.Response(503, text=long_text)
+        return httpx2.Response(503, text=long_text)
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
@@ -214,8 +214,8 @@ def test_plain_text_error_response():
     Confirms non-JSON failures still propagate with HTTP status.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, text="not found")
+    def responder(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(404, text="not found")
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError) as exc:
@@ -231,8 +231,8 @@ def test_version_incompatible_warns_by_default(
     Warn by default instead of blocking callers on API version mismatch.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"api_semver": "0.9.0"})
+    def responder(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"api_semver": "0.9.0"})
 
     client = make_client(responder, api_version="1.0.0")
     result = client.version()
@@ -248,8 +248,8 @@ def test_version_incompatible_strict_requires_device_update():
     Ensures the version guard raises a dedicated error.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"api_semver": "0.9.0"})
+    def responder(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"api_semver": "0.9.0"})
 
     client = make_client(
         responder,
@@ -266,8 +266,8 @@ def test_version_incompatible_can_skip_compatibility_check() -> None:
     Allow callers to opt out from compatibility checks.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"api_semver": "0.9.0"})
+    def responder(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"api_semver": "0.9.0"})
 
     client = make_client(
         responder,
@@ -284,14 +284,14 @@ def test_client_rejects_unknown_compatibility_mode() -> None:
     Validate compatibility policy names at client construction.
     """
     with pytest.raises(ValueError):
-        make_client(lambda _request: httpx.Response(200), compatibility_mode="fail")
+        make_client(lambda _request: httpx2.Response(200), compatibility_mode="fail")
 
 
 def test_method_compatibility_metadata() -> None:
     """
     Expose declarative OpenAPI metadata for version-gated helpers.
     """
-    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    client = make_client(lambda _request: httpx2.Response(200, json={"result": "OK"}))
     metadata = client.method_compatibility("log_dump")
 
     assert metadata == {
@@ -311,9 +311,9 @@ def test_log_dump_empty_body_returns_ok() -> None:
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["params"] = dict(request.url.params)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
     client = make_client(responder)
     result = client.log_dump(filename="dump")
@@ -330,9 +330,9 @@ def test_log_dump_no_filename_omits_params() -> None:
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["params"] = dict(request.url.params)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     result = client.log_dump()
@@ -348,7 +348,7 @@ def test_log_dump_rejects_legacy_path_kwarg() -> None:
     A caller still using the old keyword must fail loudly at the call site
     instead of getting an HTTP 400 from the device.
     """
-    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    client = make_client(lambda _request: httpx2.Response(200, json={"result": "OK"}))
 
     with pytest.raises(TypeError):
         client.log_dump(path="/ext/dump.log")  # type: ignore[call-arg]
@@ -362,9 +362,9 @@ def test_request_carries_api_version_header():
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["header"] = request.headers.get("x-busy-api-version")
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder, api_version="1.1.0")
     resp = client.wifi_disconnect()
@@ -380,11 +380,11 @@ def test_retry_on_transport_error():
     """
     calls = {"count": 0}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         calls["count"] += 1
         if calls["count"] == 1:
-            raise httpx.ConnectError("boom", request=request)
-        return httpx.Response(200, json={"result": "OK"})
+            raise httpx2.ConnectError("boom", request=request)
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder, max_retries=1, backoff=0.0)
     resp = client.wifi_disconnect()
@@ -397,9 +397,9 @@ def test_response_validation_error_is_wrapped() -> None:
     Wrap model validation failures into BusyBarResponseValidationError.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/version"
-        return httpx.Response(
+        return httpx2.Response(
             200,
             json={"api_semver": "1.2.0", "build_date": {"invalid": True}},
         )
@@ -488,11 +488,11 @@ def test_display_draw_sends_utf8_body():
         ],
     }
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.headers["content-type"].startswith("application/json")
         body = request.content.decode("utf-8")
         assert "Cafe creme" in body  # ensure ensure_ascii=False
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     resp = client.display_draw(payload)
@@ -506,7 +506,7 @@ def test_display_draw_and_clear_params() -> None:
 
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "path": request.url.path,
@@ -515,7 +515,7 @@ def test_display_draw_and_clear_params() -> None:
                 "session": request.headers.get("x-session-id"),
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     payload = {
@@ -547,9 +547,9 @@ def test_display_draw_can_clear_before_draw() -> None:
 
     seen: list[tuple[str, str, dict[str, str]]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append((request.method, request.url.path, dict(request.url.params)))
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     payload = {
@@ -575,7 +575,7 @@ def test_display_can_clear_draw_and_audio_play() -> None:
 
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "method": request.method,
@@ -585,7 +585,7 @@ def test_display_can_clear_draw_and_audio_play() -> None:
                 "session": request.headers.get("x-session-id"),
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     payload = {
@@ -648,10 +648,10 @@ def test_display_draw_can_sanitize_text_payload(caplog) -> None:
 
     seen: dict[str, str] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         body = request.content.decode("utf-8")
         seen["body"] = body
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     caplog.set_level("WARNING", logger="busylib.client.display")
@@ -690,10 +690,10 @@ def test_screen_returns_decoded_rgb_bytes():
     spec = display.get_display_spec(1)
     packed = bytes([0x21]) * ((spec.width * spec.height) // 2)
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/screen"
         assert request.url.params["display"] == "1"
-        return httpx.Response(200, content=base64.b64encode(packed))
+        return httpx2.Response(200, content=base64.b64encode(packed))
 
     client = make_client(responder)
     data = client.screen(1)
@@ -708,8 +708,8 @@ def test_screen_raises_when_the_frame_cannot_be_decoded():
     base64 text as if it were pixels.
     """
 
-    def responder(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=b"\x00\x01\x02")
+    def responder(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=b"\x00\x01\x02")
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarProtocolError, match="screen frame"):
@@ -727,9 +727,9 @@ def test_screen_accepts_a_display_spec():
     spec = display.get_display_spec(0)
     frame = bytes([1, 2, 3]) * (spec.width * spec.height)
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.params["display"] == "0"
-        return httpx.Response(200, content=base64.b64encode(frame))
+        return httpx2.Response(200, content=base64.b64encode(frame))
 
     client = make_client(responder)
     assert client.screen(spec) == frame
@@ -757,9 +757,9 @@ def test_simple_success_methods(method: str, path: str):
     Covers a set of API methods with uniform response handling.
     """
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == path
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     func = getattr(client, method)
@@ -785,9 +785,9 @@ def test_wifi_connect_serialization():
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     cfg = {"ssid": "TestNetwork", "password": "secret", "security": "WPA2"}
     client = make_client(responder)
@@ -805,10 +805,10 @@ def test_display_brightness_validation_and_payload():
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["params"] = dict(request.url.params)
         seen["content"] = request.content
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     resp = client.display_brightness_set("auto")
@@ -828,10 +828,10 @@ def test_audio_volume_set_params():
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["params"] = dict(request.url.params)
         seen["content"] = request.content
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     resp = client.audio_volume_set(42.5)
@@ -848,9 +848,9 @@ def test_display_draw_color_serialization():
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     elements: list[types.DisplayElement] = [
@@ -928,9 +928,9 @@ def test_display_draw_color_tuple_alpha():
     """
     seen = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     elements: list[types.DisplayElement] = [
@@ -968,9 +968,9 @@ def test_removed_endpoints_raise_instead_of_calling_the_device(method_name: str)
     """
     called: list[str] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         called.append(request.url.path)
-        return httpx.Response(404, json={"error": "Not Found"})
+        return httpx2.Response(404, json={"error": "Not Found"})
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarRemovedEndpointError) as exc:
@@ -984,7 +984,7 @@ def test_removed_endpoints_are_declared_in_compatibility_metadata():
     """
     `method_compatibility` reports the removal and what to use instead.
     """
-    client = make_client(lambda _r: httpx.Response(200, json={"result": "OK"}))
+    client = make_client(lambda _r: httpx2.Response(200, json={"result": "OK"}))
 
     metadata = client.method_compatibility("account_profile")
 

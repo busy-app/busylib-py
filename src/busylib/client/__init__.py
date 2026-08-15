@@ -42,7 +42,7 @@ class BusyBar(
     SyncClientBase,
 ):
     """
-    HTTPX-based client for the BUSY Bar API.
+    HTTPX2-based client for the BUSY Bar API.
     """
 
     def __init__(self, *args, **kwargs):
@@ -102,7 +102,7 @@ class AsyncBusyBar(
     AsyncClientBase,
 ):
     """
-    Async HTTPX-based client for the BUSY Bar API.
+    Async HTTPX2-based client for the BUSY Bar API.
     """
 
     def __init__(self, *args, **kwargs):

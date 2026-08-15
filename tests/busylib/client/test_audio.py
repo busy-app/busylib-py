@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-import httpx
+import httpx2
 import pytest
 from busylib import AsyncBusyBar, BusyBar, types
 from busylib import exceptions
@@ -12,7 +12,7 @@ def _make_sync_client(responder) -> BusyBar:
     """
     Build a BusyBar client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return BusyBar(addr="http://device.local", transport=transport)
 
 
@@ -20,7 +20,7 @@ def _make_async_client(responder) -> AsyncBusyBar:
     """
     Build an AsyncBusyBar client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return AsyncBusyBar(addr="http://device.local", transport=transport)
 
 
@@ -30,7 +30,7 @@ def test_audio_play_stop_volume_sync() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "path": request.url.path,
@@ -40,8 +40,8 @@ def test_audio_play_stop_volume_sync() -> None:
             }
         )
         if request.url.path == "/api/audio/volume" and request.method == "GET":
-            return httpx.Response(200, json={"volume": 42.0})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"volume": 42.0})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.audio_play(application_name="app", path="/ext/app.wav")
@@ -81,9 +81,9 @@ def test_audio_play_sync_supports_session_header() -> None:
     """
     seen: dict[str, str] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["session"] = request.headers.get("x-session-id", "")
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.audio_play(
@@ -101,9 +101,9 @@ def test_audio_play_sync_supports_stock_path_payload() -> None:
     """
     seen: dict[str, object] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.update(json.loads(request.content))
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.audio_play(payload={"stock_path": "shared/sfx.snd"})
@@ -116,7 +116,7 @@ def test_audio_play_sync_rejects_payload_application_name() -> None:
     Reject application_name inside audio payload; request context owns it.
     """
     client = _make_sync_client(
-        lambda _request: httpx.Response(200, json={"result": "OK"})
+        lambda _request: httpx2.Response(200, json={"result": "OK"})
     )
     with pytest.raises(exceptions.BusyBarResponseValidationError):
         client.audio_play(
@@ -134,9 +134,9 @@ def test_audio_play_sync_keyword_arguments_override_payload() -> None:
     """
     seen: dict[str, object] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.update(json.loads(request.content))
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.audio_play(
@@ -154,7 +154,7 @@ async def test_audio_play_stop_volume_async() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "path": request.url.path,
@@ -164,8 +164,8 @@ async def test_audio_play_stop_volume_async() -> None:
             }
         )
         if request.url.path == "/api/audio/volume" and request.method == "GET":
-            return httpx.Response(200, json={"volume": 17.0})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"volume": 17.0})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.audio_play(application_name="app", path="/ext/app.wav")
@@ -207,9 +207,9 @@ async def test_audio_play_async_supports_session_header() -> None:
     """
     seen: dict[str, str] = {}
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen["session"] = request.headers.get("x-session-id", "")
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.audio_play(
@@ -229,9 +229,9 @@ async def test_audio_play_async_supports_stock_path_payload() -> None:
     """
     seen: dict[str, object] = {}
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.update(json.loads(request.content))
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.audio_play(payload={"stock_path": "shared/sfx.snd"})

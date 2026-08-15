@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar, types
@@ -10,7 +10,7 @@ def _make_sync_client(responder) -> BusyBar:
     """
     Build a BusyBar client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return BusyBar(addr="http://device.local", transport=transport)
 
 
@@ -18,7 +18,7 @@ def _make_async_client(responder) -> AsyncBusyBar:
     """
     Build an AsyncBusyBar client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return AsyncBusyBar(addr="http://device.local", transport=transport)
 
 
@@ -28,7 +28,7 @@ def test_input_sync() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "path": request.url.path,
@@ -36,7 +36,7 @@ def test_input_sync() -> None:
                 "method": request.method,
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.input(types.InputKey.OK)
@@ -51,7 +51,7 @@ async def test_input_async() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "path": request.url.path,
@@ -59,7 +59,7 @@ async def test_input_async() -> None:
                 "method": request.method,
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.input(types.InputKey.OK)

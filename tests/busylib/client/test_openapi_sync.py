@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar, exceptions, types
@@ -12,7 +12,7 @@ def _make_sync_client(responder) -> BusyBar:
     """
     Build a sync client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return BusyBar(addr="http://device.local", transport=transport)
 
 
@@ -20,7 +20,7 @@ def _make_async_client(responder) -> AsyncBusyBar:
     """
     Build an async client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return AsyncBusyBar(addr="http://device.local", transport=transport)
 
 
@@ -48,7 +48,7 @@ def test_account_backend_sync_requests_match_openapi() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "method": request.method,
@@ -57,7 +57,7 @@ def test_account_backend_sync_requests_match_openapi() -> None:
             }
         )
         if request.method == "GET":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "server_url": "default",
@@ -65,7 +65,7 @@ def test_account_backend_sync_requests_match_openapi() -> None:
                     "ignore_server_cert": False,
                 },
             )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     backend = client.account_backend()
@@ -97,7 +97,7 @@ def test_busy_profile_sync_requests_match_openapi() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "method": request.method,
@@ -106,8 +106,8 @@ def test_busy_profile_sync_requests_match_openapi() -> None:
             }
         )
         if request.method == "GET":
-            return httpx.Response(200, json=_busy_profile_payload())
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json=_busy_profile_payload())
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     profile = client.busy_profile("busy")
@@ -133,7 +133,7 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "method": request.method,
@@ -143,9 +143,9 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
             }
         )
         if request.url.path == "/api/transport":
-            return httpx.Response(200, json={"type": "wifi"})
+            return httpx2.Response(200, json={"type": "wifi"})
         if request.url.path == "/api/status/device":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "serial_number": "203638485431500400123456",
@@ -155,7 +155,7 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
                 },
             )
         if request.url.path == "/api/status/firmware":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "version": "1.0.0",
@@ -167,17 +167,17 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
                 },
             )
         if request.url.path == "/api/time/timezone" and request.method == "GET":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"name": "Bangalore", "offset": "+05:30", "abbr": "IST"},
             )
         if request.url.path == "/api/time/tzlist":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"list": [{"name": "UTC", "offset": "+00:00", "abbr": "UTC"}]},
             )
         if request.url.path == "/api/update/autoupdate" and request.method == "GET":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "is_enabled": True,
@@ -186,11 +186,11 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
                 },
             )
         if request.url.path == "/api/log_dump":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"result": "OK", "path": "/ext/dump.txt"},
             )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     assert client.transport().type == "wifi"
@@ -243,7 +243,7 @@ def test_display_rectangle_payload_matches_openapi() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "method": request.method,
@@ -251,7 +251,7 @@ def test_display_rectangle_payload_matches_openapi() -> None:
                 "body": request.content,
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     response = client.display_draw(
@@ -410,7 +410,7 @@ def test_smart_home_sync_requests_match_openapi() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "method": request.method,
@@ -419,7 +419,7 @@ def test_smart_home_sync_requests_match_openapi() -> None:
             }
         )
         if request.url.path == "/api/smart_home/pairing" and request.method == "GET":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "fabric_count": 1,
@@ -430,7 +430,7 @@ def test_smart_home_sync_requests_match_openapi() -> None:
                 },
             )
         if request.url.path == "/api/smart_home/pairing" and request.method == "POST":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "available_until": "1769437579000",
@@ -439,8 +439,8 @@ def test_smart_home_sync_requests_match_openapi() -> None:
                 },
             )
         if request.url.path == "/api/smart_home/switch" and request.method == "GET":
-            return httpx.Response(200, json={"state": False})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"state": False})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     assert client.smart_home_pairing().fabric_count == 1
@@ -468,10 +468,10 @@ async def test_async_new_openapi_helpers() -> None:
     """
     seen: list[str] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(f"{request.method} {request.url.path}")
         if request.url.path == "/api/account/backend":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "server_url": "default",
@@ -480,12 +480,12 @@ async def test_async_new_openapi_helpers() -> None:
                 },
             )
         if request.url.path == "/api/busy/profiles/busy":
-            return httpx.Response(200, json=_busy_profile_payload())
+            return httpx2.Response(200, json=_busy_profile_payload())
         if request.url.path == "/api/smart_home/switch":
-            return httpx.Response(200, json={"state": True})
+            return httpx2.Response(200, json={"state": True})
         if request.url.path == "/api/log_dump":
-            return httpx.Response(200, json={"result": "OK", "path": "/ext/log.txt"})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"result": "OK", "path": "/ext/log.txt"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     assert (await client.account_backend()).server_url == "default"
