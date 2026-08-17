@@ -50,7 +50,7 @@ urls.Repository = "https://github.com/busy-app/busylib-py"
 dev = [
   "grpcio-tools>=1.74",
   "pre-commit>=3.8",
-  "pyproject-fmt==2.25.3",
+  "pyproject-fmt==2.27.1",
   "pyright==1.1.411",
   "pytest>=8.4.1",
   "pytest-asyncio>=0.24",
