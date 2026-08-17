@@ -1,9 +1,11 @@
-from pydantic import AliasChoices, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The device serves its API under /api; the cloud serves the same endpoints
-# under /busybar and has no /api at all, so the prefix is swapped rather than
-# appended when a client runs in cloud mode.
+# The device serves its API under /api. In the cloud the same device endpoints
+# live under /busybar (https://api.busy.app/busybar/docs) and there is no /api,
+# so the prefix is swapped rather than appended when a client runs in cloud
+# mode. The account-level API at the root of the same host is a separate
+# surface with its own token and is not covered by this client.
 DEVICE_API_PREFIX = "/api"
 CLOUD_API_PREFIX = "/busybar"
 
@@ -11,15 +13,15 @@ CLOUD_API_PREFIX = "/busybar"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="BUSYLIB_")
 
+    # Spelled out in full rather than left to env_prefix, which would expect
+    # BUSYLIB_BASE_URL. Bare URL/CLOUD_URL are deliberately not accepted: they
+    # are too broad a name for a library to claim in a shared environment.
     base_url: str = Field(
-        # An explicit validation_alias bypasses env_prefix entirely, so the
-        # documented BUSYLIB_* names were silently ignored and only the bare
-        # ones worked. Both are accepted now, prefixed first.
-        validation_alias=AliasChoices("BUSYLIB_URL", "URL"),
+        validation_alias="BUSYLIB_URL",
         default="http://10.0.4.20",
     )
     cloud_base_url: str = Field(
-        validation_alias=AliasChoices("BUSYLIB_CLOUD_URL", "CLOUD_URL"),
+        validation_alias="BUSYLIB_CLOUD_URL",
         default="https://api.busy.app",
     )
 

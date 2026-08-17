@@ -83,22 +83,23 @@ async def test_async_cloud_client_requests_the_cloud_path() -> None:
     assert seen == ["/busybar/version"]
 
 
-def test_prefixed_environment_variables_are_honoured(
+def test_only_prefixed_environment_variables_are_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Both BUSYLIB_-prefixed and bare names work.
+    `BUSYLIB_CLOUD_URL` configures the client; bare `CLOUD_URL` does not.
 
-    An explicit `validation_alias` bypasses `env_prefix`, so the documented
-    prefixed names were silently ignored and only the bare ones took effect.
+    It used to be the other way round: an explicit `validation_alias` bypasses
+    `env_prefix`, so the documented prefixed name was silently ignored while
+    the library quietly claimed a name as broad as `CLOUD_URL`.
     """
-    monkeypatch.setenv("BUSYLIB_CLOUD_URL", "https://prefixed.test")
     monkeypatch.delenv("CLOUD_URL", raising=False)
+    monkeypatch.setenv("BUSYLIB_CLOUD_URL", "https://prefixed.test")
     assert Settings().cloud_base_url == "https://prefixed.test"
 
     monkeypatch.delenv("BUSYLIB_CLOUD_URL")
     monkeypatch.setenv("CLOUD_URL", "https://bare.test")
-    assert Settings().cloud_base_url == "https://bare.test"
+    assert Settings().cloud_base_url == "https://api.busy.app"
 
 
 def test_the_cloud_default_points_at_a_host_that_exists() -> None:
