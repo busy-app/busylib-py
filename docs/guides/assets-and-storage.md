@@ -19,8 +19,19 @@ from busylib import converter
 with open("icon.png", "rb") as handle:
     filename, payload = converter.convert_for_storage("icon.png", handle.read())
 
-bb.assets_upload(application_name="my-app", filename=filename, data=payload)
+response = bb.assets_upload(application_name="my-app", filename=filename, data=payload)
+print(filename, response.result)
 ```
+
+**Example output for a PNG:**
+
+```
+icon.png OK
+```
+
+`icon.png` is the device-side filename after conversion, and `OK` confirms the
+upload. Nothing appears on a display until you reference the asset in a draw
+or playback call.
 
 `convert_for_storage` dispatches on the file extension and returns a
 `(path, data)` pair — the name can change if the target format differs.
@@ -36,8 +47,18 @@ the bar plays and displays.
 Unknown extensions pass through untouched, so plain data files are safe:
 
 ```python
-bb.storage_write(path="/my-app/data.txt", data=b"Hello, world!")
+response = bb.storage_write(path="/my-app/data.txt", data=b"Hello, world!")
+print(response.result)
 ```
+
+**Expected output:**
+
+```
+OK
+```
+
+The file now exists at `/my-app/data.txt`; media files passed to this method
+are converted before they are written.
 
 Anything that *is* recognised but fails to convert raises
 `BusyBarConversionError` rather than silently uploading unusable bytes.
@@ -53,11 +74,24 @@ bb.audio_play(application_name="my-app", path=filename)
 
 …and the same name goes into an `ImageElement.path` when drawing.
 
+**Expected result:** playback starts without terminal output. The filename is
+looked up inside `my-app`, so the application name must match the upload.
+
 ## Cleaning up
 
 ```python
-bb.assets_delete(application_name="my-app")
+response = bb.assets_delete(application_name="my-app")
+print(response.result)
 ```
+
+**Expected output:**
+
+```
+OK
+```
+
+All assets belonging to `my-app` are removed; files in general storage and
+assets belonging to other applications remain untouched.
 
 Storage has the usual file operations — `storage_read`, `storage_list`,
 `storage_mkdir`, `storage_remove` — all taking an absolute device path.

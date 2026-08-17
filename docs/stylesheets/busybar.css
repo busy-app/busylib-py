@@ -67,6 +67,26 @@
   background-color: var(--bb-black);
 }
 
+/*
+ * README is the MkDocs home page through a snippet. GitHub renders the
+ * contained picture element, while the site swaps the same artwork when a
+ * visitor changes Material's colour scheme manually.
+ */
+.md-typeset .repository-hero {
+  aspect-ratio: 1600 / 420;
+  background: center / contain no-repeat
+    url("../assets/brand/busylib-py-hero-light.png");
+  margin: 0 0 1.5rem;
+}
+
+.md-typeset .repository-hero picture {
+  display: none;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .repository-hero {
+  background-image: url("../assets/brand/busylib-py-hero-dark.png");
+}
+
 /* A red rule under the site name ties the header to the accent colour. */
 .md-header__title {
   font-weight: 600;
