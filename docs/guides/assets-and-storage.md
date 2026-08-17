@@ -47,7 +47,7 @@ the bar plays and displays.
 Unknown extensions pass through untouched, so plain data files are safe:
 
 ```python
-response = bb.storage_write(path="/my-app/data.txt", data=b"Hello, world!")
+response = bb.storage_write(path="/ext/my-app/data.txt", data=b"Hello, world!")
 print(response.result)
 ```
 
@@ -57,8 +57,12 @@ print(response.result)
 OK
 ```
 
-The file now exists at `/my-app/data.txt`; media files passed to this method
+The file now exists at `/ext/my-app/data.txt`; media files passed to this method
 are converted before they are written.
+
+Storage paths have to start with `/ext`, the bar's user-writable area. A path
+outside it is not answered at all — no error response — so the call ends in a
+timeout after retries rather than telling you the path was wrong.
 
 Anything that *is* recognised but fails to convert raises
 `BusyBarConversionError` rather than silently uploading unusable bytes.
@@ -94,4 +98,5 @@ All assets belonging to `my-app` are removed; files in general storage and
 assets belonging to other applications remain untouched.
 
 Storage has the usual file operations — `storage_read`, `storage_list`,
-`storage_mkdir`, `storage_remove` — all taking an absolute device path.
+`storage_mkdir`, `storage_remove` — all taking an absolute device path under
+`/ext`.
