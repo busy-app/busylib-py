@@ -1,11 +1,10 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The device serves its API under /api. In the cloud the same device endpoints
-# live under /busybar (https://api.busy.app/busybar/docs) and there is no /api,
-# so the prefix is swapped rather than appended when a client runs in cloud
-# mode. The account-level API at the root of the same host is a separate
-# surface with its own token and is not covered by this client.
+# The device serves its API under /api. In the cloud the same endpoints live
+# under /busybar and there is no /api, so the prefix is swapped rather than
+# appended when a client runs in cloud mode. See `busylib.cloud` for the
+# published addresses, including the account API that shares the host.
 DEVICE_API_PREFIX = "/api"
 CLOUD_API_PREFIX = "/busybar"
 
