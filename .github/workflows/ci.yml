@@ -35,6 +35,31 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+  # Every job above installs the newest dependency that satisfies the pins,
+  # so a floor that is lower than what the code actually needs looks fine
+  # here and fails only for users - which is exactly how #51 shipped. This
+  # job installs the oldest permitted version of each direct dependency.
+  minimum-dependencies:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install the lowest permitted dependency versions
+        run: uv pip install --system --resolution lowest-direct -e . --group dev
+
+      - name: Run tests
+        run: python -m pytest -q
+
   # Lint and type checks ran only in pre-commit hooks, so formatting and
   # typing drifted for anyone who committed without them installed.
   lint:
