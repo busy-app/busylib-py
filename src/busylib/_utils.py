@@ -36,13 +36,13 @@ def normalize_rgba_color(value: ColorInput | None) -> str | None:
     if not isinstance(value, str):
         raise ValueError("Color must be a string or RGB/RGBA tuple")
 
-    col = Color(value)
-    hex_value = col.as_hex().upper()
+    # `format="long"` matters: the default short form collapses each byte pair
+    # whose nibbles repeat, so "#FF000055" came back as "#f005" and fell
+    # through to the opaque branch below. A translucent colour was silently
+    # drawn solid, and fully transparent became opaque black.
+    hex_value = Color(value).as_hex(format="long").upper()
     if len(hex_value) == 9:
         return hex_value
-    if len(hex_value) == 7:
-        return f"{hex_value}FF"
-
-    rgb = col.as_rgb_tuple()
-    r, g, b = rgb[0], rgb[1], rgb[2]
-    return f"#{r:02X}{g:02X}{b:02X}FF"
+    # The long form is "#RRGGBB" or "#RRGGBBAA" and nothing else, so the only
+    # remaining shape is an opaque colour with its alpha omitted.
+    return f"{hex_value}FF"
