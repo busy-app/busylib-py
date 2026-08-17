@@ -15,10 +15,13 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
 
-  # pre-commit
-  - package-ecosystem: "pip"
+  # .pre-commit-config.yaml. This used to say "pip" with the same directory as
+  # the block above, which opened every Python update twice and left the hook
+  # revisions untouched. The linter versions here and in pyproject.toml's dev
+  # group have to move together - tests/test_tooling_pins.py enforces that -
+  # so expect a pair of pull requests to land as one.
+  - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
-    target-branch: "main"
