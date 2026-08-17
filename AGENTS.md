@@ -2,7 +2,8 @@
 
 ## Core Rules
 
-- Answer in the language the user uses for the request.
+- Everything written into this repository or onto GitHub is in English: code, comments, docstrings, README and docs, commit messages, pull request titles and bodies, issue and review comments. This is a public library with external contributors, so nothing else is acceptable.
+- Answer in the language the user uses for the request. That applies to chat replies only, and never overrides the rule above.
 - Inspect the installed/local `busylib` before using unfamiliar APIs: client methods, `busylib.types`, README, and examples.
 - Do not invent `busylib` methods, enum values, element fields, or payload shapes.
 - Prefer public `busylib` methods over direct HTTP calls. Use `prepare_request()` only for batching, diagnostics, custom transports, or tests.
