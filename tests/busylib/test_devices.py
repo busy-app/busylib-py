@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar
@@ -7,6 +9,9 @@ from busylib.devices import (
     BusyBarAddress,
     BusyBarAddressAffinity,
     BusyBarDevice,
+    AsyncBusyBarDeviceDiscoverer,
+    BusyBarDeviceDiscoverer,
+    BusyBarDevices,
 )
 
 USB_IP = "10.0.4.20"
@@ -92,3 +97,156 @@ def test_client_factories_return_none_without_an_address() -> None:
 
     assert device.to_sync_client("over_usb") is None
     assert device.to_async_client("over_usb") is None
+
+
+class RecordingZeroconf:
+    """
+    Stands in for a caller-supplied `Zeroconf`, recording what is done to it.
+    """
+
+    def __init__(self) -> None:
+        self.closed_on_thread: int | None = None
+        self.reconfigured = False
+
+    def close(self) -> None:
+        self.closed_on_thread = threading.get_ident()
+
+    def update_interfaces(self, *_args: object, **_kwargs: object) -> None:
+        self.reconfigured = True
+
+
+class RecordingAsyncZeroconf:
+    """
+    Stands in for an `AsyncZeroconf`, including the inner instance it wraps.
+    """
+
+    def __init__(self) -> None:
+        self.zeroconf = RecordingZeroconf()
+        self.closed_on_thread: int | None = None
+
+    async def async_close(self) -> None:
+        self.closed_on_thread = threading.get_ident()
+
+
+def test_discover_leaves_a_caller_supplied_zeroconf_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Neither closed nor reconfigured, because the caller still owns it.
+
+    Discovery needs every interface listened on, but that is already
+    Zeroconf's own default. Forcing `InterfaceChoice.All` onto a caller's
+    instance only overrode a narrowing they had chosen on purpose, and left it
+    that way after discovery had finished.
+    """
+    zeroconf = RecordingZeroconf()
+    monkeypatch.setattr(BusyBarDeviceDiscoverer, "sync_collect", lambda *_: [])
+
+    assert BusyBarDevices.discover(zeroconf=zeroconf) == []  # type: ignore[arg-type]
+
+    assert zeroconf.closed_on_thread is None
+    assert not zeroconf.reconfigured
+
+
+@pytest.mark.asyncio
+async def test_async_discover_leaves_a_caller_supplied_zeroconf_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    The async path leaves the caller's `AsyncZeroconf` alone too.
+    """
+    zeroconf = RecordingAsyncZeroconf()
+
+    async def no_devices(*_args: object) -> list[BusyBarDevice]:
+        return []
+
+    monkeypatch.setattr(AsyncBusyBarDeviceDiscoverer, "async_collect", no_devices)
+
+    assert await BusyBarDevices.async_discover(zeroconf=zeroconf) == []  # type: ignore[arg-type]
+
+    assert zeroconf.closed_on_thread is None
+    assert not zeroconf.zeroconf.reconfigured
+
+
+def test_an_owned_zeroconf_is_closed() -> None:
+    """
+    The instance the discoverer created is its responsibility to close.
+    """
+    discoverer = BusyBarDeviceDiscoverer(None)
+    owned = RecordingZeroconf()
+    discoverer._zeroconf = owned  # type: ignore[assignment]
+
+    discoverer.sync_teardown()
+
+    assert owned.closed_on_thread == threading.get_ident()
+
+
+@pytest.mark.asyncio
+async def test_async_teardown_closes_without_leaving_the_event_loop() -> None:
+    """
+    Closing is awaited, not handed to a worker thread.
+
+    `AsyncZeroconf.async_close()` is a coroutine, so the whole async path
+    stays on zeroconf's own async API - no `asyncio.to_thread` detour, which
+    is what an earlier version of this used because it held a plain
+    `Zeroconf`. Same-thread closing is the observable difference.
+    """
+    discoverer = AsyncBusyBarDeviceDiscoverer(None)
+    owned = RecordingAsyncZeroconf()
+    discoverer._aiozc = owned  # type: ignore[assignment]
+
+    await discoverer.async_teardown()
+
+    assert owned.closed_on_thread == threading.get_ident()
+
+
+def test_discover_closes_its_zeroconf_when_collection_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A timeout mid-scan must not leak the sockets.
+    """
+    owned = RecordingZeroconf()
+
+    def fake_init(self: BusyBarDeviceDiscoverer, zeroconf: object) -> None:
+        self._devices_by_id = {}
+        self._user_provided_zeroconf = False
+        self._zeroconf = owned  # type: ignore[assignment]
+
+    def boom(_self: BusyBarDeviceDiscoverer, _timeout: float) -> list[BusyBarDevice]:
+        raise TimeoutError("scan interrupted")
+
+    monkeypatch.setattr(BusyBarDeviceDiscoverer, "__init__", fake_init)
+    monkeypatch.setattr(BusyBarDeviceDiscoverer, "sync_collect", boom)
+
+    with pytest.raises(TimeoutError):
+        BusyBarDevices.discover()
+
+    assert owned.closed_on_thread is not None
+
+
+@pytest.mark.asyncio
+async def test_async_discover_closes_its_zeroconf_when_collection_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Same for the async path, including cancellation.
+    """
+    owned = RecordingAsyncZeroconf()
+
+    def fake_init(self: AsyncBusyBarDeviceDiscoverer, zeroconf: object) -> None:
+        self._devices_by_id = {}
+        self._user_provided_zeroconf = False
+        self._aiozc = owned  # type: ignore[assignment]
+        self._pending = set()
+
+    async def boom(_self: AsyncBusyBarDeviceDiscoverer, _timeout: float) -> None:
+        raise TimeoutError("scan interrupted")
+
+    monkeypatch.setattr(AsyncBusyBarDeviceDiscoverer, "__init__", fake_init)
+    monkeypatch.setattr(AsyncBusyBarDeviceDiscoverer, "async_collect", boom)
+
+    with pytest.raises(TimeoutError):
+        await BusyBarDevices.async_discover()
+
+    assert owned.closed_on_thread is not None
