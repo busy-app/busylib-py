@@ -452,7 +452,7 @@ if status.power:
     print(f"Battery: {status.power.battery_charge}%")
 
 brightness = bb.display_brightness()
-print(f"Front brightness: {brightness.front}, Back brightness: {brightness.back}")
+print(f"Brightness: {brightness.value}")
 
 volume = bb.audio_volume()
 print(f"Volume: {volume.volume}")
@@ -462,15 +462,21 @@ print(f"Volume: {volume.volume}")
 
 ```
 Device API: 25.0.0
-Uptime: 123
-Battery: 88%
-Front brightness: 50, Back brightness: 50
-Volume: 75
+Uptime: 00d 00h 05m 38s
+Battery: 100%
+Brightness: auto
+Volume: 100.0
 ```
 
 The values are live device state and will differ on your bar. A missing system
 or power section simply omits its corresponding line; it does not invalidate
 the other responses.
+
+Uptime is a preformatted string rather than a number of seconds. Brightness is
+either `auto` or a level from `0` to `100`, as a string; the `front` and `back`
+fields on the same model are unset on current firmware, which reports one
+shared value. After `bb.display_brightness_set(50)` it takes about a second
+before a read reports the new level.
 
 ### Discovering devices on the network
 
@@ -508,23 +514,27 @@ fall back to the well-known USB address `10.0.4.20`.
 Unlike `assets_upload`, `storage_write` converts media for the device
 automatically:
 
+Every storage path has to start with `/ext`, which is the bar's user-writable
+area. A path outside it is not rejected with an error — the device simply
+stops answering, so the call ends in a timeout after retries.
+
 ```python
 file_data = b"Hello, world!"
-response = bb.storage_write(path="/my-app/data.txt", data=file_data)
+response = bb.storage_write(path="/ext/my-app/data.txt", data=file_data)
 
-file_content = bb.storage_read(path="/my-app/data.txt")
+file_content = bb.storage_read(path="/ext/my-app/data.txt")
 print(file_content.decode("utf-8"))
 
-storage_list = bb.storage_list(path="/my-app")
+storage_list = bb.storage_list(path="/ext/my-app")
 for item in storage_list.list:
     if item.type == "file":
         print(f"File: {item.name} ({item.size} bytes)")
     else:
         print(f"Directory: {item.name}")
 
-response = bb.storage_mkdir(path="/my-app/subdirectory")
+response = bb.storage_mkdir(path="/ext/my-app/subdirectory")
 
-response = bb.storage_remove(path="/my-app/data.txt")
+response = bb.storage_remove(path="/ext/my-app/data.txt")
 ```
 
 **Example output:**
