@@ -22,8 +22,17 @@ You can read the specs from the library instead of hardcoding them:
 from busylib import display
 
 spec = display.get_display_spec(display.DisplayName.FRONT)
-print(spec.width, spec.height)  # 72 16
+print(spec.width, spec.height)
 ```
+
+**Expected output:**
+
+```
+72 16
+```
+
+This is the front display's drawable width and height in pixels; coordinates
+must stay within those bounds to be visible.
 
 ## Elements
 
@@ -45,6 +54,9 @@ payload = types.DisplayElements(
 `application_name` groups everything your app draws, which is what
 `display_clear` and `assets_delete` operate on.
 
+Creating this payload prints nothing and does not update the bar. It becomes
+visible only after you pass it to `display_draw`.
+
 ### Text
 
 ```python
@@ -61,6 +73,9 @@ types.TextElement(
 
 Fonts: `tiny`, `small`, `normal`, `condensed`, `bold`, `large`, `extra_large`,
 `global`.
+
+This creates a local element model only. It has no output or device effect
+until it is included in a `DisplayElements` payload and drawn.
 
 Alignment (`align`) accepts `top_left`, `top_mid`, `top_right`, `mid_left`,
 `center`, `mid_right`, `bottom_left`, `bottom_mid`, `bottom_right`.
@@ -87,10 +102,13 @@ types.ImageElement(
 reference artwork that ships with the device. `opacity` blends the image
 against what's underneath.
 
+This also only creates a payload. Once drawn, the image is rendered on the
+back display at `(0, 0)` using the uploaded file named `icon.png`.
+
 ## Replacing versus adding
 
-By default a draw call adds to what's on screen. To replace your app's previous
-content in one step:
+By default a draw call adds to what's on screen. To clear the display before
+drawing in one step:
 
 ```python
 bb.display_draw(payload, clear_before_draw=True)
@@ -99,8 +117,12 @@ bb.display_draw(payload, clear_before_draw=True)
 To wipe it entirely:
 
 ```python
-bb.display_clear()
+bb.display_clear(application_name="my-app")
 ```
+
+**Expected result:** neither call prints output. The first call clears the
+whole display before drawing `payload`; the second removes only `my-app`'s
+elements and leaves other applications' drawings alone.
 
 ## Text that came from somewhere else
 
@@ -112,6 +134,8 @@ bb.display_draw(payload, sanitize_text=True)
 ```
 
 Each substitution is logged, so you can see what was removed and why.
+The call itself prints nothing; the bar receives the cleaned text rather than
+characters the firmware cannot render.
 
 ## Reading the screen back
 
@@ -120,7 +144,17 @@ how the `remote` example mirrors the bar in a terminal:
 
 ```python
 frame = bb.screen(0)  # 0 = front, 1 = back
+print(len(frame))
 ```
+
+**Expected output for the front display:**
+
+```
+3456
+```
+
+That is `72 * 16 * 3`: one RGB888 byte triplet per front-display pixel. The
+back display produces `160 * 80 * 3`, or `38400` bytes.
 
 The HTTP endpoint returns base64-encoded, uncompressed framebuffer data despite
 advertising `Content-Type: image/bmp`; the client decodes that for you. Live

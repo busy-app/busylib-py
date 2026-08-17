@@ -110,6 +110,12 @@ The wizard reads every step's `status()` concurrently, prints the checklist,
 and calls `run()` only on what's still pending — which is why re-running it
 after a reboot is safe.
 
+These two blocks are implementation fragments rather than standalone scripts:
+they define a setup step and its order, so they have no direct terminal output.
+When the wizard runs them, the observable result is the setup checklist shown
+in the [quick start](../index.md), with a completed name step rendered as
+`[x] Device name ...`.
+
 ## Why this shape
 
 Splitting the device work out from the conversation buys three things:

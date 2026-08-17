@@ -1,3 +1,11 @@
+<p class="repository-hero" align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/busylib-py-hero-light.png">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/busylib-py-hero-dark.png">
+    <img alt="BUSY Bar: official Python library for connecting, controlling, and automating." width="830" height="218" src="assets/brand/busylib-py-hero-light.png">
+  </picture>
+</p>
+
 # busylib
 
 [![PyPI version](https://img.shields.io/pypi/v/busylib.svg?label=PyPI)](https://pypi.org/project/busylib/)
@@ -27,26 +35,69 @@ you can click there you can also script.
 
 ## Installation
 
-```bash
-pip install busylib
+You will use two kinds of code below:
+
+- **Terminal commands** install software or start a script. Run them in
+  PowerShell on Windows, or Terminal on macOS and Linux.
+- **Python code** goes in a `.py` file in your editor, such as PyCharm. Do not
+  paste terminal commands such as `git`, `py`, or `uv` into a Python file or a
+  `>>>` Python prompt.
+
+The page at <http://10.0.4.20> is the bar's web UI. Its `/docs` page describes
+the raw HTTP API; it does not run Python examples from this guide.
+
+### Windows (PowerShell)
+
+Open **PowerShell** from the Start menu, then run:
+
+```powershell
+py -m pip install --upgrade busylib
 ```
 
-Upgrade to the latest release:
+If PowerShell says that `py` is not found, install Python 3.10 or newer from
+[python.org](https://www.python.org/downloads/windows/), then open a new
+PowerShell window and run the command again.
+
+### macOS and Linux
+
+Open Terminal, then run:
 
 ```bash
-pip install --upgrade busylib
+python3 -m pip install --upgrade busylib
 ```
 
 ## Step 1 — Connect over USB
 
-With the bar plugged in, check that it answers:
+With the bar plugged in, create a file named `check_busybar.py` in your editor
+and paste **only** this Python code into it:
 
 ```python
 from busylib import BusyBar
 
-bb = BusyBar("10.0.4.20")
-print(bb.version())
+with BusyBar("10.0.4.20") as bb:
+    version = bb.version()
+    print(f"Connected to BUSY Bar. API {version.api_semver or 'unknown'}")
 ```
+
+Run that file from the same terminal you used for installation:
+
+```powershell
+py check_busybar.py
+```
+
+```bash
+python3 check_busybar.py
+```
+
+Successful output looks like this:
+
+```
+Connected to BUSY Bar. API 25.0.0
+```
+
+The API version is the connection check. Some firmware does not report a
+human-readable firmware version, branch, or build date; missing values for
+those fields do not mean the bar is disconnected.
 
 Current firmware enforces its access key only on connections arriving over
 Wi-Fi, so a bar reached over USB usually needs no token. If you do get a
@@ -61,22 +112,36 @@ a 4–10 digit PIN, the same one the web UI asks for:
 bb = BusyBar("192.168.1.20", token="1234")
 ```
 
+Creating a client does not print anything or contact the bar yet. The first
+method call, such as `bb.version()`, is what verifies the address and token.
+
 ## Step 2 — First-time setup
 
-The examples below ship with the source rather than the PyPI package, so grab
-a clone to run them:
+The guided setup wizard is optional and lives in the source repository; it is
+not installed by `pip install busylib`. It can update firmware, configure
+Wi-Fi and timezone, rename the bar, and link a cloud account.
+
+Run these **terminal commands**, not Python code. They do not require `uv`.
+
+### Windows (PowerShell)
+
+```powershell
+cd $HOME\Documents
+git clone https://github.com/busy-app/busylib-py
+cd busylib-py
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --editable .
+.\.venv\Scripts\python.exe -m examples.setup.main 10.0.4.20
+```
+
+### macOS and Linux
 
 ```bash
 git clone https://github.com/busy-app/busylib-py
 cd busylib-py
-```
-
-Rather than clicking through the device UI, run the setup wizard. It reads the
-bar's current state, shows you what's already configured, and only asks about
-what's missing:
-
-```bash
-uv run python -m examples.setup.main 10.0.4.20
+python3 -m venv .venv
+.venv/bin/python -m pip install --editable .
+.venv/bin/python -m examples.setup.main 10.0.4.20
 ```
 
 ```
@@ -119,37 +184,52 @@ Two things to know before you start:
 
 ### 3.1 Say hello on the front display
 
+Replace the contents of `check_busybar.py` with this code, then run it with
+the same `py check_busybar.py` or `python3 check_busybar.py` command as above.
+This first app needs no image or audio files.
+
 ```python
 from busylib import BusyBar, types
 
-bb = BusyBar("10.0.4.20")
-
-bb.display_draw(
-    types.DisplayElements(
-        application_name="my-app",
-        elements=[
-            types.TextElement(
-                id="status",
-                type="text",
-                x=2,
-                y=4,
-                text="BUILDING",
-                font="small",
-                display=types.DisplayName.FRONT,
-            ),
-        ],
+with BusyBar("10.0.4.20") as bb:
+    bb.display_draw(
+        types.DisplayElements(
+            application_name="my-app",
+            elements=[
+                types.TextElement(
+                    id="status",
+                    type="text",
+                    x=2,
+                    y=4,
+                    text="BUILDING",
+                    font="small",
+                    display=types.DisplayName.FRONT,
+                ),
+            ],
+        )
     )
-)
 ```
 
 Available fonts are `tiny`, `small`, `normal`, `condensed`, `bold`, `large`,
 `extra_large`, and `global`.
+
+**Expected result:** nothing is printed in the terminal. `BUILDING` appears on
+the front display near its top-left corner. This proves that your script can
+send a display update; it remains visible until you replace or clear it.
 
 ### 3.2 Add a picture
 
 Images and audio have to be uploaded to the bar before you can reference them.
 Note that `assets_upload` sends bytes as-is — it does **not** convert them, so
 resize and re-encode the file for the target display first:
+
+The examples below need files called `icon.png` and `alert.wav` next to your
+Python script. Use your own files or skip to another section until you have
+them; the text-only example above is the first complete app.
+
+Sections 3.2 through 3.4 are fragments of one script: add them inside the
+`with BusyBar(...) as bb:` block from section 3.1. For a complete image and
+audio example, use the script in section 3.5.
 
 ```python
 from busylib import converter
@@ -167,6 +247,10 @@ bb.assets_upload(
 `convert_for_storage` scales and crops the image to fit, and converts audio into
 the format the bar expects. (`storage_write`, further down, applies the same
 conversion automatically — `assets_upload` is the lower-level path.)
+
+**Expected result:** nothing is printed and the display does not change yet.
+The converted file is now stored under the `my-app` application, ready for a
+later draw or playback request.
 
 Now show it on the back display:
 
@@ -188,6 +272,10 @@ bb.display_draw(
 )
 ```
 
+**Expected result:** nothing is printed. The converted `icon.png` fills the
+back display. A missing image here means the upload or its `path` did not match
+the converted filename.
+
 ### 3.3 Play a sound
 
 Upload the audio the same way, then play it:
@@ -202,12 +290,19 @@ bb.audio_play(application_name="my-app", path=filename)
 
 Stop playback with `bb.audio_stop()`.
 
+**Expected result:** nothing is printed and the bar starts playing the
+converted sound. If it stays silent, check the bar's volume and that the file
+was converted and uploaded under the same application name.
+
 ### 3.4 Clean up
 
 ```python
-bb.display_clear()
+bb.display_clear(application_name="my-app")
 bb.assets_delete(application_name="my-app")
 ```
+
+**Expected result:** the `my-app` elements disappear and its uploaded assets
+are removed; drawings and assets owned by other application names stay intact.
 
 ### 3.5 The whole thing
 
@@ -227,7 +322,8 @@ def upload(bb: BusyBar, path: str) -> str:
 
 def main() -> None:
     with BusyBar("10.0.4.20") as bb:
-        print(f"Connected to firmware {bb.version().version}")
+        version = bb.version()
+        print(f"Connected to BUSY Bar. API {version.api_semver or 'unknown'}")
 
         icon = upload(bb, "icon.png")
         alert = upload(bb, "alert.wav")
@@ -263,15 +359,34 @@ if __name__ == "__main__":
     main()
 ```
 
+**Expected terminal output:**
+
+```
+Connected to BUSY Bar. API 25.0.0
+```
+
+**Expected device result:** `BUILDING` appears on the front display, the icon
+appears on the back display, and the alert sound starts. The API number and the
+exact media rendering depend on the connected bar and your input files.
+
 ### Try the interactive example
 
 `examples/remote` mirrors both displays in your terminal, forwards key presses
 to the bar, and has commands for drawing text, playing audio, renaming the
-device, and running setup:
+device, and running setup. It needs the source checkout and virtual environment
+from Step 2:
+
+```powershell
+.\.venv\Scripts\python.exe -m examples.remote.main 10.0.4.20
+```
 
 ```bash
-uv run python -m examples.remote.main 10.0.4.20
+.venv/bin/python -m examples.remote.main 10.0.4.20
 ```
+
+**Expected result:** the terminal switches to the interactive display mirror
+and keeps running while it receives updates. Press `h` for its command help and
+`q` to exit; it does not print a one-line completion message.
 
 ## Going further
 
@@ -286,8 +401,16 @@ Client method names follow BUSY Bar API path segments instead of generic
 from busylib import BusyBar
 
 with BusyBar("10.0.4.20") as bb:
-    print(bb.version().version)
+    print(f"API {bb.version().api_semver or 'unknown'}")
 ```
+
+**Expected output:**
+
+```
+API 25.0.0
+```
+
+The context manager closes the client's connection pool when the block exits.
 
 For concurrent workflows, use the async client to avoid blocking I/O:
 
@@ -300,18 +423,27 @@ from busylib import AsyncBusyBar
 async def main() -> None:
     async with AsyncBusyBar("10.0.4.20") as bb:
         version_info = await bb.version()
-        print(f"Device version: {version_info.version}")
+        print(f"Device API: {version_info.api_semver or 'unknown'}")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+**Expected output:**
+
+```
+Device API: 25.0.0
+```
+
+The value has the same meaning as in the synchronous example; `await` lets
+other asynchronous work continue while the request is in flight.
+
 ### Reading device status
 
 ```python
 version = bb.version()
-print(f"Version: {version.version}, Branch: {version.branch}")
+print(f"Device API: {version.api_semver or 'unknown'}")
 
 status = bb.status()
 if status.system:
@@ -326,6 +458,20 @@ volume = bb.audio_volume()
 print(f"Volume: {volume.volume}")
 ```
 
+**Example output:**
+
+```
+Device API: 25.0.0
+Uptime: 123
+Battery: 88%
+Front brightness: 50, Back brightness: 50
+Volume: 75
+```
+
+The values are live device state and will differ on your bar. A missing system
+or power section simply omits its corresponding line; it does not invalidate
+the other responses.
+
 ### Discovering devices on the network
 
 Instead of hardcoding an IP address, you can discover devices like so:
@@ -337,12 +483,19 @@ for device in BusyBarDevices.discover():
     print(f"Device: {device.name}")
     print(f"  Over USB: {device.get_address('over_usb')}")
     print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
-
-# Example output:
-# Device: "Anna's BUSY Bar"
-#   Over USB: 10.0.4.20
-#   Over Wi-Fi: 192.168.100.2
 ```
+
+**Example output:**
+
+```
+Device: Anna's BUSY Bar
+  Over USB: 10.0.4.20
+  Over Wi-Fi: 192.168.100.2
+```
+
+Each group identifies one discovered bar and the addresses currently known for
+it. On firmware that does not advertise mDNS, this loop prints nothing; use the
+USB address instead.
 
 Both the `remote` and `setup` examples use this automatically when no address is
 given: they discover devices via mDNS, let you pick one by name if more than one
@@ -374,6 +527,18 @@ response = bb.storage_mkdir(path="/my-app/subdirectory")
 response = bb.storage_remove(path="/my-app/data.txt")
 ```
 
+**Example output:**
+
+```
+Hello, world!
+File: data.txt (13 bytes)
+```
+
+The first line confirms that the bytes read back match what was written. The
+listing shows the device-side file before the example creates a subdirectory
+and removes the text file. The write, create, and remove calls return an
+`OK` response but do not print it.
+
 ### Preparing and executing requests separately
 
 You can prepare a low-level request first and execute it later, optionally
@@ -391,11 +556,22 @@ prepared = bb.prepare_request(
 
 # execute now
 result = bb.execute_prepared_request(prepared)
+print(result)
 
 # or execute with an external client
 # with httpx.Client(base_url="http://10.0.4.20") as ext:
 #     result = bb.execute_prepared_request(prepared, client=ext)
 ```
+
+**Expected output:**
+
+```
+{'result': 'OK'}
+```
+
+The request is sent only by `execute_prepared_request`. In this example it
+starts playback of an existing `notification.snd` asset for `my-app`; upload
+that asset first or choose a path you already uploaded.
 
 ## API compatibility
 
@@ -412,6 +588,11 @@ bb = BusyBar("10.0.4.20", compatibility_mode="strict")
 bb.version()  # raises BusyBarAPIVersionError if the firmware is too old
 ```
 
+**Expected result:** a supported bar returns normally without output. Factory
+firmware 1.0.2 instead raises `BusyBarAPIVersionError`, which tells you to
+update firmware or use a matching library release before invoking newer API
+methods.
+
 For migrations and diagnostics, methods can expose the minimum firmware
 OpenAPI version their current implementation targets (not necessarily the
 version where the underlying device endpoint first appeared).
@@ -420,6 +601,9 @@ version where the underlying device endpoint first appeared).
 metadata = bb.method_compatibility("log_dump")
 # {"version": "25.0.0", "path": "/api/log_dump", "method": "POST"}
 ```
+
+The metadata says this helper targets the `POST /api/log_dump` contract from
+OpenAPI `25.0.0`; it is compatibility information, not a request to the bar.
 
 ### Versioning policy
 
