@@ -105,6 +105,7 @@ def on_diff(changed, snapshot):
     if "screen_front" in changed and snapshot.screen_front is not None:
         render(snapshot.screen_front)
 
+
 store.on_diff(on_diff)
 ```
 
