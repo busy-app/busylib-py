@@ -9,8 +9,8 @@ network it also gets a normal address on that network, and either works:
 ```python
 from busylib import BusyBar
 
-bb = BusyBar("10.0.4.20")          # over USB
-bb = BusyBar("192.168.1.20")       # over Wi-Fi
+bb = BusyBar("10.0.4.20")  # over USB
+bb = BusyBar("192.168.1.20")  # over Wi-Fi
 ```
 
 Constructing a client produces no output and does not make a network request.

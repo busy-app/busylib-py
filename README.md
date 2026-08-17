@@ -480,7 +480,7 @@ Instead of hardcoding an IP address, you can discover devices like so:
 from busylib import BusyBarDevices
 
 for device in BusyBarDevices.discover():
-    print(f"Device: \"{device.name}\" (id \"{device.device_id}\")")
+    print(f'Device: "{device.name}" (id "{device.device_id}")')
     print(f"  Over USB: {device.get_address('over_usb')}")
     print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
 ```
@@ -513,7 +513,7 @@ file_data = b"Hello, world!"
 response = bb.storage_write(path="/my-app/data.txt", data=file_data)
 
 file_content = bb.storage_read(path="/my-app/data.txt")
-print(file_content.decode('utf-8'))
+print(file_content.decode("utf-8"))
 
 storage_list = bb.storage_list(path="/my-app")
 for item in storage_list.list:
