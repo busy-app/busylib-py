@@ -147,12 +147,56 @@ async def test_stream_status_ws_wraps_decode_error(
 
 
 @pytest.mark.asyncio
-async def test_stream_status_ws_cloud_not_supported() -> None:
+async def test_stream_status_ws_cloud_uses_the_cloud_path_and_bearer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
-    Explicitly reject cloud mode for /api/status/ws streaming.
+    Cloud streaming targets /busybar/status/ws and authenticates by header.
+
+    This used to raise NotImplementedError even though the cloud publishes the
+    endpoint. The credential also moves: the device takes it as a query
+    parameter, the cloud as the same bearer header the REST calls use.
     """
+    seen: dict[str, object] = {}
+
+    def fake_connect(uri: str, **kwargs: object) -> object:
+        seen["uri"] = uri
+        seen["headers"] = kwargs.get("additional_headers")
+        raise AssertionError("stop before connecting")
+
+    monkeypatch.setattr(state_stream_client.websockets, "connect", fake_connect)
+
     client = AsyncBusyBar(addr=None, token="secret")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(exceptions.BusyBarWebSocketError):
         async for _ in client.stream_status_ws():
             pass
     await client.aclose()
+
+    assert seen["uri"] == "wss://api.busy.app/busybar/status/ws"
+    assert seen["headers"] == {"Authorization": "Bearer secret"}
+
+
+@pytest.mark.asyncio
+async def test_stream_status_ws_device_keeps_the_query_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A local device still receives its access key in the URL.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_connect(uri: str, **kwargs: object) -> object:
+        seen["uri"] = uri
+        seen["headers"] = kwargs.get("additional_headers")
+        raise AssertionError("stop before connecting")
+
+    monkeypatch.setattr(state_stream_client.websockets, "connect", fake_connect)
+
+    client = AsyncBusyBar(addr="10.0.4.20", token="1234")
+    with pytest.raises(exceptions.BusyBarWebSocketError):
+        async for _ in client.stream_status_ws():
+            pass
+    await client.aclose()
+
+    assert seen["uri"] == "ws://10.0.4.20/api/status/ws?x-api-token=1234"
+    assert seen["headers"] is None

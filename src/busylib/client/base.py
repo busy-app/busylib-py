@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import exceptions, versioning
-from ..settings import settings
+from ..settings import CLOUD_API_PREFIX, DEVICE_API_PREFIX, settings
 
 JsonType = dict[str, Any] | list[Any] | str | int | float | bool | None
 
@@ -174,6 +174,24 @@ def _apply_application_name(
     params_local = dict(params or {})
     params_local["application_name"] = application_name
     return params_local, json_payload
+
+
+def _cloud_path(path: str) -> str:
+    """
+    Translate a device path into the one the cloud serves.
+
+    Endpoints live under `/api` on the device and under `/busybar` in the
+    cloud, which serves no `/api` at all. Every helper in this package writes
+    the device path, so the swap happens here rather than in each of them.
+    """
+    if path == DEVICE_API_PREFIX:
+        return CLOUD_API_PREFIX
+    if path.startswith(f"{DEVICE_API_PREFIX}/"):
+        return CLOUD_API_PREFIX + path[len(DEVICE_API_PREFIX) :]
+    # Anything already outside /api is passed through: the caller is reaching
+    # for something this mapping does not describe, and rewriting it blindly
+    # would be worse than leaving it alone.
+    return path
 
 
 def _prepare_request_payload(
@@ -554,7 +572,7 @@ class SyncClientBase:
         """
         return _prepare_request_payload(
             method,
-            path,
+            _cloud_path(path) if self.is_cloud else path,
             params=params,
             headers=headers,
             session_id=session_id,
@@ -836,7 +854,7 @@ class AsyncClientBase:
         """
         return _prepare_request_payload(
             method,
-            path,
+            _cloud_path(path) if self.is_cloud else path,
             params=params,
             headers=headers,
             session_id=session_id,
