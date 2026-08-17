@@ -71,22 +71,39 @@ class BusyBarDevice:
 
 
 class BusyBarDeviceDiscoverer:
-    def __init__(self, zeroconf):
-        self._user_provided_zeroconf = bool(zeroconf)
+    """
+    Collects bars advertising themselves over mDNS.
+
+    Owns the `Zeroconf` instance it creates and closes it when done. One
+    supplied by the caller is left exactly as it was found: not reconfigured,
+    and not closed, because they may still be using it.
+    """
+
+    def __init__(self, zeroconf: Zeroconf | None) -> None:
+        self._user_provided_zeroconf = zeroconf is not None
+        # A bar plugged in over USB answers on a 10.0.4.x link, so every
+        # interface has to be listened on. That is already Zeroconf's own
+        # default, which is why a caller's instance needs no adjustment - and
+        # if they deliberately narrowed theirs, overriding it would be wrong.
         self._zeroconf = zeroconf or Zeroconf(InterfaceChoice.All)
-        self._devices_by_id = {}
+        self._devices_by_id: dict[str, BusyBarDevice] = {}
 
-    def sync_setup(self):
-        if self._user_provided_zeroconf:
-            self._zeroconf.update_interfaces(InterfaceChoice.All)
-
-    async def async_setup(self):
-        if self._user_provided_zeroconf:
-            await self._zeroconf.async_update_interfaces(InterfaceChoice.All)
-
-    def sync_teardown(self):
+    def sync_teardown(self) -> None:
+        """
+        Close the `Zeroconf` instance, if this discoverer created it.
+        """
         if not self._user_provided_zeroconf:
             self._zeroconf.close()
+
+    async def async_teardown(self) -> None:
+        """
+        Close it without blocking the event loop.
+
+        `Zeroconf.close()` joins its listener threads and has no async
+        counterpart in zeroconf 0.150, so it runs on a worker thread.
+        """
+        if not self._user_provided_zeroconf:
+            await asyncio.to_thread(self._zeroconf.close)
 
     @staticmethod
     def _address_affinity(address: str) -> BusyBarAddressAffinity:
@@ -156,17 +173,17 @@ class BusyBarDevices:
         timeout: float = TIMEOUT, zeroconf: Zeroconf | None = None
     ) -> list[BusyBarDevice]:
         discoverer = BusyBarDeviceDiscoverer(zeroconf)
-        await discoverer.async_setup()
-        devices = await discoverer.async_collect(timeout)
-        discoverer.sync_teardown()
-        return devices
+        try:
+            return await discoverer.async_collect(timeout)
+        finally:
+            await discoverer.async_teardown()
 
     @staticmethod
     def discover(
         timeout: float = TIMEOUT, zeroconf: Zeroconf | None = None
     ) -> list[BusyBarDevice]:
         discoverer = BusyBarDeviceDiscoverer(zeroconf)
-        discoverer.sync_setup()
-        devices = discoverer.sync_collect(timeout)
-        discoverer.sync_teardown()
-        return devices
+        try:
+            return discoverer.sync_collect(timeout)
+        finally:
+            discoverer.sync_teardown()
