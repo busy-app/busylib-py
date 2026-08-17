@@ -480,7 +480,7 @@ Instead of hardcoding an IP address, you can discover devices like so:
 from busylib import BusyBarDevices
 
 for device in BusyBarDevices.discover():
-    print(f"Device: {device.name}")
+    print(f"Device: \"{device.name}\" (id \"{device.device_id}\")")
     print(f"  Over USB: {device.get_address('over_usb')}")
     print(f"  Over Wi-Fi: {device.get_address('over_wifi')}")
 ```
@@ -488,7 +488,7 @@ for device in BusyBarDevices.discover():
 **Example output:**
 
 ```
-Device: Anna's BUSY Bar
+Device: "Anna's BUSY Bar" (id "aabbccddeeff")
   Over USB: 10.0.4.20
   Over Wi-Fi: 192.168.100.2
 ```
