@@ -10,15 +10,19 @@ from .client import AsyncBusyBar, BusyBar
 from zeroconf import (
     IPVersion,
     ServiceBrowser,
+    ServiceInfo,
     ServiceStateChange,
     Zeroconf,
     InterfaceChoice,
 )
+from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
 
 BUSYBAR_SERVICE = "_busybar._tcp.local."
 BUSYBAR_USB_SUBNET = "10.0.4."
 BUSYBAR_DEFAULT_NAME = b"BUSY Bar"
 TIMEOUT = 1.5
+# How long to wait for one bar to answer with its full record, in ms.
+RESOLVE_TIMEOUT_MS = 1500.0
 
 
 class BusyBarAddressAffinity(Enum):
@@ -70,40 +74,19 @@ class BusyBarDevice:
         return AsyncBusyBar(addr, **kwargs)
 
 
-class BusyBarDeviceDiscoverer:
+class _DeviceCollector:
     """
-    Collects bars advertising themselves over mDNS.
+    Turns resolved mDNS records into `BusyBarDevice` values.
 
-    Owns the `Zeroconf` instance it creates and closes it when done. One
-    supplied by the caller is left exactly as it was found: not reconfigured,
-    and not closed, because they may still be using it.
+    Shared by the sync and async discoverers, which differ only in how they
+    talk to zeroconf.
     """
 
-    def __init__(self, zeroconf: Zeroconf | None) -> None:
-        self._user_provided_zeroconf = zeroconf is not None
-        # A bar plugged in over USB answers on a 10.0.4.x link, so every
-        # interface has to be listened on. That is already Zeroconf's own
-        # default, which is why a caller's instance needs no adjustment - and
-        # if they deliberately narrowed theirs, overriding it would be wrong.
-        self._zeroconf = zeroconf or Zeroconf(InterfaceChoice.All)
+    def __init__(self) -> None:
         self._devices_by_id: dict[str, BusyBarDevice] = {}
 
-    def sync_teardown(self) -> None:
-        """
-        Close the `Zeroconf` instance, if this discoverer created it.
-        """
-        if not self._user_provided_zeroconf:
-            self._zeroconf.close()
-
-    async def async_teardown(self) -> None:
-        """
-        Close it without blocking the event loop.
-
-        `Zeroconf.close()` joins its listener threads and has no async
-        counterpart in zeroconf 0.150, so it runs on a worker thread.
-        """
-        if not self._user_provided_zeroconf:
-            await asyncio.to_thread(self._zeroconf.close)
+    def collected(self) -> list[BusyBarDevice]:
+        return list(self._devices_by_id.values())
 
     @staticmethod
     def _address_affinity(address: str) -> BusyBarAddressAffinity:
@@ -119,28 +102,21 @@ class BusyBarDeviceDiscoverer:
             affinity=BusyBarDeviceDiscoverer._address_affinity(address),
         )
 
-    def _on_service_state_change(
-        self,
-        zeroconf: Zeroconf,
-        service_type: str,
-        name: str,
-        state_change: ServiceStateChange,
-    ) -> None:
-        if state_change not in [
+    @staticmethod
+    def _is_interesting(state_change: ServiceStateChange) -> bool:
+        return state_change in (
             ServiceStateChange.Added,
             ServiceStateChange.Updated,
-        ]:
-            return
+        )
 
-        info = zeroconf.get_service_info(service_type, name)
-        if not info:
-            return
-
+    def _record(self, info: ServiceInfo) -> None:
+        """
+        Fold one resolved service record into the collected devices.
+        """
         device_id = info.name.split(".")[0]
-        addresses = info.ip_addresses_by_version(IPVersion.V4Only)
         addresses = (
             BusyBarDeviceDiscoverer._ip_address_to_our(addr.compressed)
-            for addr in addresses
+            for addr in info.ip_addresses_by_version(IPVersion.V4Only)
         )
 
         raw_name = info.properties.get(b"name") or BUSYBAR_DEFAULT_NAME
@@ -152,27 +128,126 @@ class BusyBarDeviceDiscoverer:
         device.addresses = device.addresses.union(addresses)
         self._devices_by_id[device_id] = device
 
+
+class BusyBarDeviceDiscoverer(_DeviceCollector):
+    """
+    Blocking mDNS discovery.
+
+    Owns the `Zeroconf` instance it creates and closes it when done. One
+    supplied by the caller is left exactly as it was found: not reconfigured,
+    and not closed, because they may still be using it.
+    """
+
+    def __init__(self, zeroconf: Zeroconf | None) -> None:
+        super().__init__()
+        self._user_provided_zeroconf = zeroconf is not None
+        # A bar plugged in over USB answers on a 10.0.4.x link, so every
+        # interface has to be listened on. That is already Zeroconf's own
+        # default, which is why a caller's instance needs no adjustment - and
+        # if they deliberately narrowed theirs, overriding it would be wrong.
+        self._zeroconf = zeroconf or Zeroconf(InterfaceChoice.All)
+
+    def sync_teardown(self) -> None:
+        """
+        Close the `Zeroconf` instance, if this discoverer created it.
+        """
+        if not self._user_provided_zeroconf:
+            self._zeroconf.close()
+
+    def _on_service_state_change(
+        self,
+        zeroconf: Zeroconf,
+        service_type: str,
+        name: str,
+        state_change: ServiceStateChange,
+    ) -> None:
+        if not self._is_interesting(state_change):
+            return
+        info = zeroconf.get_service_info(service_type, name)
+        if info:
+            self._record(info)
+
     def sync_collect(self, timeout: float) -> list[BusyBarDevice]:
         with ServiceBrowser(
             self._zeroconf, BUSYBAR_SERVICE, handlers=[self._on_service_state_change]
         ):
             time.sleep(timeout)
-        return list(self._devices_by_id.values())
+        return self.collected()
+
+
+class AsyncBusyBarDeviceDiscoverer(_DeviceCollector):
+    """
+    Non-blocking mDNS discovery, on zeroconf's own async API.
+
+    Nothing here reaches for a worker thread: `AsyncZeroconf` closes with
+    `async_close`, the browser cancels with `async_cancel`, and records are
+    resolved with `AsyncServiceInfo.async_request` instead of the blocking
+    `get_service_info`.
+    """
+
+    def __init__(self, zeroconf: AsyncZeroconf | None) -> None:
+        super().__init__()
+        self._user_provided_zeroconf = zeroconf is not None
+        self._aiozc = zeroconf or AsyncZeroconf(InterfaceChoice.All)
+        self._pending: set[asyncio.Task[None]] = set()
+
+    async def async_teardown(self) -> None:
+        """
+        Close the `AsyncZeroconf` instance, if this discoverer created it.
+        """
+        if not self._user_provided_zeroconf:
+            await self._aiozc.async_close()
+
+    def _on_service_state_change(
+        self,
+        zeroconf: Zeroconf,
+        service_type: str,
+        name: str,
+        state_change: ServiceStateChange,
+    ) -> None:
+        if not self._is_interesting(state_change):
+            return
+        # Handlers run on the event loop thread, so resolving has to be
+        # scheduled rather than awaited here. The task is kept referenced
+        # until it finishes, otherwise it can be garbage collected mid-flight.
+        task = asyncio.ensure_future(self._resolve(service_type, name))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def _resolve(self, service_type: str, name: str) -> None:
+        info = AsyncServiceInfo(service_type, name)
+        if await info.async_request(self._aiozc.zeroconf, RESOLVE_TIMEOUT_MS):
+            self._record(info)
 
     async def async_collect(self, timeout: float) -> list[BusyBarDevice]:
-        with ServiceBrowser(
-            self._zeroconf, BUSYBAR_SERVICE, handlers=[self._on_service_state_change]
-        ):
+        browser = AsyncServiceBrowser(
+            self._aiozc.zeroconf,
+            BUSYBAR_SERVICE,
+            handlers=[self._on_service_state_change],
+        )
+        try:
             await asyncio.sleep(timeout)
-        return list(self._devices_by_id.values())
+        finally:
+            await browser.async_cancel()
+        # A record announced just before the deadline may still be resolving.
+        if self._pending:
+            await asyncio.gather(*self._pending, return_exceptions=True)
+        return self.collected()
 
 
 class BusyBarDevices:
     @staticmethod
     async def async_discover(
-        timeout: float = TIMEOUT, zeroconf: Zeroconf | None = None
+        timeout: float = TIMEOUT, zeroconf: AsyncZeroconf | None = None
     ) -> list[BusyBarDevice]:
-        discoverer = BusyBarDeviceDiscoverer(zeroconf)
+        """
+        Discover bars without blocking the event loop.
+
+        Takes an `AsyncZeroconf`, not a `Zeroconf`, mirroring zeroconf's own
+        split between the two APIs. Wrap an existing instance with
+        `AsyncZeroconf(zc=my_zeroconf)` if you already have one.
+        """
+        discoverer = AsyncBusyBarDeviceDiscoverer(zeroconf)
         try:
             return await discoverer.async_collect(timeout)
         finally:
