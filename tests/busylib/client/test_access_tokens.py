@@ -16,7 +16,9 @@ TOKEN_PAYLOAD = {
 
 
 def _client(responder) -> BusyBar:
-    return BusyBar(addr="http://device.local", transport=httpx2.MockTransport(responder))
+    return BusyBar(
+        addr="http://device.local", transport=httpx2.MockTransport(responder)
+    )
 
 
 def _async_client(responder) -> AsyncBusyBar:
