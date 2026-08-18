@@ -44,12 +44,14 @@ def test_volume_goes_on_the_wire_without_a_decimal_point(
     assert seen["params"] == {"volume": expected}
 
 
-def test_volume_model_holds_a_whole_number() -> None:
+@pytest.mark.parametrize(
+    "given,expected", [(42.5, 43), (55.5, 56), (42.4, 42), (0.4, 0), (99.5, 100)]
+)
+def test_volume_rounds_half_up(given: float, expected: int) -> None:
     """
-    The rounding happens in the model, so any caller of it benefits.
+    Half up, so a volume control does not round 42.5 down and 55.5 up.
     """
-    assert types.AudioVolumeUpdate(volume=42.5).volume == 43
-    assert isinstance(types.AudioVolumeUpdate(volume=42.0).volume, int)
+    assert types.whole_volume(given) == expected
 
 
 def test_rename_sends_the_source_as_path() -> None:
