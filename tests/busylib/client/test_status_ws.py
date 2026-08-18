@@ -147,12 +147,53 @@ async def test_stream_status_ws_wraps_decode_error(
 
 
 @pytest.mark.asyncio
-async def test_stream_status_ws_cloud_not_supported() -> None:
+async def test_stream_status_ws_is_local_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
-    Explicitly reject cloud mode for /api/status/ws streaming.
+    Cloud mode refuses streaming without opening a connection.
+
+    The endpoint is local by design. The cloud lists it but rejects the
+    upgrade for every token, so the refusal happens here rather than after a
+    round trip that would look like a credentials problem.
     """
+    connected = False
+
+    def fake_connect(*_args: object, **_kwargs: object) -> object:
+        nonlocal connected
+        connected = True
+        raise AssertionError("cloud mode must not open a websocket")
+
+    monkeypatch.setattr(state_stream_client.websockets, "connect", fake_connect)
+
     client = AsyncBusyBar(addr=None, token="secret")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match="local only"):
         async for _ in client.stream_status_ws():
             pass
     await client.aclose()
+
+    assert not connected
+
+
+@pytest.mark.asyncio
+async def test_stream_status_ws_device_keeps_the_query_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A local device still receives its access key in the URL.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_connect(uri: str, **_kwargs: object) -> object:
+        seen["uri"] = uri
+        raise AssertionError("stop before connecting")
+
+    monkeypatch.setattr(state_stream_client.websockets, "connect", fake_connect)
+
+    client = AsyncBusyBar(addr="10.0.4.20", token="1234")
+    with pytest.raises(exceptions.BusyBarWebSocketError):
+        async for _ in client.stream_status_ws():
+            pass
+    await client.aclose()
+
+    assert seen["uri"] == "ws://10.0.4.20/api/status/ws?x-api-token=1234"

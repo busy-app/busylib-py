@@ -33,12 +33,15 @@ def _http_to_ws(addr: str) -> str:
     return urlunparse(parsed._replace(scheme=scheme))
 
 
+STATUS_STREAM_PATH = "/api/status/ws"
+
+
 def _extract_token(headers: Mapping[str, str]) -> str | None:
     """
-    Extract API token from configured HTTP headers.
+    Extract the device access key from configured HTTP headers.
 
-    Local clients use `X-API-Token`. Cloud status streaming is currently not
-    supported in this client.
+    Only local clients reach this: the device takes its key as `X-API-Token`,
+    and streaming is not available through the cloud at all.
     """
     return headers.get("x-api-token") or headers.get("X-API-Token")
 
@@ -86,14 +89,17 @@ class AsyncStateStreamMixin(AsyncClientBase):
         dictionaries with original proto field names.
         """
         if self.is_cloud:
+            # Deliberate: status streaming is a local-only endpoint. The cloud
+            # lists it but refuses the upgrade for every token, including ones
+            # its own REST endpoints accept, so connect to the bar directly.
             raise NotImplementedError(
-                "Cloud mode is not supported for /api/status/ws streaming."
+                f"{STATUS_STREAM_PATH} streaming is local only. Connect to the "
+                "device address instead of using cloud mode."
             )
 
         headers = self.client.headers
+        ws_url = _http_to_ws(self.base_url).rstrip("/") + STATUS_STREAM_PATH
         token = _extract_token(headers)
-
-        ws_url = _http_to_ws(self.base_url).rstrip("/") + "/api/status/ws"
         if token:
             ws_url += f"?x-api-token={quote(token, safe='')}"
 
@@ -139,7 +145,7 @@ class AsyncStateStreamMixin(AsyncClientBase):
                 raise exceptions.BusyBarWebSocketError(
                     "Status WebSocket streaming failed: authentication required "
                     f"(HTTP {status_code}). Provide a valid API token",
-                    path="/api/status/ws",
+                    path=STATUS_STREAM_PATH,
                     original=exc,
                 ) from exc
             raise exceptions.BusyBarWebSocketError(

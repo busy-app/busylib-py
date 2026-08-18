@@ -33,12 +33,14 @@ def test_init_defaults_local():
 
 def test_init_token_sets_cloud_base_and_header():
     """
-    Ensure token auth switches to the cloud proxy base URL.
+    Ensure token auth switches to the cloud base URL.
 
-    Also validates the Authorization header value.
+    Also validates the Authorization header value. The host used to default to
+    proxy.busy.app, which was renamed before launch and never resolved, so
+    cloud mode could not reach anything.
     """
     client = BusyBar(token="secret")
-    assert client.base_url == "https://proxy.busy.app"
+    assert client.base_url == "https://api.busy.app"
     assert client.client.headers["authorization"] == "Bearer secret"
 
 

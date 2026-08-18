@@ -79,6 +79,7 @@ nav:
       - Building a tool: guides/building-a-tool.md
   - Reference:
       - Clients: api/clients.md
+      - Cloud addresses: api/cloud.md
       - Device discovery: api/discovery.md
       - Displays and frames: api/display.md
       - Features: api/features.md
