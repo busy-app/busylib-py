@@ -41,15 +41,22 @@ class BaseModel(PydanticBaseModel):
         """
         Validate input object and convert schema errors to domain exceptions.
         """
+        # Only forward what the caller actually asked for. `by_alias`/`by_name`
+        # arrived in pydantic 2.11 and `extra` in 2.12, so passing them
+        # unconditionally made every call fail with a TypeError on the older
+        # pydantic this package claims to support.
+        options: dict[str, Any] = {
+            "strict": strict,
+            "from_attributes": from_attributes,
+            "context": context,
+            "by_alias": by_alias,
+            "by_name": by_name,
+            "extra": extra,
+        }
         try:
             return super().model_validate(
                 obj,
-                strict=strict,
-                from_attributes=from_attributes,
-                context=context,
-                by_alias=by_alias,
-                by_name=by_name,
-                extra=extra,
+                **{name: value for name, value in options.items() if value is not None},
             )
         except ValidationError as exc:
             raise exceptions.BusyBarResponseValidationError(
@@ -838,5 +845,28 @@ class SmartHomePairingPayload(BaseModel):
 class SmartHomeSwitchState(BaseModel):
     state: bool | None = None
     startup: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccessToken(BaseModel):
+    short_id: str
+    display_id: str
+    name: str
+    created_at: int
+    last_used_at: int
+    token: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AccessTokensInfo(BaseModel):
+    tokens: list[AccessToken]
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AccessTokenMintRequest(BaseModel):
+    name: str
 
     model_config = ConfigDict(extra="ignore")

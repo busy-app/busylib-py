@@ -9,9 +9,24 @@ individual endpoints concurrently and tolerates partial failures:
 from busylib.features import collect_device_snapshot
 
 snapshot = await collect_device_snapshot(client)
-print(snapshot.name, snapshot.power, snapshot.wifi)
-print(snapshot.field_errors)  # whatever could not be read, and why
+print(f"Name: {snapshot.name or 'unknown'}")
+print(f"Battery: {snapshot.power.battery_charge if snapshot.power else 'unknown'}")
+print(f"Wi-Fi: {snapshot.wifi.state if snapshot.wifi else 'unknown'}")
+print(f"Field errors: {snapshot.field_errors}")
 ```
+
+**Example output:**
+
+```
+Name: Front desk
+Battery: 88
+Wi-Fi: connected
+Field errors: {}
+```
+
+`{}` means every snapshot endpoint responded. A non-empty `field_errors`
+dictionary identifies only the unavailable fields, while usable values remain
+available in the same snapshot.
 
 A field that fails lands in `field_errors` instead of aborting the whole
 snapshot, so one unavailable endpoint doesn't cost you the rest.
@@ -30,6 +45,16 @@ async for message in client.stream_status_ws():
     if isinstance(message, dict):
         print(message)
 ```
+
+**Example output after a power update:**
+
+```
+{'updates': [{'power': {'known': {'battery_charge_percent': 88}}}]}
+```
+
+The exact payload changes with the device event. Each member of `updates` is a
+delta, not a full device snapshot, so retain earlier state for fields absent
+from that message.
 
 Messages are decoded from the `BSB_State.State` schema into dictionaries with
 the original proto field names. Each one carries a list of `updates`, where
@@ -54,6 +79,16 @@ async for message in client.stream_status_ws():
         store.apply_stream_message(message)
 ```
 
+**Example output after a battery update:**
+
+```
+now: Front desk
+changed: {'power'}
+```
+
+The first callback receives the complete merged snapshot; the second names the
+top-level fields changed by this particular stream message.
+
 `on_state` receives the full updated snapshot; `on_diff` also receives the set
 of top-level fields that actually changed, which is handy for redrawing only
 what moved.
@@ -70,8 +105,13 @@ def on_diff(changed, snapshot):
     if "screen_front" in changed and snapshot.screen_front is not None:
         render(snapshot.screen_front)
 
+
 store.on_diff(on_diff)
 ```
+
+**Expected result:** `render` receives decoded RGB888 bytes whenever the front
+screen changes. This fragment intentionally has no terminal output; the
+observable result is the updated image in your renderer.
 
 Because the frame describes its own encoding, no guessing by payload size is
 involved — see `busylib.display.decode_frame_data`. A decoded frame whose size

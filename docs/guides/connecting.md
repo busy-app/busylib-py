@@ -9,9 +9,23 @@ network it also gets a normal address on that network, and either works:
 ```python
 from busylib import BusyBar
 
-bb = BusyBar("10.0.4.20")          # over USB
-bb = BusyBar("192.168.1.20")       # over Wi-Fi
+bb = BusyBar("10.0.4.20")  # over USB
+bb = BusyBar("192.168.1.20")  # over Wi-Fi
 ```
+
+Constructing a client produces no output and does not make a network request.
+Call `version()` or another method to verify that the selected address works.
+
+## Run the first check
+
+Run terminal commands in PowerShell on Windows, or Terminal on macOS and
+Linux. Put Python examples in a `.py` file in your editor and run that file;
+do not paste `git`, `py`, or `uv` commands into a Python file or `>>>` prompt.
+
+The [quick start](../index.md#installation) has copyable Windows and
+macOS/Linux installation commands, a complete `check_busybar.py` file, and
+the expected successful output. The bar's `/docs` page documents its raw HTTP
+API; it does not execute Python examples from this documentation.
 
 ## Access keys
 
@@ -37,6 +51,15 @@ info = bb.access()
 print(info.mode, info.key_valid)  # 'key' True
 ```
 
+**Example output:**
+
+```
+key True
+```
+
+This means the bar has access-key mode enabled. `key_valid` describes the
+device configuration, not whether the token supplied by this client is valid.
+
 !!! note
     `key_valid` reports whether the *device* has a key configured, not whether
     the token you supplied is the right one. Don't use it to decide that no
@@ -52,6 +75,16 @@ from busylib import BusyBarDevices
 for device in BusyBarDevices.discover():
     print(device.name, device.get_address("over_wifi"))
 ```
+
+**Example output when a bar advertises itself:**
+
+```
+Front desk 192.168.1.20
+```
+
+Each line is the advertised device name and Wi-Fi address. No output is normal
+on firmware that does not advertise the service; a USB-connected bar remains
+available at `10.0.4.20`.
 
 Discovery browses for the `_busybar._tcp` mDNS service and classifies each
 address it finds: anything in `10.0.4.*` is treated as the USB link, everything
@@ -85,6 +118,10 @@ longer timeout:
 bb.assets_upload("my-app", "big.png", data, timeout=60.0)
 ```
 
+**Expected result:** the call returns `SuccessResponse(result="OK")` without
+printing anything. A timeout applies only to this upload, not to future client
+requests.
+
 ## Helpers for endpoints that no longer exist
 
 A few helpers target device endpoints that current firmware doesn't serve at
@@ -111,3 +148,6 @@ bb.method_compatibility("account_profile")
 # {'path': '/api/account/profile', 'method': 'GET',
 #  'status': 'removed', 'replacement': 'account_backend()'}
 ```
+
+The result is local compatibility metadata: it explains that the helper must
+not be called and names its replacement; no request reaches the device.
