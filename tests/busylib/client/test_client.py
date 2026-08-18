@@ -838,7 +838,8 @@ def test_audio_volume_set_params():
     client = make_client(responder)
     resp = client.audio_volume_set(42.5)
     assert resp.result == "OK"
-    assert seen["params"] == {"volume": "42.5"}
+    # The device rejects a decimal point, so the value is whole on the wire.
+    assert seen["params"] == {"volume": "43"}
     assert seen["content"] == b""
 
 

@@ -69,7 +69,7 @@ def test_audio_play_stop_volume_sync() -> None:
         {
             "path": "/api/audio/volume",
             "method": "POST",
-            "params": {"volume": "55.5"},
+            "params": {"volume": "56"},
             "body": None,
         },
     ]
@@ -194,7 +194,7 @@ async def test_audio_play_stop_volume_async() -> None:
         {
             "path": "/api/audio/volume",
             "method": "POST",
-            "params": {"volume": "12.5"},
+            "params": {"volume": "13"},
             "body": None,
         },
     ]

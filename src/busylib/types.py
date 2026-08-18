@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
@@ -725,9 +726,22 @@ class AudioVolumeInfo(BaseModel):
 
 
 class AudioVolumeUpdate(BaseModel):
-    volume: float = Field(ge=0, le=100)
+    # The OpenAPI document says `number`, but the device rejects a decimal
+    # point: `?volume=42` is accepted and `?volume=42.0` answers 400. Floats
+    # are still taken from callers and rounded, so audio_volume_set(42.4)
+    # keeps working rather than failing at the device.
+    volume: int = Field(ge=0, le=100)
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("volume", mode="before")
+    @classmethod
+    def _round_to_whole(cls, value: Any) -> Any:
+        # Half up, not `round`: banker's rounding would send 42.5 as 42 and
+        # 55.5 as 56, which is a strange thing for a volume control to do.
+        if isinstance(value, float):
+            return math.floor(value + 0.5)
+        return value
 
 
 class AudioPlayRequest(BaseModel):

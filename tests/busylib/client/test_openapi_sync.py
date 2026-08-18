@@ -223,7 +223,7 @@ def test_system_time_update_and_storage_endpoints_match_openapi() -> None:
     assert storage_request == {
         "method": "POST",
         "path": "/api/storage/rename",
-        "params": {"old_path": "/ext/a.txt", "new_path": "/ext/b.txt"},
+        "params": {"path": "/ext/a.txt", "new_path": "/ext/b.txt"},
         "body": b"",
     }
     assert log_dump_request == {
