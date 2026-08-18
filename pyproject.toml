@@ -95,5 +95,11 @@ lint.select = [
 
 [tool.pytest]
 ini_options.pythonpath = [ "." ]
-ini_options.addopts = "-q"
+# Integration tests need a real bar, so they are opt-in: -m integration
+# selects them, and -m "integration and manual" the ones needing a human.
+ini_options.addopts = "-q -m 'not integration'"
+ini_options.markers = [
+  "integration: exercises a real device over USB, LAN or the cloud",
+  "manual: needs someone to press buttons on the bar",
+]
 ini_options.asyncio_mode = "auto"

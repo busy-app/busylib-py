@@ -85,7 +85,7 @@ class AudioMixin(SyncClientBase):
 
     def audio_volume_set(self, volume: float) -> types.SuccessResponse:
         logger.info("audio_volume_set volume=%s", volume)
-        model = types.AudioVolumeUpdate(volume=volume)
+        model = types.AudioVolumeUpdate(volume=types.whole_volume(volume))
         payload = model.model_dump()
         data = self._request(
             "POST",
@@ -167,7 +167,7 @@ class AsyncAudioMixin(AsyncClientBase):
 
     async def audio_volume_set(self, volume: float) -> types.SuccessResponse:
         logger.info("async audio_volume_set volume=%s", volume)
-        model = types.AudioVolumeUpdate(volume=volume)
+        model = types.AudioVolumeUpdate(volume=types.whole_volume(volume))
         payload = model.model_dump()
         data = await self._request(
             "POST",

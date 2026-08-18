@@ -100,7 +100,10 @@ class StorageMixin(SyncClientBase):
         data = self._request(
             "POST",
             "/api/storage/rename",
-            params={"old_path": old_path, "new_path": new_path},
+            # The device calls the source "path"; sending "old_path" was
+            # rejected with 400, so renaming never worked. The keyword stays
+            # `old_path` here because it reads better next to `new_path`.
+            params={"path": old_path, "new_path": new_path},
         )
         return types.SuccessResponse.model_validate(data)
 
@@ -209,7 +212,7 @@ class AsyncStorageMixin(AsyncClientBase):
         data = await self._request(
             "POST",
             "/api/storage/rename",
-            params={"old_path": old_path, "new_path": new_path},
+            params={"path": old_path, "new_path": new_path},
         )
         return types.SuccessResponse.model_validate(data)
 

@@ -659,3 +659,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 make install-dev
 ```
+
+`make test` runs the suite against a mock device and needs no hardware. If you
+have a bar to hand, there is a second suite that drives a real one over USB,
+over the local network and through the cloud — see
+[Testing against a real bar](https://busy-app.github.io/busylib-py/guides/integration-tests/).
+It found two client methods that had never worked, because a mock accepts
+payloads the device rejects.
