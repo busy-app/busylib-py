@@ -92,31 +92,50 @@ with `403`.
 
 ## The manual test
 
-Forwarded input travels the same stream as a real button, so the automatic
-tests cannot prove the hardware path. One test asks you to press the buttons:
+Forwarded input travels the same stream as real hardware, so the automatic
+tests cannot prove the buttons, wheel and switch are wired to it. One test
+asks you to use the bar:
 
 ```bash
 BUSYBAR_TEST_MANUAL_TIMEOUT=120 uv run pytest \
-  tests/integration/test_input_stream.py::test_physical_buttons_reach_the_stream \
+  tests/integration/test_input_stream.py::test_physical_input_reaches_the_stream \
   -m "integration and manual" -s
 ```
 
 `-s` matters: without it pytest captures the prompt and you will not see what
-to press. Press **OK**, **BACK** and **START** on the bar; each one is
-acknowledged as it arrives and the test finishes as soon as all three are
-seen.
+to do. Each input is acknowledged as it arrives, and the test finishes as soon
+as it has seen all three buttons, both wheel directions and one switch move.
 
 ```
-Press OK, BACK and START on the bar (120s)...
-  saw OK
-  saw BACK
-  saw START
+On the bar, within 120s:
+  press OK, BACK and START
+  turn the wheel one way and back
+  move the switch to any other position
+  button OK
+  wheel forward (delta 1)
+  switch APPS
 ```
 
-If a press does not appear, check the automatic counterpart first —
-`test_forwarded_input_comes_back_on_the_stream` uses the same decoding, so if
-that passes and this does not, the gap is between the buttons and the stream
+If something does not appear, check the automatic counterparts first:
+`test_forwarded_input_comes_back_on_the_stream` and
+`test_forwarded_encoder_and_switch_come_back` use the same decoding, so if
+they pass and this does not, the gap is between the hardware and the stream
 rather than in this client.
+
+### Reading input yourself
+
+Worth knowing if you consume this stream in your own code: protobuf omits
+fields holding a default value, and the first entry of every input enum is a
+default. `OK` is button 0, `PRESS` is action 0, and `BUSY` is switch position
+0 — so "OK pressed" and "moved to BUSY" both arrive as an empty payload:
+
+```python
+{"input": {"button_event": {}}}   # OK, pressed
+{"input": {"switch_event": {}}}   # switch moved to BUSY
+```
+
+Treat a missing key as the enum's first value rather than as no data. The
+wheel is safe from this, since the firmware sends `+1` and `-1` and never `0`.
 
 ## What the tests touch
 

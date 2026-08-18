@@ -22,12 +22,13 @@ STREAM_SETTLE_SECONDS = 1.5
 STREAM_DRAIN_SECONDS = 2.0
 MANUAL_TIMEOUT_SECONDS = float(os.environ.get("BUSYBAR_TEST_MANUAL_TIMEOUT", "30"))
 
-# proto3 omits fields holding a default value, so the first entry of each enum
-# arrives as an absent key: OK is button 0 and PRESS is action 0, which makes
-# "OK pressed" indistinguishable from an empty message unless the defaults are
-# filled in. Everything below reads events through _button, never raw.
+# proto3 omits fields holding a default value, so the first entry of every enum
+# arrives as an absent key. That bites three times here: OK is button 0, PRESS
+# is action 0, and BUSY is switch position 0, so "OK pressed" and "switched to
+# BUSY" both look like an empty message. Nothing below reads a payload raw.
 DEFAULT_BUTTON = "OK"
 DEFAULT_ACTION = "PRESS"
+DEFAULT_SWITCH_POSITION = "BUSY"
 
 
 def _button(event: dict) -> tuple[str, str] | None:
@@ -41,6 +42,29 @@ def _button(event: dict) -> tuple[str, str] | None:
         payload.get("button", DEFAULT_BUTTON),
         payload.get("action", DEFAULT_ACTION),
     )
+
+
+def _switch(event: dict) -> str | None:
+    """
+    Return the switch position from an update, or None if it is not a switch.
+    """
+    payload = event.get("input", {}).get("switch_event")
+    if payload is None:
+        return None
+    return payload.get("position", DEFAULT_SWITCH_POSITION)
+
+
+def _encoder(event: dict) -> int | None:
+    """
+    Return the encoder delta from an update, or None if it is not an encoder.
+
+    The firmware sends +1 and -1 and never 0, so an absent delta would mean a
+    contract change rather than "no movement".
+    """
+    payload = event.get("input", {}).get("encoder_event")
+    if payload is None:
+        return None
+    return payload.get("delta", 0)
 
 
 async def _collect(abar, seconds: float, stop_when=None) -> list[dict]:
@@ -116,37 +140,105 @@ async def test_forwarded_input_comes_back_on_the_stream(local_only, abar) -> Non
         assert (name, "RELEASE") in seen, f"no release for {name}, saw {seen}"
 
 
-@pytest.mark.manual
-async def test_physical_buttons_reach_the_stream(local_only, abar) -> None:
+async def test_forwarded_encoder_and_switch_come_back(local_only, abar) -> None:
     """
-    A human presses buttons on the bar and the stream reports them.
+    The stream carries wheel movement and switch positions too.
+
+    Only buttons were checked at first, which made it look as though scrolling
+    and the switch were not reported at all - they were, the test just never
+    asked.
+    """
+    deltas: list[int] = []
+    positions: list[str] = []
+
+    async def listen() -> None:
+        async for message in abar.stream_status_ws():
+            if not isinstance(message, dict):
+                continue
+            for update in message.get("updates", []):
+                delta = _encoder(update)
+                if delta is not None:
+                    deltas.append(delta)
+                position = _switch(update)
+                if position is not None:
+                    positions.append(position)
+
+    listener = asyncio.create_task(listen())
+    await asyncio.sleep(STREAM_SETTLE_SECONDS)
+    try:
+        for key in ("up", "down", "busy", "custom", "off", "apps", "settings"):
+            await abar.input(types.InputKey(key))
+            await asyncio.sleep(0.35)
+        await asyncio.sleep(1.0)
+    finally:
+        listener.cancel()
+
+    assert 1 in deltas, f"no forward wheel movement, saw {deltas}"
+    assert -1 in deltas, f"no backward wheel movement, saw {deltas}"
+    # BUSY is position 0 and so arrives with no field at all; reading it
+    # through _switch is what keeps it from vanishing.
+    for expected in ("BUSY", "CUSTOM", "OFF", "APPS", "SETTINGS"):
+        assert expected in positions, f"no {expected}, saw {positions}"
+
+
+@pytest.mark.manual
+async def test_physical_input_reaches_the_stream(local_only, abar) -> None:
+    """
+    A human uses the bar and the stream reports every kind of input.
 
     Forwarded input travelling the same channel does not prove the hardware
     does, which is why this exists separately. Run it with output shown:
 
         uv run pytest -m "integration and manual" -s
 
-    Then press OK, BACK and START on the bar within the timeout.
+    Then press the buttons, turn the wheel both ways, and move the switch.
     """
-    wanted = {"OK", "BACK", "START"}
+    wanted_buttons = {"OK", "BACK", "START"}
+    buttons: set[str] = set()
+    directions: set[str] = set()
+    positions: set[str] = set()
+
     print(
-        f"\nPress OK, BACK and START on the bar ({MANUAL_TIMEOUT_SECONDS:.0f}s)...",
+        f"\nOn the bar, within {MANUAL_TIMEOUT_SECONDS:.0f}s:"
+        "\n  press OK, BACK and START"
+        "\n  turn the wheel one way and back"
+        "\n  move the switch to any other position",
         flush=True,
     )
-
-    pressed: set[str] = set()
 
     def enough(updates: list[dict]) -> bool:
         for update in updates[-1:]:
             found = _button(update)
-            if found is not None and found[1] == "PRESS":
-                if found[0] not in pressed:
-                    pressed.add(found[0])
-                    print(f"  saw {found[0]}", flush=True)
-        return wanted.issubset(pressed)
+            if found is not None and found[1] == "PRESS" and found[0] not in buttons:
+                buttons.add(found[0])
+                print(f"  button {found[0]}", flush=True)
+
+            delta = _encoder(update)
+            if delta is not None:
+                direction = "forward" if delta > 0 else "backward"
+                if direction not in directions:
+                    directions.add(direction)
+                    print(f"  wheel {direction} (delta {delta})", flush=True)
+
+            position = _switch(update)
+            if position is not None and position not in positions:
+                positions.add(position)
+                print(f"  switch {position}", flush=True)
+
+        return (
+            wanted_buttons.issubset(buttons)
+            and len(directions) == 2
+            and bool(positions)
+        )
 
     await _collect(abar, MANUAL_TIMEOUT_SECONDS, stop_when=enough)
 
-    assert wanted.issubset(pressed), (
-        f"missing {sorted(wanted - pressed)}; got {sorted(pressed)}"
-    )
+    missing: list[str] = []
+    if not wanted_buttons.issubset(buttons):
+        missing.append(f"buttons {sorted(wanted_buttons - buttons)}")
+    if len(directions) < 2:
+        missing.append(f"wheel directions (saw {sorted(directions) or 'none'})")
+    if not positions:
+        missing.append("any switch movement")
+
+    assert not missing, "; ".join(missing)
