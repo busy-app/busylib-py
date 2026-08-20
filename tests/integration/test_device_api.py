@@ -13,6 +13,7 @@ storage directory, and every value that gets changed is put back.
 from __future__ import annotations
 
 import io
+import time
 import wave
 
 import pytest
@@ -108,6 +109,50 @@ def test_screen_returns_a_frame_of_the_expected_size(bar) -> None:
     # decode bug hides.
     assert len(front) == 72 * 16 * 3, "front is 72x16, three bytes per pixel"
     assert len(back) == 160 * 80 * 3, "back is 160x80, three bytes per pixel"
+
+
+def test_a_drawn_colour_reads_back_as_itself(free_display, bar) -> None:
+    """
+    Red drawn on the bar comes back as red, not blue.
+
+    The device orders the three colour bytes BGR while its own protobuf enum
+    calls them RGB888, so the library swaps them. Nothing but a real bar can
+    catch that: a mock returns whatever bytes the test invented.
+    """
+    import collections
+
+    for colour, expected in (
+        ("#FF0000FF", (255, 0, 0)),
+        ("#0000FFFF", (0, 0, 255)),
+        ("#00FF00FF", (0, 255, 0)),
+    ):
+        bar.display_draw(
+            types.DisplayElements(
+                application_name=APP_NAME,
+                elements=[
+                    types.RectangleElement(
+                        id="fill",
+                        type="rectangle",
+                        x=0,
+                        y=0,
+                        width=72,
+                        height=16,
+                        fill="solid",
+                        fill_colors=[colour],
+                        display=types.DisplayName.FRONT,
+                    )
+                ],
+            )
+        )
+        time.sleep(1.2)
+
+        frame = bar.screen(0)
+        pixels = [tuple(frame[i : i + 3]) for i in range(0, len(frame), 3)]
+        dominant, _ = collections.Counter(pixels).most_common(1)[0]
+
+        assert dominant == expected, f"drew {colour}, frame says {dominant}"
+
+    bar.display_clear(application_name=APP_NAME)
 
 
 def test_storage_round_trip(bar) -> None:

@@ -38,12 +38,17 @@ def _frame_message(
 
 def test_plain_rgb_frame_lands_on_the_snapshot() -> None:
     """
-    A well-formed front-display frame is decoded and stored.
-    """
-    payload = bytes([1, 2, 3]) * (FRONT.width * FRONT.height)
-    snapshot = apply_state_stream_update(DeviceSnapshot(), _frame_message(data=payload))
+    A well-formed front-display frame is decoded and stored as RGB.
 
-    assert snapshot.screen_front == payload
+    The device sends colour as BGR, so the snapshot holds the reordered
+    bytes - what a renderer can use directly.
+    """
+    device_order = bytes([3, 2, 1]) * (FRONT.width * FRONT.height)
+    snapshot = apply_state_stream_update(
+        DeviceSnapshot(), _frame_message(data=device_order)
+    )
+
+    assert snapshot.screen_front == bytes([1, 2, 3]) * (FRONT.width * FRONT.height)
     assert snapshot.screen_back is None
 
 
@@ -78,12 +83,12 @@ def test_deflate_frame_is_decompressed() -> None:
     """
     DEFLATE frames inflate before being stored.
     """
-    payload = bytes([4, 5, 6]) * (FRONT.width * FRONT.height)
-    message = _frame_message(encoding="DEFLATE", data=zlib.compress(payload))
+    device_order = bytes([6, 5, 4]) * (FRONT.width * FRONT.height)
+    message = _frame_message(encoding="DEFLATE", data=zlib.compress(device_order))
 
     snapshot = apply_state_stream_update(DeviceSnapshot(), message)
 
-    assert snapshot.screen_front == payload
+    assert snapshot.screen_front == bytes([4, 5, 6]) * (FRONT.width * FRONT.height)
 
 
 def test_corrupt_deflate_frame_is_skipped_not_raised() -> None:

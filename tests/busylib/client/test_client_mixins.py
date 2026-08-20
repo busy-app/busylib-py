@@ -541,14 +541,15 @@ def test_decode_frame_bytes_front_rgb888() -> None:
     Decode the base64-encoded, uncompressed front-display HTTP response.
 
     `/api/screen` never compresses data (unlike the protobuf `Frame` state
-    updates); the body is plain base64-encoded RGB888 bytes.
+    updates); the body is plain base64-encoded pixel bytes, ordered BGR by
+    the device and returned RGB.
     """
     spec = display_client.display.get_display_spec(0)
-    raw = bytes([1, 2, 3]) * (spec.width * spec.height)
+    device_order = bytes([3, 2, 1]) * (spec.width * spec.height)
 
-    decoded = display_client._decode_frame_bytes(base64.b64encode(raw), 0)
+    decoded = display_client._decode_frame_bytes(base64.b64encode(device_order), 0)
 
-    assert decoded == raw
+    assert decoded == bytes([1, 2, 3]) * (spec.width * spec.height)
 
 
 def test_decode_frame_bytes_rejects_wrong_size() -> None:
@@ -580,11 +581,15 @@ def test_rle_decode_repeats_and_copy() -> None:
 
 def test_decode_frame_data_plain_rgb888() -> None:
     """
-    RGB888/PLAIN frame data passes through unchanged.
+    Colour bytes are reordered, because the device sends BGR.
+
+    The protobuf enum is named RGB888, but on firmware 1.1.1 a pure red fill
+    arrives as (0, 0, 255) over both the HTTP frame and the state stream. The
+    name describes what the firmware meant, not what it sends.
     """
-    data = bytes([10, 20, 30, 40, 50, 60])
-    decoded = display.decode_frame_data("PLAIN", "RGB888", data)
-    assert decoded == data
+    device_order = bytes([30, 20, 10, 60, 50, 40])
+    decoded = display.decode_frame_data("PLAIN", "RGB888", device_order)
+    assert decoded == bytes([10, 20, 30, 40, 50, 60])
 
 
 def test_decode_frame_data_plain_l8() -> None:
@@ -607,7 +612,7 @@ def test_decode_frame_data_run_length_rgb888() -> None:
     """
     RUN_LENGTH-encoded RGB888 frame data decodes via the RLE repeat block.
     """
-    rle = bytes([2, 1, 2, 3])  # repeat (1,2,3) twice
+    rle = bytes([2, 3, 2, 1])  # repeat the BGR triple (3,2,1) twice
     decoded = display.decode_frame_data("RUN_LENGTH", "RGB888", rle)
     assert decoded == bytes([1, 2, 3, 1, 2, 3])
 
@@ -618,9 +623,11 @@ def test_decode_frame_data_deflate_rgb888() -> None:
     """
     import zlib
 
-    raw = bytes([9, 8, 7, 6, 5, 4])
-    decoded = display.decode_frame_data("DEFLATE", "RGB888", zlib.compress(raw))
-    assert decoded == raw
+    device_order = bytes([7, 8, 9, 4, 5, 6])
+    decoded = display.decode_frame_data(
+        "DEFLATE", "RGB888", zlib.compress(device_order)
+    )
+    assert decoded == bytes([9, 8, 7, 6, 5, 4])
 
 
 def test_decode_frame_data_run_length_l4_uses_two_byte_blocks() -> None:

@@ -135,7 +135,7 @@ def unpack_l4_to_l8(data: bytes) -> bytes:
 
 def decode_frame_data(encoding: str, pixel_format: str, data: bytes) -> bytes:
     """
-    Decode `BSB_Frame.Frame.data` into RGB888 bytes using its own metadata.
+    Decode `BSB_Frame.Frame.data` into RGB bytes using its own metadata.
 
     `encoding` and `pixel_format` are the enum names as reported by the
     protobuf message (`PLAIN`/`RUN_LENGTH`/`DEFLATE`/`DEFLATE_RUN_LENGTH` and
@@ -157,7 +157,13 @@ def decode_frame_data(encoding: str, pixel_format: str, data: bytes) -> bytes:
         data = decoded
 
     if pixel_format == "RGB888":
-        return data
+        # The enum says RGB888 and the device sends BGR: drawing #FF0000 comes
+        # back as (0, 0, 255) on both the HTTP frame and the state stream,
+        # verified against firmware 1.1.1. The name comes from the firmware's
+        # own protobuf, so it cannot be trusted over the bytes.
+        pixels = bytearray(data)
+        pixels[0::3], pixels[2::3] = pixels[2::3], pixels[0::3]
+        return bytes(pixels)
     if pixel_format == "L8":
         return b"".join(bytes((v, v, v)) for v in data)
     # L4
