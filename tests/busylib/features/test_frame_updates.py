@@ -48,7 +48,9 @@ def test_plain_rgb_frame_lands_on_the_snapshot() -> None:
         DeviceSnapshot(), _frame_message(data=device_order)
     )
 
-    assert snapshot.screen_front == bytes([1, 2, 3]) * (FRONT.width * FRONT.height)
+    assert snapshot.screen_front is not None
+    assert snapshot.screen_front.data == bytes([1, 2, 3]) * (FRONT.width * FRONT.height)
+    assert snapshot.screen_front.pixel(0, 0) == (1, 2, 3)
     assert snapshot.screen_back is None
 
 
@@ -62,7 +64,10 @@ def test_l4_back_frame_is_expanded_to_rgb() -> None:
     snapshot = apply_state_stream_update(DeviceSnapshot(), message)
 
     assert snapshot.screen_back is not None
-    assert len(snapshot.screen_back) == BACK.width * BACK.height * 3
+    assert (snapshot.screen_back.width, snapshot.screen_back.height) == (
+        BACK.width,
+        BACK.height,
+    )
 
 
 def test_run_length_frame_is_decoded() -> None:
@@ -76,7 +81,7 @@ def test_run_length_frame_is_decoded() -> None:
     snapshot = apply_state_stream_update(DeviceSnapshot(), message)
 
     assert snapshot.screen_front is not None
-    assert len(snapshot.screen_front) == pixels * 3
+    assert len(snapshot.screen_front.data) == pixels * 3
 
 
 def test_deflate_frame_is_decompressed() -> None:
@@ -88,7 +93,8 @@ def test_deflate_frame_is_decompressed() -> None:
 
     snapshot = apply_state_stream_update(DeviceSnapshot(), message)
 
-    assert snapshot.screen_front == bytes([4, 5, 6]) * (FRONT.width * FRONT.height)
+    assert snapshot.screen_front is not None
+    assert snapshot.screen_front.data == bytes([4, 5, 6]) * (FRONT.width * FRONT.height)
 
 
 def test_corrupt_deflate_frame_is_skipped_not_raised() -> None:
@@ -168,4 +174,5 @@ def test_existing_frame_is_preserved_when_a_bad_one_arrives() -> None:
 
     snapshot = apply_state_stream_update(snapshot, _frame_message(data=b"\x01\x02"))
 
-    assert snapshot.screen_front == payload
+    assert snapshot.screen_front is not None
+    assert snapshot.screen_front.data == payload
