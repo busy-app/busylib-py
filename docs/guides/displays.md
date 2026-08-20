@@ -139,12 +139,12 @@ characters the firmware cannot render.
 
 ## Reading the screen back
 
-`screen()` returns the current contents of a display as RGB888 bytes, which is
-how the `remote` example mirrors the bar in a terminal:
+`frame()` returns the current contents of a display as a `Frame`, which is how
+the `remote` example mirrors the bar in a terminal:
 
 ```python
-frame = bb.screen(0)  # 0 = front, 1 = back
-print(len(frame))
+frame = bb.frame(0)  # 0 = front, 1 = back
+print(len(frame.data))
 ```
 
 **Expected output for the front display:**
@@ -153,8 +153,14 @@ print(len(frame))
 3456
 ```
 
-That is `72 * 16 * 3`: one RGB888 byte triplet per front-display pixel. The
-back display produces `160 * 80 * 3`, or `38400` bytes.
+That is `72 * 16 * 3`: three bytes per front-display pixel. The back display
+produces `160 * 80 * 3`, or `38400` bytes.
+
+The bytes are RGB. The device orders colour blue-first and its own protobuf
+calls that format `RGB888` anyway, so the library reorders on the way out
+rather than passing the firmware's name along — see
+[Displays and frames](../api/display.md). `screen()` still returns the same
+bytes without the wrapper.
 
 The HTTP endpoint returns base64-encoded, uncompressed framebuffer data despite
 advertising `Content-Type: image/bmp`; the client decodes that for you. Live

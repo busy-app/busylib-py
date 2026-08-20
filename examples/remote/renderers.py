@@ -7,6 +7,7 @@ import time
 import unicodedata
 
 from busylib import display
+from busylib.frames import Frame
 from examples.remote.settings import settings
 from busylib.features import DeviceSnapshot
 from examples.remote.keymap import KeyMap
@@ -77,7 +78,7 @@ class TerminalRenderer:
         self._link_key: str | None = None
         self._link_email: str | None = None
         self._update_available: bool | None = None
-        self._last_frame: bytes | None = None
+        self._last_frame: Frame | None = None
         self._command_line_cursor: int | None = None
         self._log_lines: list[str] = []
         self._max_log_lines = 200
@@ -125,11 +126,14 @@ class TerminalRenderer:
         required_rows = spec.height + extra_rows + frame_rows
         return required_cols, required_rows
 
-    def render(self, rgb_bytes: bytes) -> None:
+    def render(self, frame: Frame) -> None:
         """
-        Render a single RGB frame to the terminal with size guarding.
+        Render a single frame to the terminal with size guarding.
+
+        Geometry and byte order come from the frame, so this no longer has to
+        agree with the device by hand.
         """
-        self._last_frame = rgb_bytes
+        self._last_frame = frame
         self._update_size()
         if self._help_active:
             self._render_help_frame()
@@ -149,11 +153,10 @@ class TerminalRenderer:
         spacer_str = self.spacer or ""
         if spacer_str and settings.black_pixel_mode == "space_bg":
             spacer_str = "\x1b[48;2;0;0;0m \x1b[0m"
-        for y in range(self.spec.height):
+        for row in frame.rows():
             row_parts: list[str] = []
-            for x in range(self.spec.width):
-                idx = (y * self.spec.width + x) * 3
-                r, g, b = rgb_bytes[idx : idx + 3]
+            for offset in range(0, len(row), 3):
+                r, g, b = row[offset], row[offset + 1], row[offset + 2]
                 original_black = b == g == r == 0
                 if settings.invert_colors:
                     r, g, b = 255 - r, 255 - g, 255 - b

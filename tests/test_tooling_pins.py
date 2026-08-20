@@ -74,7 +74,22 @@ def test_linters_are_pinned_alike_in_both_files(repo: str, package: str) -> None
     pinned = _pinned_dev_versions().get(package)
 
     assert pinned is not None, f"{package} is not pinned in pyproject.toml"
-    assert revision == f"v{pinned}", (
+    # Compared as version numbers, not strings: pyproject-fmt normalizes the
+    # specifiers it writes, so 2.28.0 becomes ==2.28 in pyproject.toml while
+    # the hook revision stays at the release tag v2.28.0.
+    assert _release_parts(revision.lstrip("v")) == _release_parts(pinned), (
         f"{package}: .pre-commit-config.yaml has {revision}, "
         f"pyproject.toml pins {pinned}"
     )
+
+
+def _release_parts(version: str) -> tuple[int, ...]:
+    """
+    Split a version into numbers, ignoring trailing zeros.
+
+    `2.28` and `2.28.0` are the same release written two ways.
+    """
+    parts = [int(part) for part in version.split(".") if part.isdigit()]
+    while parts and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)

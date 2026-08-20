@@ -98,7 +98,7 @@ what moved.
 Current firmware has no separate screen WebSocket. Instead, front-display
 frames come through this same stream as `frame` updates, carrying their own
 `width`, `height`, `encoding`, and `pixel_format`. The store decodes them into
-RGB888 bytes on `DeviceSnapshot.screen_front` and `screen_back`:
+`Frame` objects on `DeviceSnapshot.screen_front` and `screen_back`:
 
 ```python
 def on_diff(changed, snapshot):
@@ -109,8 +109,8 @@ def on_diff(changed, snapshot):
 store.on_diff(on_diff)
 ```
 
-**Expected result:** `render` receives decoded RGB888 bytes whenever the front
-screen changes. This fragment intentionally has no terminal output; the
+**Expected result:** `render` receives a decoded `Frame` whenever the front
+screen changes, carrying RGB bytes with their geometry. This fragment intentionally has no terminal output; the
 observable result is the updated image in your renderer.
 
 Because the frame describes its own encoding, no guessing by payload size is

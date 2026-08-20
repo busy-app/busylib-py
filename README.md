@@ -663,6 +663,10 @@ source .venv/bin/activate
 make install-dev
 ```
 
+Image conversion for `storage_write` and `assets_upload` needs Pillow, which
+is optional: `pip install busylib[media]`. Everything else, including reading
+frames off the displays, works without it.
+
 `make test` runs the suite against a mock device and needs no hardware. If you
 have a bar to hand, there is a second suite that drives a real one over USB,
 over the local network and through the cloud — see

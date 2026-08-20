@@ -683,7 +683,7 @@ def test_display_draw_can_sanitize_text_payload(caplog) -> None:
 
 def test_screen_returns_decoded_rgb_bytes():
     """
-    Decode the base64 framebuffer response into RGB888 bytes.
+    Decode the base64 framebuffer response into RGB bytes.
     """
     import base64
 
