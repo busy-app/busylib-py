@@ -67,7 +67,9 @@ def test_subsystem_state_is_readable(bar) -> None:
     "display,x,y",
     [(types.DisplayName.FRONT, 2, 4), (types.DisplayName.BACK, 4, 8)],
 )
-def test_draws_then_clears(bar, display: types.DisplayName, x: int, y: int) -> None:
+def test_draws_then_clears(
+    free_display, bar, display: types.DisplayName, x: int, y: int
+) -> None:
     """
     Text reaches both displays and the drawing can be withdrawn again.
     """
@@ -141,7 +143,7 @@ def test_storage_round_trip(bar) -> None:
     bar.storage_remove(path=STORAGE_DIR)
 
 
-def test_assets_and_audio(bar) -> None:
+def test_assets_and_audio(free_display, bar) -> None:
     """
     Upload an image and a sound, use both, then delete them together.
 

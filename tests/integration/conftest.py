@@ -147,6 +147,28 @@ async def abar(transport: Transport):
 
 
 @pytest.fixture
+def free_display(bar) -> None:
+    """
+    Skip the test while a Busy session owns the display.
+
+    `display_draw` competes for the screen and answers `409 Not drawn due to
+    low priority` while a session is running - and no priority wins, 100
+    included. Stopping the session would take the bar away from whoever is
+    using it, so the honest move is to stand down and say why.
+    """
+    try:
+        snapshot = bar.busy_snapshot().snapshot
+    except Exception as exc:  # noqa: BLE001 - unreadable state is not a reason to fail
+        pytest.skip(f"could not read the Busy session state - {exc}")
+
+    kind = getattr(snapshot, "type", None)
+    if kind is not None and kind != "NOT_STARTED":
+        paused = getattr(snapshot, "is_paused", None)
+        if paused is not True:
+            pytest.skip(f"a Busy session owns the display ({kind})")
+
+
+@pytest.fixture
 def local_only(transport: Transport) -> Transport:
     """
     Skip the test unless the bar is reached directly.

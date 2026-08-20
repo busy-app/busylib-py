@@ -46,6 +46,44 @@ def _extract_token(headers: Mapping[str, str]) -> str | None:
     return headers.get("x-api-token") or headers.get("X-API-Token")
 
 
+def _decode_state(state_message: Any) -> dict[str, Any]:
+    """
+    Convert a decoded `State` into a dictionary, keeping input events whole.
+
+    protobuf omits every field holding its default, and the first entry of an
+    enum *is* the default - so a press of OK (button 0, action 0) arrives as an
+    empty `button_event`, indistinguishable from no data. Reported as #77 with
+    the wire bytes to prove it.
+
+    Only the input subtree is re-converted with defaults filled in. Doing that
+    for the whole state would pad every update with zeroes for fields the
+    device never sent, which is a much bigger change than the problem needs.
+    """
+    decoded: dict[str, Any] = MessageToDict(
+        state_message,
+        preserving_proto_field_name=True,
+    )
+
+    updates = decoded.get("updates")
+    if not isinstance(updates, list):
+        return decoded
+
+    # The dictionary preserves order, so an update lines up with the message it
+    # came from by index.
+    for index, update in enumerate(updates):
+        if not isinstance(update, dict) or "input" not in update:
+            continue
+        if index >= len(state_message.updates):
+            continue
+        update["input"] = MessageToDict(
+            state_message.updates[index].input,
+            preserving_proto_field_name=True,
+            always_print_fields_with_no_presence=True,
+        )
+
+    return decoded
+
+
 class StateStreamMixin(SyncClientBase):
     """
     Sync API for status streaming endpoints.
@@ -126,10 +164,7 @@ class AsyncStateStreamMixin(AsyncClientBase):
                         state_schema = cast(Any, state_pb2)
                         state_message = state_schema.State()
                         state_message.ParseFromString(message)
-                        yield MessageToDict(
-                            state_message,
-                            preserving_proto_field_name=True,
-                        )
+                        yield _decode_state(state_message)
                     except Exception as exc:
                         raise exceptions.BusyBarProtocolError(
                             "Failed to decode /api/status/ws protobuf message",
