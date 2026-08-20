@@ -56,7 +56,7 @@ def test_plain_rgb_frame_lands_on_the_snapshot() -> None:
 
 def test_l4_back_frame_is_expanded_to_rgb() -> None:
     """
-    The back display's packed nibbles expand to RGB888 of the right size.
+    The back display's packed nibbles expand to RGB of the right size.
     """
     packed = bytes([0x21]) * ((BACK.width * BACK.height) // 2)
     message = _frame_message(screen="BACK", pixel_format="L4", data=packed)

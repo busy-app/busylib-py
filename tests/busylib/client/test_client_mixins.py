@@ -583,9 +583,9 @@ def test_decode_frame_data_plain_rgb888() -> None:
     """
     Colour bytes are reordered, because the device sends BGR.
 
-    The protobuf enum is named RGB888, but on firmware 1.1.1 a pure red fill
-    arrives as (0, 0, 255) over both the HTTP frame and the state stream. The
-    name describes what the firmware meant, not what it sends.
+    The device sends colour blue-first, so the bytes are reordered. Its own
+    protobuf calls that format RGB888; the name is accepted on input and
+    translated, never repeated inside the package.
     """
     device_order = bytes([30, 20, 10, 60, 50, 40])
     decoded = display.decode_frame_data("PLAIN", "RGB888", device_order)
@@ -610,7 +610,7 @@ def test_decode_frame_data_plain_l4() -> None:
 
 def test_decode_frame_data_run_length_rgb888() -> None:
     """
-    RUN_LENGTH-encoded RGB888 frame data decodes via the RLE repeat block.
+    RUN_LENGTH-encoded colour frame data decodes via the RLE repeat block.
     """
     rle = bytes([2, 3, 2, 1])  # repeat the BGR triple (3,2,1) twice
     decoded = display.decode_frame_data("RUN_LENGTH", "RGB888", rle)
@@ -619,7 +619,7 @@ def test_decode_frame_data_run_length_rgb888() -> None:
 
 def test_decode_frame_data_deflate_rgb888() -> None:
     """
-    DEFLATE-encoded RGB888 frame data inflates before use.
+    DEFLATE-encoded colour frame data inflates before use.
     """
     import zlib
 

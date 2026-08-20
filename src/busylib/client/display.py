@@ -39,7 +39,7 @@ def _decode_frame_bytes(data: bytes, display_id: int) -> bytes | None:
     except (binascii.Error, ValueError):
         return None
 
-    pixel_format = "L4" if display_id == 1 else "RGB888"
+    pixel_format = display.GREY4_FORMAT if display_id == 1 else display.COLOUR_FORMAT
     try:
         decoded = display.decode_frame_data("PLAIN", pixel_format, raw)
     except ValueError:
@@ -58,7 +58,7 @@ def _frame_excerpt(data: bytes, spec: display.DisplaySpec) -> str:
     return (
         f"{len(data)} bytes for the {spec.name.value} display "
         f"({spec.width}x{spec.height}); expected base64-encoded "
-        f"{'L4-packed' if spec.index == 1 else 'RGB888'} framebuffer data"
+        f"{'L4-packed' if spec.index == 1 else 'BGR888'} framebuffer data"
     )
 
 

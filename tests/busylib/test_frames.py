@@ -203,3 +203,24 @@ def test_frames_module_does_not_import_pillow() -> None:
     )
 
     assert result.stdout.strip() == "False", result.stdout
+
+
+def test_the_wire_format_name_is_accepted_and_translated() -> None:
+    """
+    Both the device's name and this package's name decode identically.
+
+    The firmware calls its colour format RGB888 while sending blue first, so
+    the name is translated at the edge. It still has to be accepted: it is
+    what arrives on real frames.
+    """
+    from busylib import display
+
+    device_order = bytes([3, 2, 1])
+
+    assert display.WIRE_PIXEL_FORMATS["RGB888"] == display.COLOUR_FORMAT
+    assert display.decode_frame_data(
+        "PLAIN", "RGB888", device_order
+    ) == display.decode_frame_data("PLAIN", display.COLOUR_FORMAT, device_order)
+    assert display.decode_frame_data("PLAIN", "RGB888", device_order) == bytes(
+        [1, 2, 3]
+    )

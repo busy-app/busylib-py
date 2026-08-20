@@ -116,7 +116,7 @@ def test_a_drawn_colour_reads_back_as_itself(free_display, bar) -> None:
     Red drawn on the bar comes back as red, not blue.
 
     The device orders the three colour bytes BGR while its own protobuf enum
-    calls them RGB888, so the library swaps them. Nothing but a real bar can
+    calls that format RGB888, so the library swaps them. Nothing but a real bar can
     catch that: a mock returns whatever bytes the test invented.
     """
     import collections

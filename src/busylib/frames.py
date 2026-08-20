@@ -17,7 +17,13 @@ import zlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .display import DisplaySpec, DisplaySpecLike, decode_frame_data, get_display_spec
+from .display import (
+    DEFAULT_PIXEL_FORMAT,
+    DisplaySpec,
+    DisplaySpecLike,
+    decode_frame_data,
+    get_display_spec,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checkers only
     from PIL import Image
@@ -166,11 +172,10 @@ class Frame:
         Build a frame from a `frame` update on the status stream.
 
         The stream compresses frames and describes them with its own metadata,
-        and protobuf omits any field holding a default value - so a plain
-        RGB888 frame arrives with no `pixel_format` and an uncompressed one
-        with no `encoding`. Both defaults are filled in here, because reading
-        their absence as missing data is the mistake this method exists to
-        prevent.
+        and protobuf omits any field holding a default value - so a colour
+        frame arrives with no `pixel_format` and an uncompressed one with no
+        `encoding`. Both defaults are filled in here, because reading their
+        absence as missing data is the mistake this method exists to prevent.
         """
         payload = frame_update.get("data")
         if payload is None:
@@ -182,7 +187,7 @@ class Frame:
 
         decoded = decode_frame_data(
             frame_update.get("encoding") or "PLAIN",
-            frame_update.get("pixel_format") or "RGB888",
+            frame_update.get("pixel_format") or DEFAULT_PIXEL_FORMAT,
             bytes(payload),
         )
         screen = frame_update.get("screen") or "FRONT"
