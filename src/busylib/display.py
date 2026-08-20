@@ -7,11 +7,12 @@ from typing import TypeAlias
 from .types import DisplayName
 
 # Pixel formats, named for what the bytes are. The firmware's protobuf calls
-# its colour format RGB888, but the bytes arrive blue first - drawing #FF0000
-# reads back as (0, 0, 255) on firmware 1.1.1, over both the HTTP frame and
-# the state stream. Repeating the firmware's name inside this package taught
-# every reader the wrong thing, so it is translated at the edge and never
-# used past it.
+# its colour format RGB888, but the bytes arrive blue first: drawing #FF0000
+# reads back as (0, 0, 255), over both the HTTP frame and the state stream.
+# Repeating the firmware's name inside this package taught every reader the
+# wrong thing, so it is translated at the edge and never used past it. The
+# integration suite draws a colour and reads it back, which re-checks this
+# against whatever firmware is actually in front of you.
 COLOUR_FORMAT = "BGR888"
 GREY8_FORMAT = "L8"
 GREY4_FORMAT = "L4"
