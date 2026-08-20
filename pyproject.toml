@@ -24,7 +24,6 @@ classifiers = [
 dynamic = [ "version" ]
 dependencies = [
   "httpx>=0.28.1",
-  "pillow>=12",
   "protobuf>=6.31.1",
   "pydantic>=2.9",
   "pydantic-extra-types>=2.9",
@@ -32,6 +31,11 @@ dependencies = [
   "typing-extensions>=4.6",
   "websockets>=12",
   "zeroconf>=0.150",
+]
+# Image conversion is the only thing that needs Pillow, and it is by far the
+# heaviest dependency available to this package, so it is opt-in.
+optional-dependencies.media = [
+  "pillow>=12",
 ]
 optional-dependencies.docs = [
   "mkdocs>=1.6",
@@ -49,6 +53,7 @@ urls.Repository = "https://github.com/busy-app/busylib-py"
 # fails the whole repository including main.
 dev = [
   "grpcio-tools>=1.74",
+  "pillow>=12",
   "pre-commit>=3.8",
   "pyproject-fmt==2.27.1",
   "pyright==1.1.411",

@@ -9,6 +9,7 @@ from typing import Any, cast
 from typing_extensions import Unpack
 
 from .. import display, exceptions, types
+from ..frames import Frame
 from .base import AsyncClientBase, RequestKwargs, SyncClientBase
 
 logger = logging.getLogger(__name__)
@@ -292,6 +293,16 @@ class DisplayMixin(SyncClientBase):
             )
         return decoded
 
+    def frame(self, display_id: display.DisplaySpecLike) -> Frame:
+        """
+        Fetch a display frame as a `Frame` via GET /api/screen.
+
+        The same bytes as `screen()`, with the geometry and the display
+        attached, so callers can read pixels, rows or a PNG without tracking
+        the layout themselves.
+        """
+        return Frame.from_screen(self.screen(display_id), display_id)
+
 
 class AsyncDisplayMixin(AsyncClientBase):
     """
@@ -484,3 +495,13 @@ class AsyncDisplayMixin(AsyncClientBase):
                 response_excerpt=_frame_excerpt(data, target),
             )
         return decoded
+
+    async def frame(self, display_id: display.DisplaySpecLike) -> Frame:
+        """
+        Fetch a display frame as a `Frame` via GET /api/screen.
+
+        The same bytes as `screen()`, with the geometry and the display
+        attached, so callers can read pixels, rows or a PNG without tracking
+        the layout themselves.
+        """
+        return Frame.from_screen(await self.screen(display_id), display_id)
