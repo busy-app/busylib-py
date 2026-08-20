@@ -8,6 +8,29 @@ interchangeable — a token for one is refused by the other.
 | Device API | [`/busybar`](https://api.busy.app/busybar/docs) | bar-scope | yes, as cloud mode |
 | Account API | [`/`](https://api.busy.app/docs) | account-scope | no |
 
+## Choosing an environment
+
+A bar can be pointed at a non-production cloud, and a client has to follow it
+there. Name the host and say that it is a cloud:
+
+```python
+bb = BusyBar(
+    addr="https://api.dev.busy.app",
+    token="<bar-scope token for that environment>",
+    is_cloud=True,
+)
+```
+
+`is_cloud` matters. Without it the address is taken for a device, so requests
+go to `/api` with the device's token header instead of `/busybar` with a
+bearer one, and fail without explaining themselves. Omitting `addr` still
+means the configured cloud host, so `BusyBar(token=...)` is unchanged; the
+default comes from `BUSYLIB_CLOUD_URL`.
+
+The helpers below follow the same host, so a bar on a development cloud gets
+that environment's documentation rather than production's. Both accept an
+explicit `host` if you need to ask about another one.
+
 Cloud mode talks to the device API. It is the same set of endpoints a bar
 serves locally, with `/api` replaced by `/busybar`, so every client method
 works unchanged:
