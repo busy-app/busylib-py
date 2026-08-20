@@ -125,11 +125,11 @@ class TerminalRenderer:
         required_rows = spec.height + extra_rows + frame_rows
         return required_cols, required_rows
 
-    def render(self, bgr_bytes: bytes) -> None:
+    def render(self, rgb_bytes: bytes) -> None:
         """
         Render a single RGB frame to the terminal with size guarding.
         """
-        self._last_frame = bgr_bytes
+        self._last_frame = rgb_bytes
         self._update_size()
         if self._help_active:
             self._render_help_frame()
@@ -153,7 +153,7 @@ class TerminalRenderer:
             row_parts: list[str] = []
             for x in range(self.spec.width):
                 idx = (y * self.spec.width + x) * 3
-                b, g, r = bgr_bytes[idx : idx + 3]
+                r, g, b = rgb_bytes[idx : idx + 3]
                 original_black = b == g == r == 0
                 if settings.invert_colors:
                     r, g, b = 255 - r, 255 - g, 255 - b

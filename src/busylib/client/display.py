@@ -24,13 +24,14 @@ _SANITIZE_LOG_TEXT_LIMIT = 80
 
 def _decode_frame_bytes(data: bytes, display_id: int) -> bytes | None:
     """
-    Decode the `/api/screen` HTTP response into RGB888 bytes.
+    Decode the `/api/screen` HTTP response into RGB bytes.
 
     The endpoint's `Content-Type: image/bmp` header is misleading: the body
     is base64-encoded (via mongoose's `mg_print_base64`), uncompressed
-    framebuffer bytes with no real BMP header, RGB888 for the front display
-    and L4-packed (2 pixels/byte) for the back display. Returns None if the
-    payload cannot be decoded or its size doesn't match the display.
+    framebuffer bytes with no real BMP header, three bytes per pixel for the
+    front display and L4-packed (2 pixels/byte) for the back display. The
+    device orders those three bytes as BGR; they are returned as RGB. Returns
+    None if the payload cannot be decoded or its size doesn't match.
     """
     try:
         raw = base64.b64decode(data, validate=True)
@@ -261,11 +262,14 @@ class DisplayMixin(SyncClientBase):
         """
         Fetch a single display frame via GET /api/screen.
 
+        Returns RGB bytes, three per pixel: 3456 for the front display
+        (72x16) and 38400 for the back (160x80, sent L4-packed and expanded
+        to grey triples here). The device sends colour as BGR and it is
+        swapped on the way out.
+
         The response body is base64-encoded, uncompressed framebuffer bytes
         (the `Content-Type: image/bmp` header is misleading, there is no
-        real BMP header). Client must pass `display` query param: 0 for
-        front (RGB888, 72x16 => 3456 bytes decoded) or 1 for back
-        (L4-packed, 160x80 => 6400 bytes decoded).
+        real BMP header).
         """
         logger.info("screen display=%s", display_id)
         target = display.get_display_spec(display_id)
@@ -451,11 +455,14 @@ class AsyncDisplayMixin(AsyncClientBase):
         """
         Fetch a single display frame via GET /api/screen.
 
+        Returns RGB bytes, three per pixel: 3456 for the front display
+        (72x16) and 38400 for the back (160x80, sent L4-packed and expanded
+        to grey triples here). The device sends colour as BGR and it is
+        swapped on the way out.
+
         The response body is base64-encoded, uncompressed framebuffer bytes
         (the `Content-Type: image/bmp` header is misleading, there is no
-        real BMP header). Client must pass `display` query param: 0 for
-        front (RGB888, 72x16 => 3456 bytes decoded) or 1 for back
-        (L4-packed, 160x80 => 6400 bytes decoded).
+        real BMP header).
         """
         logger.info("async screen display=%s", display_id)
         target = display.get_display_spec(display_id)

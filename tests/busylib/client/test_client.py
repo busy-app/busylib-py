@@ -727,14 +727,15 @@ def test_screen_accepts_a_display_spec():
     from busylib import display
 
     spec = display.get_display_spec(0)
-    frame = bytes([1, 2, 3]) * (spec.width * spec.height)
+    device_order = bytes([3, 2, 1]) * (spec.width * spec.height)
 
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.url.params["display"] == "0"
-        return httpx.Response(200, content=base64.b64encode(frame))
+        return httpx.Response(200, content=base64.b64encode(device_order))
 
     client = make_client(responder)
-    assert client.screen(spec) == frame
+    # Returned as RGB; the device orders the three bytes BGR.
+    assert client.screen(spec) == bytes([1, 2, 3]) * (spec.width * spec.height)
 
 
 @pytest.mark.parametrize(
