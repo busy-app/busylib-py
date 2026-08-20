@@ -32,15 +32,15 @@ dependencies = [
   "websockets>=12",
   "zeroconf>=0.150",
 ]
-# Image conversion is the only thing that needs Pillow, and it is by far the
-# heaviest dependency available to this package, so it is opt-in.
-optional-dependencies.media = [
-  "pillow>=12",
-]
 optional-dependencies.docs = [
   "mkdocs>=1.6",
   "mkdocs-material>=9.5",
   "mkdocstrings[python]>=0.28",
+]
+# Image conversion is the only thing that needs Pillow, and it is by far the
+# heaviest dependency available to this package, so it is opt-in.
+optional-dependencies.media = [
+  "pillow>=12",
 ]
 urls.Documentation = "https://busy-app.github.io/busylib-py/"
 urls.Homepage = "https://github.com/busy-app/busylib-py"
