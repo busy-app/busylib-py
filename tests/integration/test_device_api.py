@@ -13,6 +13,7 @@ storage directory, and every value that gets changed is put back.
 from __future__ import annotations
 
 import io
+import re
 import time
 import wave
 
@@ -116,7 +117,7 @@ def test_a_drawn_colour_reads_back_as_itself(free_display, bar) -> None:
     Red drawn on the bar comes back as red, not blue.
 
     The device orders the three colour bytes BGR while its own protobuf enum
-    calls them RGB888, so the library swaps them. Nothing but a real bar can
+    calls that format RGB888, so the library swaps them. Nothing but a real bar can
     catch that: a mock returns whatever bytes the test invented.
     """
     import collections
@@ -314,14 +315,19 @@ def test_compatibility_metadata_matches_this_bar(bar) -> None:
     """
     What the library claims about an endpoint holds against real firmware.
 
-    An experimental marker that answers 404 is honest; one that answers 200
-    means the marker outlived the firmware work and should be a version floor
-    instead.
+    An `experimental` marker means "no released firmware serves this yet", so
+    only a released build can contradict it. A development build is expected
+    to carry unreleased work, and the endpoint answering there says nothing
+    either way - which is why that case is skipped rather than asserted.
     """
     from busylib import exceptions
 
     metadata = bar.method_compatibility("access_tokens_list")
     assert metadata is not None
+
+    firmware = bar.status().firmware
+    branch = (firmware.branch if firmware else None) or ""
+    on_release = bool(re.fullmatch(r"\d+\.\d+\.\d+", branch))
 
     try:
         bar.access_tokens_list()
@@ -330,6 +336,12 @@ def test_compatibility_metadata_matches_this_bar(bar) -> None:
             f"endpoint failed ({exc}) but is not marked experimental"
         )
     else:
+        if not on_release:
+            pytest.skip(
+                f"firmware branch {branch!r} is not a release, so an "
+                "unreleased endpoint working here proves nothing"
+            )
         assert metadata.get("status") != "experimental", (
-            "endpoint works on this firmware but is still marked experimental"
+            "endpoint works on released firmware but is still marked "
+            "experimental - the marker should be a version floor now"
         )

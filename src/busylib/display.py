@@ -6,15 +6,37 @@ from typing import TypeAlias
 
 from .types import DisplayName
 
+# Pixel formats, named for what the bytes are. The firmware's protobuf calls
+# its colour format RGB888, but the bytes arrive blue first: drawing #FF0000
+# reads back as (0, 0, 255), over both the HTTP frame and the state stream.
+# Repeating the firmware's name inside this package taught every reader the
+# wrong thing, so it is translated at the edge and never used past it. The
+# integration suite draws a colour and reads it back, which re-checks this
+# against whatever firmware is actually in front of you.
+COLOUR_FORMAT = "BGR888"
+GREY8_FORMAT = "L8"
+GREY4_FORMAT = "L4"
+
+# What the device puts on the wire, mapped to what this package calls it.
+WIRE_PIXEL_FORMATS = {
+    "RGB888": COLOUR_FORMAT,
+    "L8": GREY8_FORMAT,
+    "L4": GREY4_FORMAT,
+}
+
+# proto3 leaves out a field holding its enum's first value, so a frame with no
+# pixel_format is a colour frame rather than one missing its format.
+DEFAULT_PIXEL_FORMAT = COLOUR_FORMAT
+
 # Block size the RLE codec compares for repeats, per pixel format. This is
 # NOT bytes-per-pixel: it mirrors the firmware's screen streamer, which uses
 # `blk_size = display_id == Front ? 3 : 2` in
 # applications/services/state_publisher/screen_streamer.c - so L4 (the back
 # display, 2 pixels packed per byte) is compared in 2-byte blocks.
 _RLE_BLOCK_SIZE = {
-    "RGB888": 3,
-    "L8": 1,
-    "L4": 2,
+    COLOUR_FORMAT: 3,
+    GREY8_FORMAT: 1,
+    GREY4_FORMAT: 2,
 }
 
 
@@ -137,11 +159,14 @@ def decode_frame_data(encoding: str, pixel_format: str, data: bytes) -> bytes:
     """
     Decode `BSB_Frame.Frame.data` into RGB bytes using its own metadata.
 
-    `encoding` and `pixel_format` are the enum names as reported by the
-    protobuf message (`PLAIN`/`RUN_LENGTH`/`DEFLATE`/`DEFLATE_RUN_LENGTH` and
-    `RGB888`/`L8`/`L4`), so no guessing based on frame byte length is needed.
+    `encoding` is the enum name the protobuf message reports
+    (`PLAIN`/`RUN_LENGTH`/`DEFLATE`/`DEFLATE_RUN_LENGTH`). `pixel_format`
+    accepts either the name the device sends or this package's own
+    (`BGR888`/`L8`/`L4`), so callers can pass a frame's metadata straight
+    through. Either way the result is RGB, three bytes per pixel.
     """
-    block_size = _RLE_BLOCK_SIZE.get(pixel_format)
+    normalized = WIRE_PIXEL_FORMATS.get(pixel_format, pixel_format)
+    block_size = _RLE_BLOCK_SIZE.get(normalized)
     if block_size is None:
         raise ValueError(f"Unsupported frame pixel_format: {pixel_format}")
 
@@ -156,16 +181,13 @@ def decode_frame_data(encoding: str, pixel_format: str, data: bytes) -> bytes:
             raise ValueError("Failed to RLE-decode frame data")
         data = decoded
 
-    if pixel_format == "RGB888":
-        # The enum says RGB888 and the device sends BGR: drawing #FF0000 comes
-        # back as (0, 0, 255) on both the HTTP frame and the state stream,
-        # verified against firmware 1.1.1. The name comes from the firmware's
-        # own protobuf, so it cannot be trusted over the bytes.
+    if normalized == COLOUR_FORMAT:
+        # Blue and red change places on the way out. See COLOUR_FORMAT above
+        # for why the format is not called RGB888 here.
         pixels = bytearray(data)
         pixels[0::3], pixels[2::3] = pixels[2::3], pixels[0::3]
         return bytes(pixels)
-    if pixel_format == "L8":
+    if normalized == GREY8_FORMAT:
         return b"".join(bytes((v, v, v)) for v in data)
-    # L4
     unpacked = unpack_l4_to_l8(data)
     return b"".join(bytes((v * 17, v * 17, v * 17)) for v in unpacked)

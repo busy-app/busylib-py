@@ -3,12 +3,34 @@ from __future__ import annotations
 import io
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from PIL import Image
+from .. import display, exceptions
 
-from .. import display
+if TYPE_CHECKING:  # pragma: no cover - import for type checkers only
+    from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+PILLOW_MISSING = (
+    "Converting images needs Pillow, which is optional: install "
+    "busylib[media], or pass bytes the device already accepts."
+)
+
+
+def _pillow_image(path: str) -> Any:
+    """
+    Import Pillow on demand and explain plainly when it is absent.
+
+    Pillow is the heaviest dependency this package could have - around 13 MB
+    of compiled code - and only image conversion needs it, so importing it at
+    module load charged every caller for a feature most never touch.
+    """
+    try:
+        from PIL import Image
+    except ImportError as exc:  # pragma: no cover - depends on environment
+        raise exceptions.BusyBarConversionError(PILLOW_MISSING, path=path) from exc
+    return Image
 
 
 def _center_crop(image: Image.Image, width: int, height: int) -> Image.Image:
@@ -28,6 +50,7 @@ def _center_crop(image: Image.Image, width: int, height: int) -> Image.Image:
 
 
 def _resize_for_display(
+    pillow_image: Any,
     image: Image.Image,
     width: int,
     height: int,
@@ -47,7 +70,7 @@ def _resize_for_display(
             max(1, int(img_w * scale_factor)),
             max(1, int(img_h * scale_factor)),
         )
-        resampling = getattr(Image, "Resampling", None)
+        resampling = getattr(pillow_image, "Resampling", None)
         resample_filter = getattr(resampling, "LANCZOS", 3)
         image = image.resize(new_size, resample_filter)
     if crop:
@@ -68,8 +91,9 @@ def convert(
 
     Applies optional downscaling and center-crop to match the device size.
     """
+    pillow_image = _pillow_image(path)
     try:
-        image = Image.open(io.BytesIO(data))
+        image = pillow_image.open(io.BytesIO(data))
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"Failed to open image: {exc}") from exc
 
@@ -77,7 +101,9 @@ def convert(
         raise NotImplementedError("Animated images are not supported yet")
 
     spec = display.get_display_spec(display_name)
-    image = _resize_for_display(image, spec.width, spec.height, scale=scale, crop=crop)
+    image = _resize_for_display(
+        pillow_image, image, spec.width, spec.height, scale=scale, crop=crop
+    )
 
     output = io.BytesIO()
     image.save(output, format="PNG")
