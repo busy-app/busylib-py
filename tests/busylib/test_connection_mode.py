@@ -9,7 +9,7 @@ token header and the device's `/api` paths. `is_cloud` states it instead.
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar
@@ -17,7 +17,7 @@ from busylib import AsyncBusyBar, BusyBar
 
 def _client(**kwargs) -> BusyBar:
     return BusyBar(
-        transport=httpx.MockTransport(lambda _r: httpx.Response(200)), **kwargs
+        transport=httpx2.MockTransport(lambda _r: httpx2.Response(200)), **kwargs
     )
 
 
@@ -95,7 +95,7 @@ async def test_the_async_client_agrees() -> None:
         addr="https://api.stage.busy.app",
         token="s",
         is_cloud=True,
-        transport=httpx.MockTransport(lambda _r: httpx.Response(200)),
+        transport=httpx2.MockTransport(lambda _r: httpx2.Response(200)),
     )
 
     assert client.connection_type == "cloud"

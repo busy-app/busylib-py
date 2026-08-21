@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar
@@ -15,7 +15,7 @@ def _make_sync_client(responder) -> BusyBar:
     """
     Build a BusyBar client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return BusyBar(addr="http://device.local", transport=transport)
 
 
@@ -23,7 +23,7 @@ def _make_async_client(responder) -> AsyncBusyBar:
     """
     Build an AsyncBusyBar client with a mock transport responder.
     """
-    transport = httpx.MockTransport(responder)
+    transport = httpx2.MockTransport(responder)
     return AsyncBusyBar(addr="http://device.local", transport=transport)
 
 
@@ -33,11 +33,11 @@ def test_assets_upload_and_delete_sync() -> None:
     """
     seen: dict[str, object] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["params"] = dict(request.url.params)
         seen["body"] = request.content
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.assets_upload("app", "file.bin", b"data")
@@ -57,7 +57,7 @@ def test_assets_upload_sync_uses_extended_timeout_by_default(
     Ensure sync asset upload passes the mixin default upload timeout.
     """
     client = _make_sync_client(
-        lambda _request: httpx.Response(200, json={"result": "OK"})
+        lambda _request: httpx2.Response(200, json={"result": "OK"})
     )
     captured: dict[str, object] = {}
 
@@ -81,7 +81,7 @@ def test_assets_upload_sync_allows_timeout_override(
     Ensure sync asset upload accepts an explicit timeout override.
     """
     client = _make_sync_client(
-        lambda _request: httpx.Response(200, json={"result": "OK"})
+        lambda _request: httpx2.Response(200, json={"result": "OK"})
     )
     captured: dict[str, object] = {}
 
@@ -105,7 +105,7 @@ async def test_assets_upload_and_delete_async() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "path": request.url.path,
@@ -113,7 +113,7 @@ async def test_assets_upload_and_delete_async() -> None:
                 "body": request.content,
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.assets_upload("app", "file.bin", b"data")
@@ -135,7 +135,7 @@ async def test_assets_upload_async_uses_extended_timeout_by_default(
     Ensure async asset upload passes the mixin default upload timeout.
     """
     client = _make_async_client(
-        lambda _request: httpx.Response(200, json={"result": "OK"})
+        lambda _request: httpx2.Response(200, json={"result": "OK"})
     )
     captured: dict[str, object] = {}
 
@@ -161,7 +161,7 @@ async def test_assets_upload_async_allows_timeout_override(
     Ensure async asset upload accepts an explicit timeout override.
     """
     client = _make_async_client(
-        lambda _request: httpx.Response(200, json={"result": "OK"})
+        lambda _request: httpx2.Response(200, json={"result": "OK"})
     )
     captured: dict[str, object] = {}
 
@@ -185,15 +185,15 @@ def test_ble_and_wifi_status_sync() -> None:
     """
     seen: list[str] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
         if request.url.path == "/api/ble/status":
-            return httpx.Response(200, json={"state": "on"})
+            return httpx2.Response(200, json={"state": "on"})
         if request.url.path == "/api/wifi/status":
-            return httpx.Response(200, json={"state": "connected", "ssid": "Test"})
+            return httpx2.Response(200, json={"state": "connected", "ssid": "Test"})
         if request.url.path == "/api/wifi/networks":
-            return httpx.Response(200, json={"count": 0, "networks": []})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"count": 0, "networks": []})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     ble = client.ble_status()
@@ -211,13 +211,13 @@ def test_access_mode_sync() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append({"path": request.url.path, "params": dict(request.url.params)})
         if request.url.path == "/api/access":
             if request.method == "GET":
-                return httpx.Response(200, json={"mode": "key", "key_valid": True})
-            return httpx.Response(200, json={"result": "OK"})
-        return httpx.Response(200, json={"result": "OK"})
+                return httpx2.Response(200, json={"mode": "key", "key_valid": True})
+            return httpx2.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     info = client.access()
@@ -237,11 +237,11 @@ def test_busy_snapshot_sync() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append({"path": request.url.path, "body": request.content})
         if request.url.path == "/api/busy/snapshot":
             if request.method == "GET":
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={
                         "snapshot": {
@@ -253,8 +253,8 @@ def test_busy_snapshot_sync() -> None:
                         "snapshot_timestamp_ms": 123,
                     },
                 )
-            return httpx.Response(200, json={"result": "OK"})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     snapshot = client.busy_snapshot()
@@ -276,15 +276,15 @@ async def test_ble_and_wifi_status_async() -> None:
     """
     seen: list[str] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
         if request.url.path == "/api/ble/status":
-            return httpx.Response(200, json={"state": "on"})
+            return httpx2.Response(200, json={"state": "on"})
         if request.url.path == "/api/wifi/status":
-            return httpx.Response(200, json={"state": "connected", "ssid": "Test"})
+            return httpx2.Response(200, json={"state": "connected", "ssid": "Test"})
         if request.url.path == "/api/wifi/networks":
-            return httpx.Response(200, json={"count": 0, "networks": []})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"count": 0, "networks": []})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     ble = await client.ble_status()
@@ -304,13 +304,13 @@ async def test_access_mode_async() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append({"path": request.url.path, "params": dict(request.url.params)})
         if request.url.path == "/api/access":
             if request.method == "GET":
-                return httpx.Response(200, json={"mode": "key", "key_valid": True})
-            return httpx.Response(200, json={"result": "OK"})
-        return httpx.Response(200, json={"result": "OK"})
+                return httpx2.Response(200, json={"mode": "key", "key_valid": True})
+            return httpx2.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     info = await client.access()
@@ -332,11 +332,11 @@ async def test_busy_snapshot_async() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append({"path": request.url.path, "body": request.content})
         if request.url.path == "/api/busy/snapshot":
             if request.method == "GET":
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={
                         "snapshot": {
@@ -348,8 +348,8 @@ async def test_busy_snapshot_async() -> None:
                         "snapshot_timestamp_ms": 123,
                     },
                 )
-            return httpx.Response(200, json={"result": "OK"})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     snapshot = await client.busy_snapshot()
@@ -371,10 +371,10 @@ def test_updater_update_sync() -> None:
     """
     seen: dict[str, object] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["params"] = dict(request.url.params)
         seen["body"] = request.content
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.update(b"fw")
@@ -389,9 +389,9 @@ def test_time_endpoints_sync() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append({"path": request.url.path, "params": dict(request.url.params)})
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.time_timestamp("2025-10-02T14:30:45+04:00")
@@ -413,10 +413,10 @@ async def test_updater_update_async() -> None:
     Ensure async firmware update omits params.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         assert dict(request.url.params) == {}
         assert request.content == b"fw"
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.update(b"fw")
@@ -431,9 +431,9 @@ async def test_time_endpoints_async() -> None:
     """
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append({"path": request.url.path, "params": dict(request.url.params)})
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.time_timestamp("2025-10-02T14:30:45+04:00")
@@ -456,14 +456,14 @@ def test_updater_check_status_and_changelog_sync() -> None:
     """
     seen: list[str] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
         if request.url.path == "/api/update/status":
-            return httpx.Response(200, json={"install": {"status": "ok"}})
+            return httpx2.Response(200, json={"install": {"status": "ok"}})
         if request.url.path == "/api/update/changelog":
             assert dict(request.url.params) == {"version": "1.2.3"}
-            return httpx.Response(200, json={"changelog": "Fixes"})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"changelog": "Fixes"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_sync_client(responder)
     resp = client.update_check()
@@ -492,14 +492,14 @@ async def test_updater_check_status_and_changelog_async() -> None:
     """
     seen: list[str] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
         if request.url.path == "/api/update/status":
-            return httpx.Response(200, json={"check": {"result": "available"}})
+            return httpx2.Response(200, json={"check": {"result": "available"}})
         if request.url.path == "/api/update/changelog":
             assert dict(request.url.params) == {"version": "2.0.0"}
-            return httpx.Response(200, json={"changelog": "New"})
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json={"changelog": "New"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _make_async_client(responder)
     resp = await client.update_check()

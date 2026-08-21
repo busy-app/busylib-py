@@ -5,7 +5,7 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-import httpx
+import httpx2
 
 from examples.remote.constants import TEXT_ERR_CONNECT, TEXT_ERR_TIMEOUT, TEXT_STOPPED
 
@@ -102,7 +102,7 @@ def _format_error_message(exc: BaseException) -> tuple[str | None, str]:
         return "Error", f"{TEXT_ERR_TIMEOUT} (WebSocket)"
     if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
         return "Error", TEXT_ERR_TIMEOUT
-    if isinstance(exc, httpx.RequestError):
+    if isinstance(exc, httpx2.RequestError):
         return "Error", TEXT_ERR_CONNECT.format(details=message)
     if isinstance(exc, OSError):
         details = exc.strerror or message

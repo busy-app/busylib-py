@@ -572,7 +572,7 @@ result = bb.execute_prepared_request(prepared)
 print(result)
 
 # or execute with an external client
-# with httpx.Client(base_url="http://10.0.4.20") as ext:
+# with httpx2.Client(base_url="http://10.0.4.20") as ext:
 #     result = bb.execute_prepared_request(prepared, client=ext)
 ```
 

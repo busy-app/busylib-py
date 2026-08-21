@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar
@@ -39,11 +39,11 @@ def test_cloud_client_requests_the_cloud_path() -> None:
     """
     seen: list[str] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
-        return httpx.Response(200, json={"api_semver": "25.0.0"})
+        return httpx2.Response(200, json={"api_semver": "25.0.0"})
 
-    client = BusyBar(token="secret", transport=httpx.MockTransport(responder))
+    client = BusyBar(token="secret", transport=httpx2.MockTransport(responder))
     client.version()
 
     assert seen == ["/busybar/version"]
@@ -55,11 +55,11 @@ def test_device_client_keeps_the_device_path() -> None:
     """
     seen: list[str] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
-        return httpx.Response(200, json={"api_semver": "25.0.0"})
+        return httpx2.Response(200, json={"api_semver": "25.0.0"})
 
-    client = BusyBar(addr="10.0.4.20", transport=httpx.MockTransport(responder))
+    client = BusyBar(addr="10.0.4.20", transport=httpx2.MockTransport(responder))
     client.version()
 
     assert seen == ["/api/version"]
@@ -72,11 +72,11 @@ async def test_async_cloud_client_requests_the_cloud_path() -> None:
     """
     seen: list[str] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
-        return httpx.Response(200, json={"api_semver": "25.0.0"})
+        return httpx2.Response(200, json={"api_semver": "25.0.0"})
 
-    client = AsyncBusyBar(token="secret", transport=httpx.MockTransport(responder))
+    client = AsyncBusyBar(token="secret", transport=httpx2.MockTransport(responder))
     await client.version()
     await client.aclose()
 

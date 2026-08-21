@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, BusyBar, types
@@ -16,12 +16,14 @@ TOKEN_PAYLOAD = {
 
 
 def _client(responder) -> BusyBar:
-    return BusyBar(addr="http://device.local", transport=httpx.MockTransport(responder))
+    return BusyBar(
+        addr="http://device.local", transport=httpx2.MockTransport(responder)
+    )
 
 
 def _async_client(responder) -> AsyncBusyBar:
     return AsyncBusyBar(
-        addr="http://device.local", transport=httpx.MockTransport(responder)
+        addr="http://device.local", transport=httpx2.MockTransport(responder)
     )
 
 
@@ -31,10 +33,10 @@ def test_tokens_list_parses_the_collection() -> None:
     """
     seen: dict[str, str] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["method"] = request.method
-        return httpx.Response(200, json={"tokens": [TOKEN_PAYLOAD]})
+        return httpx2.Response(200, json={"tokens": [TOKEN_PAYLOAD]})
 
     info = _client(responder).access_tokens_list()
 
@@ -49,10 +51,10 @@ def test_token_mint_sends_the_name_and_returns_the_secret() -> None:
     """
     seen: dict[str, object] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["body"] = request.content
-        return httpx.Response(200, json=TOKEN_PAYLOAD)
+        return httpx2.Response(200, json=TOKEN_PAYLOAD)
 
     token = _client(responder).access_token_mint("laptop")
 
@@ -69,8 +71,8 @@ def test_token_without_a_secret_parses() -> None:
     """
     payload = {k: v for k, v in TOKEN_PAYLOAD.items() if k != "token"}
 
-    def responder(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"tokens": [payload]})
+    def responder(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"tokens": [payload]})
 
     info = _client(responder).access_tokens_list()
 
@@ -83,10 +85,10 @@ def test_tokens_delete_all_uses_delete_on_the_collection() -> None:
     """
     seen: dict[str, str] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["method"] = request.method
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     assert _client(responder).access_tokens_delete_all().result == "OK"
     assert seen == {"path": "/api/access/tokens", "method": "DELETE"}
@@ -98,10 +100,10 @@ def test_tokens_revoke_addresses_a_single_token() -> None:
     """
     seen: dict[str, str] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["method"] = request.method
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     _client(responder).access_tokens_revoke("ab12")
 
@@ -115,13 +117,13 @@ async def test_async_token_helpers_hit_the_same_endpoints() -> None:
     """
     seen: list[tuple[str, str]] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append((request.method, request.url.path))
         if request.method == "GET":
-            return httpx.Response(200, json={"tokens": []})
+            return httpx2.Response(200, json={"tokens": []})
         if request.method == "POST":
-            return httpx.Response(200, json=TOKEN_PAYLOAD)
-        return httpx.Response(200, json={"result": "OK"})
+            return httpx2.Response(200, json=TOKEN_PAYLOAD)
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = _async_client(responder)
     await client.access_tokens_list()

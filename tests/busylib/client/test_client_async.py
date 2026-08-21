@@ -1,6 +1,6 @@
 import json
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, exceptions, types
@@ -12,7 +12,7 @@ def make_client(async_responder, **kwargs) -> AsyncBusyBar:
 
     Uses async responders without extra transport configuration.
     """
-    transport = httpx.MockTransport(async_responder)
+    transport = httpx2.MockTransport(async_responder)
     return AsyncBusyBar(addr="http://device.local", transport=transport, **kwargs)
 
 
@@ -24,9 +24,9 @@ async def test_version_success_async():
     Ensures the response is mapped to VersionInfo.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/version"
-        return httpx.Response(200, json={"api_semver": "2.0.0", "branch": "dev"})
+        return httpx2.Response(200, json={"api_semver": "2.0.0", "branch": "dev"})
 
     client = make_client(responder, api_version="2.0.0")
     result = await client.version()
@@ -43,12 +43,12 @@ async def test_name_and_time_async():
     Confirms both endpoints return parsed models.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/api/name":
-            return httpx.Response(200, json={"name": "BusyBar"})
+            return httpx2.Response(200, json={"name": "BusyBar"})
         if request.url.path == "/api/time":
-            return httpx.Response(200, json={"timestamp": "2024-01-01T10:00:00"})
-        return httpx.Response(404, json={"error": "missing", "code": 404})
+            return httpx2.Response(200, json={"timestamp": "2024-01-01T10:00:00"})
+        return httpx2.Response(404, json={"error": "missing", "code": 404})
 
     client = make_client(responder)
     name = await client.name()
@@ -65,11 +65,11 @@ async def test_name_set_async() -> None:
     """
     seen: dict[str, object] = {}
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["method"] = request.method
         seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     resp = await client.name_set("Busy Desk")
@@ -85,7 +85,7 @@ async def test_name_set_async_rejects_empty() -> None:
     """
     Reject empty device names before async request send.
     """
-    client = make_client(lambda _request: httpx.Response(200, json={"result": "OK"}))
+    client = make_client(lambda _request: httpx2.Response(200, json={"result": "OK"}))
     with pytest.raises(ValueError):
         await client.name_set("")
     await client.aclose()
@@ -97,9 +97,9 @@ async def test_account_info_async():
     Parse linked account info from the async client.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/account/info"
-        return httpx.Response(200, json={"linked": False, "email": "name@example.com"})
+        return httpx2.Response(200, json={"linked": False, "email": "name@example.com"})
 
     client = make_client(responder)
     result = await client.account_info()
@@ -114,9 +114,9 @@ async def test_account_status_async():
     Parse MQTT account state from the async client.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/account/status"
-        return httpx.Response(200, json={"state": "connected"})
+        return httpx2.Response(200, json={"state": "connected"})
 
     client = make_client(responder)
     result = await client.account_status()
@@ -130,9 +130,9 @@ async def test_account_link_async():
     Parse account link response from the async client.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/account/link"
-        return httpx.Response(200, json={"code": "EFGH", "expires_at": 1700000001})
+        return httpx2.Response(200, json={"code": "EFGH", "expires_at": 1700000001})
 
     client = make_client(responder)
     result = await client.account_link()
@@ -150,11 +150,11 @@ async def test_async_retry_on_transport_error():
     """
     calls = {"count": 0}
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         calls["count"] += 1
         if calls["count"] == 1:
-            raise httpx.ConnectError("fail", request=request)
-        return httpx.Response(200, json={"result": "OK"})
+            raise httpx2.ConnectError("fail", request=request)
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder, max_retries=1, backoff=0.0)
     resp = await client.wifi_disconnect()
@@ -185,11 +185,11 @@ async def test_display_draw_utf8_async():
         ],
     }
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         body = request.content.decode()
         assert "Café" in body
         assert "\\u00e9" not in body
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     resp = await client.display_draw(payload)
@@ -205,7 +205,7 @@ async def test_display_draw_and_clear_params_async() -> None:
 
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "path": request.url.path,
@@ -214,7 +214,7 @@ async def test_display_draw_and_clear_params_async() -> None:
                 "session": request.headers.get("x-session-id"),
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     payload = {
@@ -248,9 +248,9 @@ async def test_display_draw_can_clear_before_draw_async() -> None:
 
     seen: list[tuple[str, str, dict[str, str]]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append((request.method, request.url.path, dict(request.url.params)))
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     payload = {
@@ -278,7 +278,7 @@ async def test_display_can_clear_draw_and_audio_play_async() -> None:
 
     seen: list[dict[str, object]] = []
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(
             {
                 "method": request.method,
@@ -288,7 +288,7 @@ async def test_display_can_clear_draw_and_audio_play_async() -> None:
                 "session": request.headers.get("x-session-id"),
             }
         )
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     payload = {
@@ -353,9 +353,9 @@ async def test_display_draw_can_sanitize_text_payload_async(caplog) -> None:
 
     seen: dict[str, str] = {}
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen["body"] = request.content.decode("utf-8")
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     caplog.set_level("WARNING", logger="busylib.client.display")
@@ -392,8 +392,8 @@ async def test_error_response_raises_api_error_async():
     Confirms JSON error payloads are surfaced.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(400, json={"error": "bad request", "code": 400})
+    async def responder(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(400, json={"error": "bad request", "code": 400})
 
     client = make_client(responder)
     with pytest.raises(exceptions.BusyBarAPIError):
@@ -410,10 +410,10 @@ async def test_async_display_brightness_set_params():
     """
     seen = {}
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen["params"] = dict(request.url.params)
         seen["content"] = request.content
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     resp = await client.display_brightness_set("auto")
@@ -433,9 +433,9 @@ async def test_async_log_dump_empty_body_returns_ok():
     """
     seen = {}
 
-    async def responder(request: httpx.Request) -> httpx.Response:
+    async def responder(request: httpx2.Request) -> httpx2.Response:
         seen["params"] = dict(request.url.params)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
     client = make_client(responder)
     result = await client.log_dump(filename="dump")
@@ -456,8 +456,8 @@ async def test_async_log_dump_rejects_legacy_path_kwarg():
     instead of getting an HTTP 400 from the device.
     """
 
-    async def responder(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"result": "OK"})
+    async def responder(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = make_client(responder)
     with pytest.raises(TypeError):
