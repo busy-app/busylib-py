@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
+from .. import versioning
+from .base import DEFAULT_BACKOFF
+
 from .access import AccessMixin, AsyncAccessMixin
 from .account import AccountMixin, AsyncAccountMixin
 from .busy import AsyncBusyMixin, BusyMixin
@@ -45,8 +50,38 @@ class BusyBar(
     HTTPX-based client for the BUSY Bar API.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        addr: str | None = None,
+        *,
+        token: str | None = None,
+        timeout: float | httpx.Timeout | None = None,
+        max_retries: int = 2,
+        backoff: float = DEFAULT_BACKOFF,
+        transport: httpx.BaseTransport | None = None,
+        api_version: str | None = None,
+        compatibility_mode: versioning.CompatibilityMode = "warn",
+        is_cloud: bool | None = None,
+    ) -> None:
+        """
+        Build a client for one bar.
+
+        `addr` is a device address; leaving it out with a `token` reaches the
+        bar through the cloud, at the host `BUSYLIB_CLOUD_URL` names. Pass
+        `is_cloud=True` only to name a cloud host per client, which is what
+        stops an address like api.dev.busy.app being taken for a device.
+        """
+        super().__init__(
+            addr,
+            token=token,
+            timeout=timeout,
+            max_retries=max_retries,
+            backoff=backoff,
+            transport=transport,
+            api_version=api_version,
+            compatibility_mode=compatibility_mode,
+            is_cloud=is_cloud,
+        )
         self._usb: UsbController | None = None
 
     @property
@@ -105,8 +140,38 @@ class AsyncBusyBar(
     Async HTTPX-based client for the BUSY Bar API.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        addr: str | None = None,
+        *,
+        token: str | None = None,
+        timeout: float | httpx.Timeout | None = None,
+        max_retries: int = 2,
+        backoff: float = DEFAULT_BACKOFF,
+        transport: httpx.AsyncBaseTransport | None = None,
+        api_version: str | None = None,
+        compatibility_mode: versioning.CompatibilityMode = "warn",
+        is_cloud: bool | None = None,
+    ) -> None:
+        """
+        Build a client for one bar.
+
+        `addr` is a device address; leaving it out with a `token` reaches the
+        bar through the cloud, at the host `BUSYLIB_CLOUD_URL` names. Pass
+        `is_cloud=True` only to name a cloud host per client, which is what
+        stops an address like api.dev.busy.app being taken for a device.
+        """
+        super().__init__(
+            addr,
+            token=token,
+            timeout=timeout,
+            max_retries=max_retries,
+            backoff=backoff,
+            transport=transport,
+            api_version=api_version,
+            compatibility_mode=compatibility_mode,
+            is_cloud=is_cloud,
+        )
         self._usb: AsyncUsbController | None = None
 
     @property

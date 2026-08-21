@@ -365,6 +365,34 @@ def _decode_response_payload(
         return response.text
 
 
+def _resolve_connection(
+    addr: str | None,
+    token: str | None,
+    is_cloud: bool | None,
+) -> tuple[str, Literal["local", "cloud", "network"]]:
+    """
+    Decide the base URL and the connection type from the arguments.
+
+    `BUSYLIB_CLOUD_URL` is the usual way to reach a non-production cloud, and
+    it needs nothing here. `is_cloud` exists because the address alone cannot
+    say what it is: pointing at api.dev.busy.app looked like `addr=...` and
+    quietly became an ordinary network connection, with the device's token
+    header and the device's `/api` paths. Left as None, the historical
+    inference applies, so existing calls are unaffected.
+    """
+    if is_cloud is None:
+        is_cloud = addr is None and token is not None
+
+    if is_cloud:
+        return (
+            _normalize_addr(addr) if addr else settings.cloud_base_url,
+            "cloud",
+        )
+    if addr is not None:
+        return _normalize_addr(addr), "network"
+    return settings.base_url, "local"
+
+
 class SyncClientBase:
     """
     Sync foundation: connection setup, retries, and low-level HTTP requests.
@@ -383,16 +411,9 @@ class SyncClientBase:
         transport: httpx2.BaseTransport | None = None,
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
+        is_cloud: bool | None = None,
     ) -> None:
-        if addr is None and token is None:
-            self.base_url = settings.base_url
-            self.connection_type = "local"
-        elif addr is None:
-            self.base_url = settings.cloud_base_url
-            self.connection_type = "cloud"
-        else:
-            self.base_url = _normalize_addr(addr)
-            self.connection_type = "network"
+        self.base_url, self.connection_type = _resolve_connection(addr, token, is_cloud)
 
         self._token = token
         self.max_retries = max(0, int(max_retries))
@@ -664,16 +685,9 @@ class AsyncClientBase:
         transport: httpx2.AsyncBaseTransport | None = None,
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
+        is_cloud: bool | None = None,
     ) -> None:
-        if addr is None and token is None:
-            self.base_url = settings.base_url
-            self.connection_type = "local"
-        elif addr is None:
-            self.base_url = settings.cloud_base_url
-            self.connection_type = "cloud"
-        else:
-            self.base_url = _normalize_addr(addr)
-            self.connection_type = "network"
+        self.base_url, self.connection_type = _resolve_connection(addr, token, is_cloud)
 
         self._token = token
         self.max_retries = max(0, int(max_retries))
