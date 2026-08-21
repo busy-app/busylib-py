@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import httpx2
 
 from .. import versioning
 from .base import DEFAULT_BACKOFF
@@ -55,10 +55,10 @@ class BusyBar(
         addr: str | None = None,
         *,
         token: str | None = None,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
-        transport: httpx.BaseTransport | None = None,
+        transport: httpx2.BaseTransport | None = None,
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
         is_cloud: bool | None = None,
@@ -145,10 +145,10 @@ class AsyncBusyBar(
         addr: str | None = None,
         *,
         token: str | None = None,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport: httpx2.AsyncBaseTransport | None = None,
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
         is_cloud: bool | None = None,
