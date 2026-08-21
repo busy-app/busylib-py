@@ -373,11 +373,12 @@ def _resolve_connection(
     """
     Decide the base URL and the connection type from the arguments.
 
-    Cloud mode used to be selected by *omitting* `addr`, which made it
-    impossible to name a cloud host - so pointing at api.dev.busy.app looked
-    like `addr=...` and quietly became an ordinary network connection, with
-    the device's token header and the device's `/api` paths. `is_cloud` says
-    it outright; left as None, the historical inference applies.
+    `BUSYLIB_CLOUD_URL` is the usual way to reach a non-production cloud, and
+    it needs nothing here. `is_cloud` exists because the address alone cannot
+    say what it is: pointing at api.dev.busy.app looked like `addr=...` and
+    quietly became an ordinary network connection, with the device's token
+    header and the device's `/api` paths. Left as None, the historical
+    inference applies, so existing calls are unaffected.
     """
     if is_cloud is None:
         is_cloud = addr is None and token is not None

@@ -67,9 +67,9 @@ class BusyBar(
         Build a client for one bar.
 
         `addr` is a device address; leaving it out with a `token` reaches the
-        bar through the cloud. `is_cloud` states that outright, which is what
-        lets a cloud host be named - `addr="https://api.dev.busy.app",
-        is_cloud=True` - instead of being inferred from an omitted argument.
+        bar through the cloud, at the host `BUSYLIB_CLOUD_URL` names. Pass
+        `is_cloud=True` only to name a cloud host per client, which is what
+        stops an address like api.dev.busy.app being taken for a device.
         """
         super().__init__(
             addr,
@@ -157,9 +157,9 @@ class AsyncBusyBar(
         Build a client for one bar.
 
         `addr` is a device address; leaving it out with a `token` reaches the
-        bar through the cloud. `is_cloud` states that outright, which is what
-        lets a cloud host be named - `addr="https://api.dev.busy.app",
-        is_cloud=True` - instead of being inferred from an omitted argument.
+        bar through the cloud, at the host `BUSYLIB_CLOUD_URL` names. Pass
+        `is_cloud=True` only to name a cloud host per client, which is what
+        stops an address like api.dev.busy.app being taken for a device.
         """
         super().__init__(
             addr,
