@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import AsyncBusyBar
@@ -70,14 +70,14 @@ async def test_name_set_posts_name_to_device() -> None:
     """
     seen: dict[str, object] = {}
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["body"] = request.content
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = AsyncBusyBar(
         addr="http://device.local",
-        transport=httpx.MockTransport(responder),
+        transport=httpx2.MockTransport(responder),
     )
     messages: list[str] = []
     command = NameSetCommand(client, messages.append)
@@ -99,13 +99,13 @@ async def test_name_set_rejects_invalid_name_without_calling_device() -> None:
     """
     calls: list[str] = []
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         calls.append(request.url.path)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
     client = AsyncBusyBar(
         addr="http://device.local",
-        transport=httpx.MockTransport(responder),
+        transport=httpx2.MockTransport(responder),
     )
     messages: list[str] = []
     command = NameSetCommand(client, messages.append)
@@ -124,12 +124,12 @@ async def test_name_set_reports_api_failure() -> None:
     Surface an API failure as a status message instead of raising.
     """
 
-    def responder(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(403, json={"error": "Forbidden"})
+    def responder(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(403, json={"error": "Forbidden"})
 
     client = AsyncBusyBar(
         addr="http://device.local",
-        transport=httpx.MockTransport(responder),
+        transport=httpx2.MockTransport(responder),
     )
     messages: list[str] = []
     command = NameSetCommand(client, messages.append)

@@ -83,7 +83,7 @@ def test_experimental_helpers_still_call_the_device(name: str) -> None:
 
     Unlike a removed endpoint, this one works against firmware that has it.
     """
-    import httpx
+    import httpx2
 
     seen: list[str] = []
 
@@ -100,12 +100,12 @@ def test_experimental_helpers_still_call_the_device(name: str) -> None:
         "access_tokens_revoke": {"result": "OK"},
     }
 
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.url.path)
-        return httpx.Response(200, json=bodies[name])
+        return httpx2.Response(200, json=bodies[name])
 
     client = BusyBar(
-        addr="http://device.local", transport=httpx.MockTransport(responder)
+        addr="http://device.local", transport=httpx2.MockTransport(responder)
     )
     getattr(client, name)("x") if name in (
         "access_token_mint",

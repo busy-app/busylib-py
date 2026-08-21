@@ -8,7 +8,7 @@ import uuid
 from collections.abc import AsyncIterable, Iterable
 from typing import Any, Literal, TypedDict
 
-import httpx
+import httpx2
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import exceptions, versioning
@@ -29,12 +29,12 @@ class RequestKwargs(TypedDict, total=False):
     headers: dict[str, str]
     session_id: str | None
     application_name: str | None
-    timeout: float | httpx.Timeout | None
+    timeout: float | httpx2.Timeout | None
 
 
-DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0, read=10.0, write=10.0, pool=5.0)
+DEFAULT_TIMEOUT = httpx2.Timeout(10.0, connect=5.0, read=10.0, write=10.0, pool=5.0)
 DEFAULT_BACKOFF = 0.25
-LOCAL_CHECK_TIMEOUT = httpx.Timeout(1.5, connect=0.5, read=1.0, write=1.0, pool=0.5)
+LOCAL_CHECK_TIMEOUT = httpx2.Timeout(1.5, connect=0.5, read=1.0, write=1.0, pool=0.5)
 SESSION_HEADER = "x-session-id"
 REQUEST_ID_HEADER = "X-Request-ID"
 
@@ -66,7 +66,7 @@ class PreparedRequest(BaseModel):
     )
     expect_bytes: bool
     allow_text: bool
-    timeout: httpx.Timeout
+    timeout: httpx2.Timeout
     request_id: str
     json_payload: JsonType | None = None
 
@@ -102,15 +102,15 @@ def _data_length(data: Any) -> int | None:
         return None
 
 
-def _as_timeout(value: float | httpx.Timeout | None) -> httpx.Timeout:
+def _as_timeout(value: float | httpx2.Timeout | None) -> httpx2.Timeout:
     """
-    Normalize timeout to an httpx.Timeout instance.
+    Normalize timeout to an httpx2.Timeout instance.
     """
     if value is None:
         return DEFAULT_TIMEOUT
-    if isinstance(value, httpx.Timeout):
+    if isinstance(value, httpx2.Timeout):
         return value
-    return httpx.Timeout(value)
+    return httpx2.Timeout(value)
 
 
 def _normalize_addr(addr: str) -> str:
@@ -206,7 +206,7 @@ def _prepare_request_payload(
     data: bytes | Iterable[bytes] | AsyncIterable[bytes] | None,
     expect_bytes: bool,
     allow_text: bool,
-    timeout: float | httpx.Timeout | None,
+    timeout: float | httpx2.Timeout | None,
     async_mode: bool,
 ) -> PreparedRequest:
     """
@@ -265,7 +265,7 @@ def _prepare_request_payload(
     )
 
 
-def _response_request_id(response: httpx.Response, fallback: str) -> str:
+def _response_request_id(response: httpx2.Response, fallback: str) -> str:
     """
     Return response request id or the caller-generated fallback id.
     """
@@ -275,7 +275,7 @@ def _response_request_id(response: httpx.Response, fallback: str) -> str:
 
 
 def _raise_api_error_from_response(
-    response: httpx.Response, *, prepared: PreparedRequest
+    response: httpx2.Response, *, prepared: PreparedRequest
 ) -> None:
     """
     Raise BusyBarAPIError built from an HTTP error response.
@@ -321,7 +321,7 @@ def _raise_api_error_from_response(
 
 
 def _decode_response_payload(
-    response: httpx.Response, *, prepared: PreparedRequest
+    response: httpx2.Response, *, prepared: PreparedRequest
 ) -> JsonType | bytes | str:
     """
     Decode successful HTTP response according to PreparedRequest flags.
@@ -377,10 +377,10 @@ class SyncClientBase:
         addr: str | None = None,
         *,
         token: str | None = None,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
-        transport: httpx.BaseTransport | None = None,
+        transport: httpx2.BaseTransport | None = None,
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
     ) -> None:
@@ -411,7 +411,7 @@ class SyncClientBase:
         else:
             headers["X-API-Token"] = token
 
-        self.client = httpx.Client(
+        self.client = httpx2.Client(
             base_url=self.base_url,
             headers=headers or None,
             timeout=_as_timeout(timeout),
@@ -465,7 +465,7 @@ class SyncClientBase:
                 headers=headers,
                 timeout=LOCAL_CHECK_TIMEOUT,
             )
-        except httpx.RequestError:
+        except httpx2.RequestError:
             return False
         return response.status_code < 400
 
@@ -491,7 +491,7 @@ class SyncClientBase:
         data: bytes | Iterable[bytes] | None = None,
         expect_bytes: bool = False,
         allow_text: bool = False,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Execute a raw API request through the current client session.
@@ -526,7 +526,7 @@ class SyncClientBase:
         data: bytes | Iterable[bytes] | None = None,
         expect_bytes: bool = False,
         allow_text: bool = False,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Prepare and execute one synchronous HTTP request.
@@ -562,7 +562,7 @@ class SyncClientBase:
         data: bytes | Iterable[bytes] | None = None,
         expect_bytes: bool = False,
         allow_text: bool = False,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
     ) -> PreparedRequest:
         """
         Build a prepared request without executing network I/O.
@@ -589,12 +589,12 @@ class SyncClientBase:
         self,
         prepared: PreparedRequest,
         *,
-        client: httpx.Client | None = None,
+        client: httpx2.Client | None = None,
     ) -> JsonType | bytes | str:
         """
         Execute a previously prepared request.
 
-        By default the current `httpx.Client` is used. Callers may inject a
+        By default the current `httpx2.Client` is used. Callers may inject a
         custom client while preserving error mapping. Prepared streaming content
         is single-use and should be regenerated for repeated executions.
         """
@@ -610,7 +610,7 @@ class SyncClientBase:
                     headers=prepared.headers,
                     timeout=prepared.timeout,
                 )
-            except httpx.RequestError as exc:
+            except httpx2.RequestError as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise exceptions.BusyBarRequestError(
@@ -658,10 +658,10 @@ class AsyncClientBase:
         addr: str | None = None,
         *,
         token: str | None = None,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
         max_retries: int = 2,
         backoff: float = DEFAULT_BACKOFF,
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport: httpx2.AsyncBaseTransport | None = None,
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
     ) -> None:
@@ -692,7 +692,7 @@ class AsyncClientBase:
         else:
             headers["X-API-Token"] = token
 
-        self.client = httpx.AsyncClient(
+        self.client = httpx2.AsyncClient(
             base_url=self.base_url,
             headers=headers or None,
             timeout=_as_timeout(timeout),
@@ -746,7 +746,7 @@ class AsyncClientBase:
                 headers=headers,
                 timeout=LOCAL_CHECK_TIMEOUT,
             )
-        except httpx.RequestError:
+        except httpx2.RequestError:
             return False
         return response.status_code < 400
 
@@ -772,7 +772,7 @@ class AsyncClientBase:
         data: bytes | AsyncIterable[bytes] | None = None,
         expect_bytes: bool = False,
         allow_text: bool = False,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Execute a raw async API request through the current client session.
@@ -807,7 +807,7 @@ class AsyncClientBase:
         data: bytes | AsyncIterable[bytes] | None = None,
         expect_bytes: bool = False,
         allow_text: bool = False,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
     ) -> JsonType | bytes | str:
         """
         Prepare and execute one asynchronous HTTP request.
@@ -843,7 +843,7 @@ class AsyncClientBase:
         data: bytes | AsyncIterable[bytes] | None = None,
         expect_bytes: bool = False,
         allow_text: bool = False,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx2.Timeout | None = None,
     ) -> PreparedRequest:
         """
         Build a prepared async request without executing network I/O.
@@ -871,12 +871,12 @@ class AsyncClientBase:
         self,
         prepared: PreparedRequest,
         *,
-        client: httpx.AsyncClient | None = None,
+        client: httpx2.AsyncClient | None = None,
     ) -> JsonType | bytes | str:
         """
         Execute a previously prepared async request.
 
-        By default the current `httpx.AsyncClient` is used. Callers may inject
+        By default the current `httpx2.AsyncClient` is used. Callers may inject
         a custom client while preserving error mapping. Prepared streaming
         content is single-use and should be regenerated for repeated executions.
         """
@@ -892,7 +892,7 @@ class AsyncClientBase:
                     headers=prepared.headers,
                     timeout=prepared.timeout,
                 )
-            except httpx.RequestError as exc:
+            except httpx2.RequestError as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise exceptions.BusyBarRequestError(

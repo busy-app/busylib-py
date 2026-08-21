@@ -9,7 +9,7 @@ import zlib
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from PIL import Image
 
@@ -40,7 +40,7 @@ def test_readme_onboarding_separates_terminal_and_python() -> None:
     assert "does not run Python examples from this guide" in readme
 
 
-def _responder(request: httpx.Request) -> httpx.Response:
+def _responder(request: httpx2.Request) -> httpx2.Response:
     """
     Answer the endpoints the README touches with realistic payloads.
     """
@@ -60,10 +60,10 @@ def _responder(request: httpx.Request) -> httpx.Response:
         "/api/storage/list": {"list": [{"name": "d.txt", "type": "file", "size": 13}]},
     }
     if path in bodies:
-        return httpx.Response(200, json=bodies[path])
+        return httpx2.Response(200, json=bodies[path])
     if path == "/api/storage/read":
-        return httpx.Response(200, content=b"Hello, world!")
-    return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, content=b"Hello, world!")
+    return httpx2.Response(200, json={"result": "OK"})
 
 
 @pytest.fixture
@@ -112,7 +112,7 @@ def test_readme_examples_run_without_warnings(
     coordinate or a skipped media conversion shows up as a busylib warning,
     which is exactly how the previous examples were broken.
     """
-    transport = httpx.MockTransport(_responder)
+    transport = httpx2.MockTransport(_responder)
     original_init = BusyBar.__init__
 
     def patched_init(self, *args, **kwargs):

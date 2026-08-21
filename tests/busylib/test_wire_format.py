@@ -8,19 +8,21 @@ noticed that the device did not.
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from busylib import BusyBar, types
 
 
 def _client(seen: dict[str, object]) -> BusyBar:
-    def responder(request: httpx.Request) -> httpx.Response:
+    def responder(request: httpx2.Request) -> httpx2.Response:
         seen["path"] = request.url.path
         seen["params"] = dict(request.url.params)
-        return httpx.Response(200, json={"result": "OK"})
+        return httpx2.Response(200, json={"result": "OK"})
 
-    return BusyBar(addr="http://device.local", transport=httpx.MockTransport(responder))
+    return BusyBar(
+        addr="http://device.local", transport=httpx2.MockTransport(responder)
+    )
 
 
 @pytest.mark.parametrize(

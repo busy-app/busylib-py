@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import httpx2
 
 from .. import types
 from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
-ASSET_UPLOAD_TIMEOUT = httpx.Timeout(
+ASSET_UPLOAD_TIMEOUT = httpx2.Timeout(
     120.0,
     connect=5.0,
     read=120.0,
@@ -28,7 +28,7 @@ class AssetsMixin(SyncClientBase):
         filename: str,
         data: bytes,
         *,
-        timeout: float | httpx.Timeout | None = ASSET_UPLOAD_TIMEOUT,
+        timeout: float | httpx2.Timeout | None = ASSET_UPLOAD_TIMEOUT,
     ) -> types.SuccessResponse:
         """
         Upload an asset file for the given application.
@@ -72,7 +72,7 @@ class AsyncAssetsMixin(AsyncClientBase):
         filename: str,
         data: bytes,
         *,
-        timeout: float | httpx.Timeout | None = ASSET_UPLOAD_TIMEOUT,
+        timeout: float | httpx2.Timeout | None = ASSET_UPLOAD_TIMEOUT,
     ) -> types.SuccessResponse:
         """
         Upload an asset file for the given application.
