@@ -1,11 +1,13 @@
 <p class="repository-hero" align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="assets/brand/busylib-py-hero-light.png">
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/busylib-py-hero-dark.png">
-    <!-- Width only: GitHub constrains images with max-width and no height:auto,
-         so an explicit height attribute stays fixed while the width shrinks and
-         squashes the image on a phone. -->
-    <img alt="BUSY Bar: official Python library for connecting, controlling, and automating." width="830" src="assets/brand/busylib-py-hero-light.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/busy-app/busylib-py/main/assets/brand/busylib-py-hero-light.png">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/busy-app/busylib-py/main/assets/brand/busylib-py-hero-dark.png">
+    <!-- Absolute, and width only. PyPI renders this README on its own domain
+         without rewriting relative paths, so `assets/...` resolved to a PyPI
+         page and the image broke; it also strips <source>, so this img is the
+         only variant seen there. GitHub constrains images with max-width and
+         no height:auto, which is why no height attribute. -->
+    <img alt="BUSY Bar: official Python library for connecting, controlling, and automating." width="830" src="https://raw.githubusercontent.com/busy-app/busylib-py/main/assets/brand/busylib-py-hero-light.png">
   </picture>
 </p>
 
