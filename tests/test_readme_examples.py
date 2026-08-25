@@ -40,6 +40,24 @@ def test_readme_onboarding_separates_terminal_and_python() -> None:
     assert "does not run Python examples from this guide" in readme
 
 
+def test_readme_images_are_absolute() -> None:
+    """
+    Every image in the README is reachable from off-site.
+
+    PyPI renders this file on its own domain without rewriting relative
+    paths, so `assets/...` resolved to a PyPI page - served as HTML with a
+    200, which shows up as a broken image rather than a 404. It also strips
+    `<source>`, so the `<img>` fallback is the only variant seen there.
+    """
+    readme = README.read_text(encoding="utf-8")
+
+    references = re.findall(r'(?:src|srcset)="([^"]+)"', readme)
+
+    assert references, "no image references found in README.md"
+    relative = [ref for ref in references if not ref.startswith("https://")]
+    assert not relative, f"these must be absolute for PyPI: {relative}"
+
+
 def _responder(request: httpx2.Request) -> httpx2.Response:
     """
     Answer the endpoints the README touches with realistic payloads.
