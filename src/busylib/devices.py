@@ -17,7 +17,11 @@ from zeroconf import (
 )
 from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
 
-BUSYBAR_SERVICE = "_busybar._tcp.local."
+BUSYBAR_SERVICE = "_http._tcp.local."
+# Firmware advertises the bar's unique instance name as "busybar-<mac>" under
+# the shared _http service (not a dedicated _busybar service), so it must be
+# stripped to recover the device id.
+BUSYBAR_INSTANCE_NAME_PREFIX = "busybar-"
 BUSYBAR_USB_SUBNET = "10.0.4."
 BUSYBAR_DEFAULT_NAME = b"BUSY Bar"
 TIMEOUT = 1.5
@@ -112,8 +116,15 @@ class _DeviceCollector:
     def _record(self, info: ServiceInfo) -> None:
         """
         Fold one resolved service record into the collected devices.
+
+        `_http._tcp` is a generic service type, so other, unrelated HTTP
+        servers on the network may answer too; only instances following the
+        bar's naming convention are treated as bars.
         """
-        device_id = info.name.split(".")[0]
+        instance_name = info.name.split(".")[0]
+        if not instance_name.startswith(BUSYBAR_INSTANCE_NAME_PREFIX):
+            return
+        device_id = instance_name.removeprefix(BUSYBAR_INSTANCE_NAME_PREFIX)
         addresses = (
             BusyBarDeviceDiscoverer._ip_address_to_our(addr.compressed)
             for addr in info.ip_addresses_by_version(IPVersion.V4Only)

@@ -9,8 +9,8 @@ from busylib.types import HttpAccessInfo
 DISCOVERY_TIMEOUT_SECONDS = 1.5
 
 # Well-known static address of a USB-connected bar. Falls back to this when
-# mDNS discovery finds nothing - factory firmware doesn't advertise
-# `_busybar._tcp` yet (that feature isn't merged/released), so a bar
+# mDNS discovery finds nothing - factory firmware doesn't advertise itself
+# under `_http._tcp` yet (that feature isn't merged/released), so a bar
 # connected over USB is otherwise unreachable without an explicit --addr.
 USB_FALLBACK_ADDRESS = "10.0.4.20"
 

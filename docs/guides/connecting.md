@@ -86,14 +86,15 @@ Each line is the advertised device name and Wi-Fi address. No output is normal
 on firmware that does not advertise the service; a USB-connected bar remains
 available at `10.0.4.20`.
 
-Discovery browses for the `_busybar._tcp` mDNS service and classifies each
+Discovery browses for the `_http._tcp` mDNS service and classifies each
 address it finds: anything in `10.0.4.*` is treated as the USB link, everything
-else as Wi-Fi.
+else as Wi-Fi. Only instances whose name starts with `busybar-` are treated as
+bars; other, unrelated `_http._tcp` services on the network are ignored.
 
 !!! warning
-    Shipped firmware does not advertise `_busybar._tcp` yet, so `discover()`
-    can legitimately return an empty list. The `remote` and `setup` examples
-    fall back to `10.0.4.20` in that case.
+    Shipped firmware does not advertise itself under `_http._tcp` yet, so
+    `discover()` can legitimately return an empty list. The `remote` and
+    `setup` examples fall back to `10.0.4.20` in that case.
 
 ## Closing the client
 
