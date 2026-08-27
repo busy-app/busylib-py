@@ -12,6 +12,7 @@ from busylib.devices import (
     AsyncBusyBarDeviceDiscoverer,
     BusyBarDeviceDiscoverer,
     BusyBarDevices,
+    _DeviceCollector,
 )
 
 USB_IP = "10.0.4.20"
@@ -97,6 +98,70 @@ def test_client_factories_return_none_without_an_address() -> None:
 
     assert device.to_sync_client("over_usb") is None
     assert device.to_async_client("over_usb") is None
+
+
+class FakeIPAddress:
+    def __init__(self, compressed: str) -> None:
+        self.compressed = compressed
+
+
+class FakeServiceInfo:
+    """
+    Stands in for a resolved `zeroconf.ServiceInfo`/`AsyncServiceInfo`.
+    """
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        addresses: list[str] | None = None,
+        device_name: bytes | None = None,
+    ) -> None:
+        self.name = name
+        self._addresses = [FakeIPAddress(addr) for addr in (addresses or [])]
+        self.properties: dict[bytes, bytes] = {}
+        if device_name is not None:
+            self.properties[b"name"] = device_name
+
+    def ip_addresses_by_version(self, _version: object) -> list[FakeIPAddress]:
+        return self._addresses
+
+
+def test_record_accepts_a_busybar_instance_and_strips_the_prefix() -> None:
+    """
+    `_http._tcp` is shared with other services, so only the bar's own
+    naming convention ("busybar-<id>") is recognized, and the prefix is
+    stripped to recover the plain device id.
+    """
+    collector = _DeviceCollector()
+    info = FakeServiceInfo(
+        name="busybar-aabbcc._http._tcp.local.",
+        addresses=[WIFI_IP],
+        device_name=b"Front desk",
+    )
+
+    collector._record(info)  # type: ignore[arg-type]
+
+    devices = collector.collected()
+    assert len(devices) == 1
+    assert devices[0].device_id == "aabbcc"
+    assert devices[0].name == "Front desk"
+
+
+def test_record_ignores_unrelated_http_services() -> None:
+    """
+    An unrelated `_http._tcp` responder on the network must not be
+    mistaken for a bar.
+    """
+    collector = _DeviceCollector()
+    info = FakeServiceInfo(
+        name="some-printer._http._tcp.local.",
+        addresses=[WIFI_IP],
+    )
+
+    collector._record(info)  # type: ignore[arg-type]
+
+    assert collector.collected() == []
 
 
 class RecordingZeroconf:

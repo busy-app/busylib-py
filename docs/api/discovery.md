@@ -21,7 +21,7 @@ were discovered, not that the library failed; use `10.0.4.20` for a
 USB-connected bar in that case.
 
 !!! note
-    Shipped firmware doesn't advertise the `_busybar._tcp` service yet, so
+    Shipped firmware doesn't advertise itself under `_http._tcp` yet, so
     `discover()` can legitimately return an empty list. A USB-connected bar
     is still reachable at its well-known static address, `10.0.4.20`.
 

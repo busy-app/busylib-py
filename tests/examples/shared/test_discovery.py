@@ -39,7 +39,7 @@ def test_resolve_connection_falls_back_to_usb_address(
     """
     Use the well-known USB address when mDNS discovery finds nothing but
     that address is reachable (e.g. a USB-connected bar on firmware that
-    doesn't advertise `_busybar._tcp` yet).
+    doesn't advertise itself under `_http._tcp` yet).
     """
     monkeypatch.setattr(discovery.BusyBarDevices, "discover", lambda timeout=1.5: [])
     monkeypatch.setattr(

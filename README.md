@@ -511,7 +511,7 @@ USB address instead.
 Both the `remote` and `setup` examples use this automatically when no address is
 given: they discover devices via mDNS, let you pick one by name if more than one
 is found, and prompt for the access key if the bar needs one. Shipped firmware
-doesn't advertise the `_busybar._tcp` service yet, so if nothing is found they
+doesn't advertise itself under `_http._tcp` yet, so if nothing is found they
 fall back to the well-known USB address `10.0.4.20`.
 
 ### Working with storage
