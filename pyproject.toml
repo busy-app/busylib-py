@@ -37,6 +37,11 @@ optional-dependencies.docs = [
   "mkdocs-material>=9.5",
   "mkdocstrings[python]>=0.28",
 ]
+# For AiohttpTransport, which lets a host application lend this client its own
+# aiohttp session instead of opening a second connection pool.
+optional-dependencies.aiohttp = [
+  "aiohttp>=3.9",
+]
 # Image conversion is the only thing that needs Pillow, and it is by far the
 # heaviest dependency available to this package, so it is opt-in.
 optional-dependencies.media = [
@@ -52,6 +57,7 @@ urls.Repository = "https://github.com/busy-app/busylib-py"
 # unrelated pull requests red: ruff 0.16 widened its default rule set, which
 # fails the whole repository including main.
 dev = [
+  "aiohttp>=3.9",
   "grpcio-tools>=1.74",
   "pillow>=12",
   "pre-commit>=3.8",
