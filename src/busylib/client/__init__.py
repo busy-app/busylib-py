@@ -62,6 +62,7 @@ class BusyBar(
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
         is_cloud: bool | None = None,
+        device_api_version: str | None = None,
     ) -> None:
         """
         Build a client for one bar.
@@ -81,6 +82,7 @@ class BusyBar(
             api_version=api_version,
             compatibility_mode=compatibility_mode,
             is_cloud=is_cloud,
+            device_api_version=device_api_version,
         )
         self._usb: UsbController | None = None
 
@@ -152,6 +154,7 @@ class AsyncBusyBar(
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
         is_cloud: bool | None = None,
+        device_api_version: str | None = None,
     ) -> None:
         """
         Build a client for one bar.
@@ -171,6 +174,7 @@ class AsyncBusyBar(
             api_version=api_version,
             compatibility_mode=compatibility_mode,
             is_cloud=is_cloud,
+            device_api_version=device_api_version,
         )
         self._usb: AsyncUsbController | None = None
 

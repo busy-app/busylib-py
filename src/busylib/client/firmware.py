@@ -7,6 +7,42 @@ from .base import AsyncClientBase, SyncClientBase
 
 logger = logging.getLogger(__name__)
 
+LOG_DUMP_FILENAME_VERSION = "25.0.0"
+
+
+def _log_dump_params(
+    filename: str | None,
+    path: str | None,
+    device_is_current: bool | None,
+) -> dict[str, str] | None:
+    """
+    Choose the log_dump query for the contract the device speaks.
+
+    `device_is_current` is None when the bar's version is unknown; the request
+    then goes out as asked, because refusing on a guess would be worse than
+    letting the device answer.
+    """
+    if filename is not None and path is not None:
+        raise ValueError(
+            "log_dump takes filename (OpenAPI 25.0.0+) or path (earlier), not both"
+        )
+    if filename is not None:
+        if device_is_current is False:
+            raise ValueError(
+                "this device predates OpenAPI 25.0.0 and takes path=, a full "
+                "destination such as /ext/dump.log, rather than filename="
+            )
+        return {"filename": filename}
+    if path is not None:
+        if device_is_current is True:
+            raise ValueError(
+                "this device is on OpenAPI 25.0.0 or later and takes "
+                "filename=, a bare name without an extension, rather than path="
+            )
+        return {"path": path}
+    # Neither given: both contracts write to their own default.
+    return None
+
 
 def _handle_compatibility(
     *,
@@ -117,27 +153,39 @@ class FirmwareMixin(SyncClientBase):
         return types.StatusPower.model_validate(data)
 
     @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
-    def log_dump(self, filename: str | None = None) -> types.LogDumpResponse:
+    def log_dump(
+        self,
+        filename: str | None = None,
+        *,
+        path: str | None = None,
+    ) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
 
-        `filename` is a bare name without a path or extension, matching
-        `^[a-zA-Z0-9_-]+$` on firmware OpenAPI 25.0.0+; the device appends its
-        own extension and storage path. When omitted, the device picks a
-        default file.
+        The contract changed at OpenAPI 25.0.0 and the two are not
+        translatable, so both are kept rather than one being dropped:
 
-        Breaking change: prior to 25.0.0 this method accepted `path=` (a full
-        device-side path). That parameter has been removed rather than
-        aliased, since the two contracts are not translatable (a full path
-        never matches the new filename pattern). Callers targeting firmware
-        older than 25.0.0 should pin an older `busylib` release instead of
-        adapting call sites.
+        - `filename` is a bare name matching `^[a-zA-Z0-9_-]+$`; the device
+          adds the extension and the storage path. 25.0.0 and later.
+        - `path` is a full destination path such as `/ext/dump.log`. Before
+          25.0.0.
+
+        With neither, the device writes to its own default and the request is
+        identical on both, which is why plain `log_dump()` needs no version at
+        all.
+
+        When the device version is known - after `version()`, or from
+        `device_api_version=` - asking for the wrong one raises here instead
+        of being refused by the bar with a bare 400.
         """
-        logger.info("log_dump filename=%s", filename)
+        params = _log_dump_params(
+            filename, path, self.device_at_least(LOG_DUMP_FILENAME_VERSION)
+        )
+        logger.info("log_dump params=%s", params)
         data = self._request(
             "POST",
             "/api/log_dump",
-            params={"filename": filename} if filename is not None else None,
+            params=params,
             allow_text=True,
         )
         if data == "":
@@ -274,27 +322,39 @@ class AsyncFirmwareMixin(AsyncClientBase):
         return types.StatusPower.model_validate(data)
 
     @versioning.requires_openapi("25.0.0", path="/api/log_dump", method="POST")
-    async def log_dump(self, filename: str | None = None) -> types.LogDumpResponse:
+    async def log_dump(
+        self,
+        filename: str | None = None,
+        *,
+        path: str | None = None,
+    ) -> types.LogDumpResponse:
         """
         Dump the in-memory device log buffer to a storage file.
 
-        `filename` is a bare name without a path or extension, matching
-        `^[a-zA-Z0-9_-]+$` on firmware OpenAPI 25.0.0+; the device appends its
-        own extension and storage path. When omitted, the device picks a
-        default file.
+        The contract changed at OpenAPI 25.0.0 and the two are not
+        translatable, so both are kept rather than one being dropped:
 
-        Breaking change: prior to 25.0.0 this method accepted `path=` (a full
-        device-side path). That parameter has been removed rather than
-        aliased, since the two contracts are not translatable (a full path
-        never matches the new filename pattern). Callers targeting firmware
-        older than 25.0.0 should pin an older `busylib` release instead of
-        adapting call sites.
+        - `filename` is a bare name matching `^[a-zA-Z0-9_-]+$`; the device
+          adds the extension and the storage path. 25.0.0 and later.
+        - `path` is a full destination path such as `/ext/dump.log`. Before
+          25.0.0.
+
+        With neither, the device writes to its own default and the request is
+        identical on both, which is why plain `log_dump()` needs no version at
+        all.
+
+        When the device version is known - after `version()`, or from
+        `device_api_version=` - asking for the wrong one raises here instead
+        of being refused by the bar with a bare 400.
         """
-        logger.info("async log_dump filename=%s", filename)
+        params = _log_dump_params(
+            filename, path, self.device_at_least(LOG_DUMP_FILENAME_VERSION)
+        )
+        logger.info("async log_dump params=%s", params)
         data = await self._request(
             "POST",
             "/api/log_dump",
-            params={"filename": filename} if filename is not None else None,
+            params=params,
             allow_text=True,
         )
         if data == "":

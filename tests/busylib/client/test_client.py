@@ -343,19 +343,6 @@ def test_log_dump_no_filename_omits_params() -> None:
     assert seen["params"] == {}
 
 
-def test_log_dump_rejects_legacy_path_kwarg() -> None:
-    """
-    The pre-25.0.0 `path=` alias was removed, not silently translated.
-
-    A caller still using the old keyword must fail loudly at the call site
-    instead of getting an HTTP 400 from the device.
-    """
-    client = make_client(lambda _request: httpx2.Response(200, json={"result": "OK"}))
-
-    with pytest.raises(TypeError):
-        client.log_dump(path="/ext/dump.log")  # type: ignore[call-arg]
-
-
 def test_request_carries_api_version_header():
     """
     Send API version header with each request.

@@ -445,21 +445,3 @@ async def test_async_log_dump_empty_body_returns_ok():
     assert result.path is None
     assert seen["params"] == {"filename": "dump"}
     await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_async_log_dump_rejects_legacy_path_kwarg():
-    """
-    The pre-25.0.0 `path=` alias was removed, not silently translated (async).
-
-    A caller still using the old keyword must fail loudly at the call site
-    instead of getting an HTTP 400 from the device.
-    """
-
-    async def responder(request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(200, json={"result": "OK"})
-
-    client = make_client(responder)
-    with pytest.raises(TypeError):
-        await client.log_dump(path="/ext/dump.log")  # type: ignore[call-arg]
-    await client.aclose()

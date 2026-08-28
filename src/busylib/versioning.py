@@ -173,6 +173,23 @@ def _parse_major_minor(version: str) -> tuple[int, int]:
     return int(match.group(1)), int(match.group(2))
 
 
+def at_least(device_version: str | None, minimum: str) -> bool | None:
+    """
+    Whether a device is known to run at least `minimum`.
+
+    Returns None when the device version is unknown, which callers must treat
+    as "cannot tell" rather than as False - a client that has not called
+    `version()` yet knows nothing about the bar, and guessing "older" would
+    send the wrong contract to a current device.
+    """
+    if not device_version:
+        return None
+    try:
+        return _parse_major_minor(device_version) >= _parse_major_minor(minimum)
+    except ValueError:
+        return None
+
+
 def ensure_compatible(*, library_version: str, device_version: str) -> None:
     """
     Validate device API version against the library support matrix.
