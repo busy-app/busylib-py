@@ -32,15 +32,15 @@ dependencies = [
   "websockets>=12",
   "zeroconf>=0.150",
 ]
-optional-dependencies.docs = [
-  "mkdocs>=1.6",
-  "mkdocs-material>=9.5",
-  "mkdocstrings[python]>=0.28",
-]
 # For AiohttpTransport, which lets a host application lend this client its own
 # aiohttp session instead of opening a second connection pool.
 optional-dependencies.aiohttp = [
   "aiohttp>=3.9",
+]
+optional-dependencies.docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.28",
 ]
 # Image conversion is the only thing that needs Pillow, and it is by far the
 # heaviest dependency available to this package, so it is opt-in.
