@@ -412,6 +412,7 @@ class SyncClientBase:
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
         is_cloud: bool | None = None,
+        device_api_version: str | None = None,
     ) -> None:
         self.base_url, self.connection_type = _resolve_connection(addr, token, is_cloud)
 
@@ -422,7 +423,10 @@ class SyncClientBase:
         if compatibility_mode not in ("warn", "strict", "none"):
             raise ValueError("compatibility_mode must be 'warn', 'strict', or 'none'")
         self.compatibility_mode: versioning.CompatibilityMode = compatibility_mode
-        self._device_api_version: str | None = None
+        # What the bar runs, as opposed to `api_version`, which is what this
+        # library targets. Filled in by `version()`, or given up front by a
+        # caller who already knows and would rather not spend a round trip.
+        self._device_api_version: str | None = device_api_version
 
         headers: dict[str, str] = {versioning.API_VERSION_HEADER: self.api_version}
         if token is None:
@@ -444,6 +448,26 @@ class SyncClientBase:
             timeout=self._timeout,
             transport=transport,
         )
+
+    @property
+    def device_api_version(self) -> str | None:
+        """
+        The device's API version, if it is known yet.
+
+        None until `version()` has been called or a value was supplied to the
+        constructor.
+        """
+        return self._device_api_version
+
+    def device_at_least(self, minimum: str) -> bool | None:
+        """
+        Whether the bar is known to run at least `minimum`.
+
+        None means the version is not known, which is not the same as "older":
+        a caller deciding between two request contracts should send the
+        current one rather than assume the device is behind.
+        """
+        return versioning.at_least(self._device_api_version, minimum)
 
     @property
     def is_cloud(self) -> bool:
@@ -692,6 +716,7 @@ class AsyncClientBase:
         api_version: str | None = None,
         compatibility_mode: versioning.CompatibilityMode = "warn",
         is_cloud: bool | None = None,
+        device_api_version: str | None = None,
     ) -> None:
         self.base_url, self.connection_type = _resolve_connection(addr, token, is_cloud)
 
@@ -702,7 +727,10 @@ class AsyncClientBase:
         if compatibility_mode not in ("warn", "strict", "none"):
             raise ValueError("compatibility_mode must be 'warn', 'strict', or 'none'")
         self.compatibility_mode: versioning.CompatibilityMode = compatibility_mode
-        self._device_api_version: str | None = None
+        # What the bar runs, as opposed to `api_version`, which is what this
+        # library targets. Filled in by `version()`, or given up front by a
+        # caller who already knows and would rather not spend a round trip.
+        self._device_api_version: str | None = device_api_version
 
         headers: dict[str, str] = {versioning.API_VERSION_HEADER: self.api_version}
         if token is None:
@@ -720,6 +748,26 @@ class AsyncClientBase:
             timeout=self._timeout,
             transport=transport,
         )
+
+    @property
+    def device_api_version(self) -> str | None:
+        """
+        The device's API version, if it is known yet.
+
+        None until `version()` has been called or a value was supplied to the
+        constructor.
+        """
+        return self._device_api_version
+
+    def device_at_least(self, minimum: str) -> bool | None:
+        """
+        Whether the bar is known to run at least `minimum`.
+
+        None means the version is not known, which is not the same as "older":
+        a caller deciding between two request contracts should send the
+        current one rather than assume the device is behind.
+        """
+        return versioning.at_least(self._device_api_version, minimum)
 
     @property
     def is_cloud(self) -> bool:
