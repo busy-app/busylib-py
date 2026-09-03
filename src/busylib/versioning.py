@@ -9,7 +9,7 @@ from typing import Literal, TypeVar, cast
 
 from . import exceptions
 
-API_VERSION = os.environ.get("BUSY_API_VERSION", "25.0.0")
+API_VERSION = os.environ.get("BUSY_API_VERSION", "27.5.0")
 API_VERSION_HEADER = "X-Busy-Api-Version"
 CompatibilityMode = Literal["warn", "strict", "none"]
 F = TypeVar("F", bound=Callable[..., object])

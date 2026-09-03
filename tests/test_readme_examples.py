@@ -13,7 +13,7 @@ import httpx2
 import pytest
 from PIL import Image
 
-from busylib import BusyBar, converter, types
+from busylib import BusyBar, converter, types, versioning
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 
@@ -64,9 +64,11 @@ def _responder(request: httpx2.Request) -> httpx2.Response:
     """
     path = request.url.path
     bodies: dict[str, Any] = {
+        # Pinned to the library's own target so a version bump cannot leave
+        # the mock device behind and fail every README block at once.
         "/api/version": {
-            "version": "1.1.1",
-            "api_semver": "25.0.0",
+            "version": "1.2.3",
+            "api_semver": versioning.API_VERSION,
             "branch": "release",
         },
         "/api/status": {
