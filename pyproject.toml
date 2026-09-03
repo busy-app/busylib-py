@@ -55,12 +55,12 @@ dev = [
   "grpcio-tools>=1.74",
   "pillow>=12",
   "pre-commit>=3.8",
-  "pyproject-fmt==2.28.1",
+  "pyproject-fmt==2.29",
   "pyright==1.1.411",
   "pytest>=8.4.1",
   "pytest-asyncio>=0.24",
   "pytest-cov>=7",
-  "ruff==0.16.4",
+  "ruff==0.16.5",
   "tomli>=2.2",
 ]
 
