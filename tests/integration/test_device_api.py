@@ -13,7 +13,6 @@ storage directory, and every value that gets changed is put back.
 from __future__ import annotations
 
 import io
-import re
 import time
 import wave
 
@@ -313,35 +312,34 @@ def test_input_is_accepted(bar) -> None:
 
 def test_compatibility_metadata_matches_this_bar(bar) -> None:
     """
-    What the library claims about an endpoint holds against real firmware.
+    A declared version floor holds against the firmware in front of us.
 
-    An `experimental` marker means "no released firmware serves this yet", so
-    only a released build can contradict it. A development build is expected
-    to carry unreleased work, and the endpoint answering there says nothing
-    either way - which is why that case is skipped rather than asserted.
+    `access_tokens_list` carries a floor of 27.5.0 rather than an
+    experimental marker, so the claim is falsifiable on any bar: at or above
+    that floor the call has to work, and below it the endpoint is allowed to
+    be missing. Earlier this test compared release channels, which meant a
+    development build could never contradict anything.
     """
     from busylib import exceptions
 
     metadata = bar.method_compatibility("access_tokens_list")
     assert metadata is not None
 
-    firmware = bar.status().firmware
-    branch = (firmware.branch if firmware else None) or ""
-    on_release = bool(re.fullmatch(r"\d+\.\d+\.\d+", branch))
+    floor = metadata.get("version")
+    assert floor, "access_tokens_list should declare a version floor"
 
-    try:
-        bar.access_tokens_list()
-    except exceptions.BusyBarAPIError as exc:
-        assert metadata.get("status") == "experimental", (
-            f"endpoint failed ({exc}) but is not marked experimental"
+    reported = bar.version().api_semver
+    if not reported:
+        pytest.skip("the bar does not report an API version")
+
+    def semver(value: str) -> tuple[int, ...]:
+        return tuple(int(part) for part in value.split(".")[:2])
+
+    if semver(reported) >= semver(floor):
+        assert bar.access_tokens_list() is not None, (
+            f"device is at or above the declared floor {floor} but the "
+            "endpoint did not answer"
         )
     else:
-        if not on_release:
-            pytest.skip(
-                f"firmware branch {branch!r} is not a release, so an "
-                "unreleased endpoint working here proves nothing"
-            )
-        assert metadata.get("status") != "experimental", (
-            "endpoint works on released firmware but is still marked "
-            "experimental - the marker should be a version floor now"
-        )
+        with pytest.raises(exceptions.BusyBarAPIError):
+            bar.access_tokens_list()

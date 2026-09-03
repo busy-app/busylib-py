@@ -34,9 +34,9 @@ Everything that UI does is the same HTTP API this library speaks, so anything
 you can click there you can also script.
 
 > **Update the firmware early.** Firmware 1.0.2 serves API version `24.3.0`,
-> while this library targets `25.0.0`. Most things still work, but you'll see
-> compatibility warnings and a few newer methods are unavailable. The setup
-> wizard below handles updating for you.
+> while this library targets `27.5.0` (firmware 1.2.3). Most things still
+> work, but you'll see compatibility warnings and a few newer methods are
+> unavailable. The setup wizard below handles updating for you.
 
 ## Installation
 
@@ -97,7 +97,7 @@ python3 check_busybar.py
 Successful output looks like this:
 
 ```
-Connected to BUSY Bar. API 25.0.0
+Connected to BUSY Bar. API 27.5.0
 ```
 
 The API version is the connection check. Some firmware does not report a
@@ -151,7 +151,7 @@ python3 -m venv .venv
 
 ```
 BUSY Bar setup
-  [ ] Firmware       1.0.2 (API 24.3.0) - library targets API 25.0.0
+  [ ] Firmware       1.0.2 (API 24.3.0) - library targets API 27.5.0
   [ ] Wi-Fi          disconnected
   [ ] Timezone       UTC+00:00 - this computer is UTC+03:00
   [ ] Device name    BUSY Bar (factory default)
@@ -367,7 +367,7 @@ if __name__ == "__main__":
 **Expected terminal output:**
 
 ```
-Connected to BUSY Bar. API 25.0.0
+Connected to BUSY Bar. API 27.5.0
 ```
 
 **Expected device result:** `BUILDING` appears on the front display, the icon
@@ -412,7 +412,7 @@ with BusyBar("10.0.4.20") as bb:
 **Expected output:**
 
 ```
-API 25.0.0
+API 27.5.0
 ```
 
 The context manager closes the client's connection pool when the block exits.
@@ -438,7 +438,7 @@ if __name__ == "__main__":
 **Expected output:**
 
 ```
-Device API: 25.0.0
+Device API: 27.5.0
 ```
 
 The value has the same meaning as in the synchronous example; `await` lets
@@ -466,7 +466,7 @@ print(f"Volume: {volume.volume}")
 **Example output:**
 
 ```
-Device API: 25.0.0
+Device API: 27.5.0
 Uptime: 00d 00h 05m 38s
 Battery: 100%
 Brightness: auto
