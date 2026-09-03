@@ -5,7 +5,7 @@ import httpx2
 import pytest
 from pydantic import ValidationError
 
-from busylib import BusyBar, exceptions, types
+from busylib import BusyBar, exceptions, types, versioning
 
 Responder = Callable[[httpx2.Request], httpx2.Response]
 
@@ -77,13 +77,15 @@ def test_version_default_api_version_remains_device_semver() -> None:
 
     def responder(request: httpx2.Request) -> httpx2.Response:
         seen["header"] = request.headers.get("x-busy-api-version")
-        return httpx2.Response(200, json={"api_semver": "25.0.0"})
+        return httpx2.Response(200, json={"api_semver": versioning.API_VERSION})
 
     client = make_client(responder)
     result = client.version()
 
-    assert result.api_semver == "25.0.0"
-    assert seen["header"] == "25.0.0"
+    assert result.api_semver == versioning.API_VERSION
+    # Pinned to the constant on purpose: the point is that the default header
+    # tracks the device semver, not that it holds any particular value.
+    assert seen["header"] == versioning.API_VERSION
 
 
 def test_name_and_time():

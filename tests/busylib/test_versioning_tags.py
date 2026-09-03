@@ -19,6 +19,11 @@ EXPECTED = {
     "account_backend": "23.0.0",
     # Endpoint exists from 24.3.0, but the contract was reworked in 25.0.0.
     "log_dump": "25.0.0",
+    # busybar-firmware#886, first released in firmware 1.2.3.
+    "access_tokens_list": "27.5.0",
+    "access_token_mint": "27.5.0",
+    "access_tokens_delete_all": "27.5.0",
+    "access_tokens_revoke": "27.5.0",
 }
 
 
@@ -49,7 +54,7 @@ def test_endpoints_present_since_the_first_api_are_left_untagged(
         assert versioning.get_method_compatibility(getattr(client, name)) is None
 
 
-EXPERIMENTAL = [
+ACCESS_TOKEN_HELPERS = [
     "access_tokens_list",
     "access_token_mint",
     "access_tokens_delete_all",
@@ -57,31 +62,34 @@ EXPERIMENTAL = [
 ]
 
 
-@pytest.mark.parametrize("name", EXPERIMENTAL)
-@pytest.mark.parametrize("client", [BusyBar, AsyncBusyBar])
-def test_endpoints_ahead_of_released_firmware_are_marked(
-    client: type, name: str
-) -> None:
+def test_the_experimental_marker_records_a_note_instead_of_a_version() -> None:
     """
-    Helpers for unreleased endpoints say so instead of claiming a version.
+    The marker carries a note where a version floor would go.
 
-    No released firmware serves these, so a version floor would have to be
-    invented; the marker records that and names the firmware work, so it can
-    be swapped for a real floor once that ships.
+    No client helper needs it right now - the access-token endpoints it used
+    to cover shipped in firmware 1.2.3 and carry a real floor - so it is
+    exercised directly, and stays ready for the next unreleased endpoint.
     """
-    metadata = versioning.get_method_compatibility(getattr(client, name))
+
+    @versioning.experimental_endpoint(
+        path="/api/future",
+        method="GET",
+        note="busy-app/busybar-firmware#1234, not released yet",
+    )
+    def helper() -> None: ...
+
+    metadata = versioning.get_method_compatibility(helper)
 
     assert metadata is not None
     assert metadata["status"] == "experimental"
-    assert "886" in metadata["note"]
+    assert "version" not in metadata
+    assert "1234" in metadata["note"]
 
 
-@pytest.mark.parametrize("name", EXPERIMENTAL)
-def test_experimental_helpers_still_call_the_device(name: str) -> None:
+@pytest.mark.parametrize("name", ACCESS_TOKEN_HELPERS)
+def test_access_token_helpers_call_the_device(name: str) -> None:
     """
-    Marking is documentation, not a block: the call still goes out.
-
-    Unlike a removed endpoint, this one works against firmware that has it.
+    Each helper reaches its own endpoint under /api/access/tokens.
     """
     import httpx2
 
