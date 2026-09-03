@@ -432,10 +432,16 @@ class SyncClientBase:
         else:
             headers["X-API-Token"] = token
 
+        # Kept so per-request preparation can fall back to it. Every request
+        # carries its own timeout, and a request-level value wins over the
+        # client's - so without this the constructor argument was set on the
+        # client and then overridden on every call, doing nothing.
+        self._timeout = _as_timeout(timeout)
+
         self.client = httpx2.Client(
             base_url=self.base_url,
             headers=headers or None,
-            timeout=_as_timeout(timeout),
+            timeout=self._timeout,
             transport=transport,
         )
 
@@ -531,7 +537,7 @@ class SyncClientBase:
             data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=timeout,
+            timeout=self._timeout if timeout is None else timeout,
         )
 
     def _request(
@@ -566,7 +572,7 @@ class SyncClientBase:
             data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=timeout,
+            timeout=self._timeout if timeout is None else timeout,
         )
         return self.execute_prepared_request(prepared)
 
@@ -602,7 +608,7 @@ class SyncClientBase:
             data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=timeout,
+            timeout=self._timeout if timeout is None else timeout,
             async_mode=False,
         )
 
@@ -706,10 +712,12 @@ class AsyncClientBase:
         else:
             headers["X-API-Token"] = token
 
+        self._timeout = _as_timeout(timeout)
+
         self.client = httpx2.AsyncClient(
             base_url=self.base_url,
             headers=headers or None,
-            timeout=_as_timeout(timeout),
+            timeout=self._timeout,
             transport=transport,
         )
 
@@ -805,7 +813,7 @@ class AsyncClientBase:
             data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=timeout,
+            timeout=self._timeout if timeout is None else timeout,
         )
 
     async def _request(
@@ -840,7 +848,7 @@ class AsyncClientBase:
             data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=timeout,
+            timeout=self._timeout if timeout is None else timeout,
         )
         return await self.execute_prepared_request(prepared)
 
@@ -877,7 +885,7 @@ class AsyncClientBase:
             data=data,
             expect_bytes=expect_bytes,
             allow_text=allow_text,
-            timeout=timeout,
+            timeout=self._timeout if timeout is None else timeout,
             async_mode=True,
         )
 

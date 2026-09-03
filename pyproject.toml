@@ -32,6 +32,11 @@ dependencies = [
   "websockets>=12",
   "zeroconf>=0.150",
 ]
+# For AiohttpTransport, which lets a host application lend this client its own
+# aiohttp session instead of opening a second connection pool.
+optional-dependencies.aiohttp = [
+  "aiohttp>=3.9",
+]
 optional-dependencies.docs = [
   "mkdocs>=1.6",
   "mkdocs-material>=9.5",
@@ -52,6 +57,7 @@ urls.Repository = "https://github.com/busy-app/busylib-py"
 # unrelated pull requests red: ruff 0.16 widened its default rule set, which
 # fails the whole repository including main.
 dev = [
+  "aiohttp>=3.9",
   "grpcio-tools>=1.74",
   "pillow>=12",
   "pre-commit>=3.8",
