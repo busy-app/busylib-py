@@ -10,10 +10,6 @@ logger = logging.getLogger(__name__)
 
 HttpAccessMode = Literal["disabled", "enabled", "key"]
 
-# Named once so the marker and the docstrings cannot drift apart, and so the
-# whole set can be swapped for a version floor when the firmware work ships.
-TOKENS_NOTE = "requires firmware from busy-app/busybar-firmware#886, not released yet"
-
 
 class AccessMixin(SyncClientBase):
     """
@@ -37,10 +33,10 @@ class AccessMixin(SyncClientBase):
         data = self._request("POST", "/api/access", params=params)
         return types.SuccessResponse.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens",
         method="GET",
-        note=TOKENS_NOTE,
     )
     def access_tokens_list(self) -> types.AccessTokensInfo:
         """
@@ -49,17 +45,17 @@ class AccessMixin(SyncClientBase):
         The secret itself is returned only when a token is minted, so every
         token here has `token` set to None.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("access_tokens_list")
         data = self._request("GET", "/api/access/tokens")
         return types.AccessTokensInfo.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens",
         method="POST",
-        note=TOKENS_NOTE,
     )
     def access_token_mint(self, name: str) -> types.AccessToken:
         """
@@ -68,41 +64,41 @@ class AccessMixin(SyncClientBase):
         This is the only time the device discloses the secret; it cannot be
         read back afterwards.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("access_token_mint name=%s", name)
         payload = types.AccessTokenMintRequest(name=name).model_dump()
         data = self._request("POST", "/api/access/tokens", json_payload=payload)
         return types.AccessToken.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens",
         method="DELETE",
-        note=TOKENS_NOTE,
     )
     def access_tokens_delete_all(self) -> types.SuccessResponse:
         """
         Revoke every access token via DELETE /api/access/tokens.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("access_tokens_delete_all")
         data = self._request("DELETE", "/api/access/tokens")
         return types.SuccessResponse.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens/{short_id}",
         method="DELETE",
-        note=TOKENS_NOTE,
     )
     def access_tokens_revoke(self, short_id: str) -> types.SuccessResponse:
         """
         Revoke one access token via DELETE /api/access/tokens/{short_id}.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("access_tokens_revoke short_id=%s", short_id)
         data = self._request("DELETE", f"/api/access/tokens/{short_id}")
@@ -131,10 +127,10 @@ class AsyncAccessMixin(AsyncClientBase):
         data = await self._request("POST", "/api/access", params=params)
         return types.SuccessResponse.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens",
         method="GET",
-        note=TOKENS_NOTE,
     )
     async def access_tokens_list(self) -> types.AccessTokensInfo:
         """
@@ -143,17 +139,17 @@ class AsyncAccessMixin(AsyncClientBase):
         The secret itself is returned only when a token is minted, so every
         token here has `token` set to None.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("async access_tokens_list")
         data = await self._request("GET", "/api/access/tokens")
         return types.AccessTokensInfo.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens",
         method="POST",
-        note=TOKENS_NOTE,
     )
     async def access_token_mint(self, name: str) -> types.AccessToken:
         """
@@ -162,41 +158,41 @@ class AsyncAccessMixin(AsyncClientBase):
         This is the only time the device discloses the secret; it cannot be
         read back afterwards.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("async access_token_mint name=%s", name)
         payload = types.AccessTokenMintRequest(name=name).model_dump()
         data = await self._request("POST", "/api/access/tokens", json_payload=payload)
         return types.AccessToken.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens",
         method="DELETE",
-        note=TOKENS_NOTE,
     )
     async def access_tokens_delete_all(self) -> types.SuccessResponse:
         """
         Revoke every access token via DELETE /api/access/tokens.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("async access_tokens_delete_all")
         data = await self._request("DELETE", "/api/access/tokens")
         return types.SuccessResponse.model_validate(data)
 
-    @versioning.experimental_endpoint(
+    @versioning.requires_openapi(
+        "27.5.0",
         path="/api/access/tokens/{short_id}",
         method="DELETE",
-        note=TOKENS_NOTE,
     )
     async def access_tokens_revoke(self, short_id: str) -> types.SuccessResponse:
         """
         Revoke one access token via DELETE /api/access/tokens/{short_id}.
 
-        Experimental: needs firmware from busy-app/busybar-firmware#886, which
-        is not released yet, so it answers 404 on every released firmware.
+        Added by busy-app/busybar-firmware#886 and served from OpenAPI
+        27.5.0, first released in firmware 1.2.3; earlier firmware 404s.
         """
         logger.info("async access_tokens_revoke short_id=%s", short_id)
         data = await self._request("DELETE", f"/api/access/tokens/{short_id}")
