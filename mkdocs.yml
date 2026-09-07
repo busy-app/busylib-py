@@ -74,6 +74,7 @@ nav:
   - Guides:
       - Connecting to a bar: guides/connecting.md
       - Drawing on the displays: guides/displays.md
+      - Sending notifications: guides/notifications.md
       - Assets and storage: guides/assets-and-storage.md
       - Reading device state: guides/device-state.md
       - Building a tool: guides/building-a-tool.md
