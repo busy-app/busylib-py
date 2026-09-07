@@ -17,9 +17,10 @@ updates:
 
   # .pre-commit-config.yaml. This used to say "pip" with the same directory as
   # the block above, which opened every Python update twice and left the hook
-  # revisions untouched. The linter versions here and in pyproject.toml's dev
-  # group have to move together - tests/test_tooling_pins.py enforces that -
-  # so expect a pair of pull requests to land as one.
+  # revisions untouched. Only pre-commit-hooks is pinned there now - ruff,
+  # pyproject-fmt and pyright run as local hooks off the pins in
+  # pyproject.toml - so a bump from either ecosystem stands on its own. They
+  # were pinned in both files before, and nothing could move both at once.
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
