@@ -33,6 +33,7 @@ which returns a `DisplayElements` model.
 | `font` | One name for both lines |
 | `duration` | Seconds before the elements expire |
 | `priority` | `PRIORITY_DEFAULT`, or `PRIORITY_INTERRUPT` to sit above a Busy session |
+| `sound` | A name from `STOCK_SOUNDS`, played with the drawing |
 | `application_name` | Owns the drawing, and is how `display_clear` finds it |
 
 A drawing loses to anything above it, and the device answers
@@ -120,18 +121,14 @@ for any other anchor:
 - with a right-hand `x` and the default width, the room is computed as the
   few pixels right of it, and the line scrolls through a window that narrow.
 
-Found on real hardware, where a right-aligned `CUSTOM` rendered as six lit
-pixels. Pass both `x` and `width` for any anchor other than the left one, as
-the example above does.
+Pass both `x` and `width` for any anchor other than the left one, as the
+example above does.
 
-## Backgrounds need firmware 24.3.0
+## Backgrounds need API 24.3.0
 
-A background colour is drawn as a filled rectangle, and that element enters
-the published API at 24.3.0 (firmware 1.0.0-rc). Below it there is no fill
-primitive at all, which is why older integrations faked a background by
-tiling a dense glyph across the panel.
-
-Rather than carry a second renderer, the library refuses:
+A background colour is drawn as a filled rectangle, which firmware below
+24.3.0 has no primitive for. Asking for one there raises rather than drawing
+something else:
 
 ```python
 from busylib.exceptions import BusyBarFeatureUnavailableError
@@ -170,16 +167,26 @@ print(sorted(notification.STOCK_SOUNDS))
 ['event', 'reminder', 'volume']
 ```
 
-A sound is played separately, through `audio_play`, with the drawing's own
-application name:
+Pass a sound name to `notify()` rather than playing it yourself - it is a
+second request, and it has to carry the same `application_name` as the
+drawing or the two belong to different owners on the device:
 
 ```python
-await bar.audio_play(
-    stock_path=notification.STOCK_SOUNDS["event"],
-    application_name="home_assistant",
-)
+await notify(bar, "Laundry done", icon="check", sound="event")
 ```
 
 Paths in both catalogues carry their sub-folder and extension. The flat
-`shared/<name>` form that the OpenAPI spec suggests does not resolve, and
-the device answers `400 Failed to decode image` for it.
+`shared/<name>` form that the OpenAPI spec suggests is refused.
+
+## Withdrawing a notification
+
+There is no clearing helper, because there is nothing to compose - a
+drawing is withdrawn by its owner:
+
+```python
+await bar.display_clear(application_name="home_assistant")
+```
+
+Most notifications do not need it: `duration` expires the elements on their
+own, and a short one is the usual way to replace a notification with
+nothing.

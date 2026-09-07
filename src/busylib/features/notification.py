@@ -31,11 +31,8 @@ from ..exceptions import BusyBarFeatureUnavailableError
 
 logger = logging.getLogger(__name__)
 
-# A filled rectangle is what a background colour is drawn with. It does not
-# exist in every firmware: the element appears in the published API from
-# 24.3.0 (firmware 1.0.0-rc) onwards and is absent at 23.3.0 and below,
-# where a background had to be faked by tiling a dense glyph across the
-# panel. Rather than carry that trick, callers are told plainly.
+# A background colour is drawn as a filled rectangle, which firmware below
+# this version has no primitive for.
 RECTANGLE_FILL_VERSION = "24.3.0"
 
 DEFAULT_FONT: types.DisplayFontName = "small"
@@ -111,10 +108,8 @@ class StockIcon:
     width: int
 
 
-# Icons shipped on the device, verified present under
-# /ext/apps_assets/shared/images. The path needs its sub-folder and its
-# extension: the flat "shared/<name>" form in the OpenAPI spec does not
-# resolve, and firmware answers 400 "Failed to decode image" for it.
+# Icons shipped on the device. The path needs its sub-folder and extension -
+# the flat "shared/<name>" form the OpenAPI spec suggests is refused.
 #
 # Widths differ - these are 5, 8 and 11px - so the text offset is computed
 # from the icon rather than assumed, or an icon and its text overlap.
@@ -406,11 +401,7 @@ def background_element(
     """
     Build the background fill, or None when no background was asked for.
 
-    Raises when the firmware cannot fill. A background colour is a filled
-    rectangle, and that element enters the published API at 24.3.0
-    (firmware 1.0.0-rc); below it there is none, which is why older
-    integrations faked one by tiling a dense glyph across the panel. This
-    library says so instead of carrying a second renderer.
+    Raises below `RECTANGLE_FILL_VERSION`, where the firmware cannot fill.
     """
     if spec.background_color is None:
         return None
@@ -549,6 +540,17 @@ class NotifyClient(Protocol):
         """
         ...
 
+    async def audio_play(
+        self,
+        *,
+        stock_path: str | None = None,
+        **request_kwargs: object,
+    ) -> types.SuccessResponse:
+        """
+        Play a built-in sound.
+        """
+        ...
+
 
 async def notify(
     client: NotifyClient,
@@ -560,22 +562,46 @@ async def notify(
     line_1_color: types.ColorInput | None = None,
     line_2_color: types.ColorInput | None = None,
     background_color: types.ColorInput | None = None,
+    sound: str | None = None,
     duration: int | None = None,
     priority: int = PRIORITY_DEFAULT,
     application_name: str = "busylib",
     template: Template | None = None,
 ) -> types.SuccessResponse:
     """
-    Lay out a notification and draw it on the bar.
+    Lay out a notification, draw it, and play its sound if it has one.
+
+    A notification with a sound is one intention, so `sound` belongs here
+    even though playing it is a second request - a caller composing this by
+    hand has to remember both, and to pass the same `application_name` to
+    each. Names come from `STOCK_SOUNDS`.
 
     The device version is taken from the client, so a caller cannot forget
     to pass it and silently lose the check that a feature the firmware lacks
     is refused rather than drawn wrong.
 
+    There is deliberately no clearing helper: a drawing is withdrawn with
+    `display_clear(application_name=...)`, which is already a single call to
+    a single endpoint, and wrapping it would only add a synonym.
+
     Callers that want to place elements themselves can use
     `build_notification` and `display_draw` separately, or skip both.
     """
-    logger.info("notify line_2=%s icon=%s font=%s", line_2 is not None, icon, font)
+    logger.info(
+        "notify line_2=%s icon=%s font=%s sound=%s",
+        line_2 is not None,
+        icon,
+        font,
+        sound,
+    )
+    stock_sound: str | None = None
+    if sound:
+        stock_sound = STOCK_SOUNDS.get(sound)
+        if stock_sound is None:
+            raise ValueError(
+                f"unknown sound {sound!r}; use one of {', '.join(sorted(STOCK_SOUNDS))}"
+            )
+
     elements = build_notification(
         line_1,
         line_2=line_2,
@@ -590,4 +616,9 @@ async def notify(
         device_api_version=client.device_api_version,
         template=template,
     )
-    return await client.display_draw(elements, application_name=application_name)
+    drawn = await client.display_draw(elements, application_name=application_name)
+    if stock_sound is not None:
+        await client.audio_play(
+            stock_path=stock_sound, application_name=application_name
+        )
+    return drawn

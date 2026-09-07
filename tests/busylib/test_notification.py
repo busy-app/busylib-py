@@ -242,6 +242,8 @@ class StubClient:
         self._version = device_api_version
         self.drawn: types.DisplayElements | None = None
         self.request_kwargs: dict[str, object] = {}
+        self.played: str | None = None
+        self.play_kwargs: dict[str, object] = {}
 
     @property
     def device_api_version(self) -> str | None:
@@ -255,6 +257,16 @@ class StubClient:
         assert isinstance(display_data, types.DisplayElements)
         self.drawn = display_data
         self.request_kwargs = request_kwargs
+        return types.SuccessResponse(result="OK")
+
+    async def audio_play(
+        self,
+        *,
+        stock_path: str | None = None,
+        **request_kwargs: object,
+    ) -> types.SuccessResponse:
+        self.played = stock_path
+        self.play_kwargs = request_kwargs
         return types.SuccessResponse(result="OK")
 
 
@@ -418,3 +430,44 @@ def test_a_line_scrolls_against_the_room_it_was_given() -> None:
     assert told.width is None, "it fits, so it must not scroll"
     assert told.scroll_rate is None
     assert told.x == right
+
+
+async def test_notify_plays_the_sound_with_the_same_application_name() -> None:
+    """
+    Sound and drawing arrive as one intention, owned by one application.
+
+    Playing it is a second request, and the application name has to match
+    the drawing's or the two belong to different owners on the device.
+    """
+    client = StubClient("27.7.0")
+
+    await notification.notify(
+        client, "Laundry", sound="event", application_name="home_assistant"
+    )
+
+    assert client.played == notification.STOCK_SOUNDS["event"]
+    assert client.play_kwargs["application_name"] == "home_assistant"
+
+
+async def test_notify_without_a_sound_plays_nothing() -> None:
+    """
+    The extra request only happens when a sound was asked for.
+    """
+    client = StubClient("27.7.0")
+
+    await notification.notify(client, "Laundry")
+
+    assert client.drawn is not None
+    assert client.played is None
+
+
+async def test_notify_refuses_an_unknown_sound_before_drawing() -> None:
+    """
+    A mistyped sound fails outright rather than drawing silently.
+    """
+    client = StubClient("27.7.0")
+
+    with pytest.raises(ValueError, match="unknown sound"):
+        await notification.notify(client, "Laundry", sound="fanfare")
+
+    assert client.drawn is None, "nothing should reach the device"
