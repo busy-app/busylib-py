@@ -65,7 +65,12 @@ def test_ffmpeg_is_asked_for_the_format_the_firmware_expects(
     back as noise on the device, which is not something a mock of `convert`
     would ever catch, so the argv is asserted rather than the effect.
     """
-    new_path, payload = audio.convert("alert.mp3", b"mp3-bytes")
+    result = audio.convert("alert.mp3", b"mp3-bytes")
+
+    # `convert` returns None for formats it declines; narrow before unpacking
+    # so a regression that stops converting fails here rather than at pyright.
+    assert result is not None
+    new_path, payload = result
 
     assert new_path == "alert.wav"
     assert payload == b"converted-pcm"
