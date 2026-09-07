@@ -328,14 +328,12 @@ def test_compatibility_metadata_matches_this_bar(bar) -> None:
     floor = metadata.get("version")
     assert floor, "access_tokens_list should declare a version floor"
 
-    reported = bar.version().api_semver
-    if not reported:
+    bar.version()  # populate the device version device_at_least() reads
+    supported = bar.device_at_least(floor)
+    if supported is None:
         pytest.skip("the bar does not report an API version")
 
-    def semver(value: str) -> tuple[int, ...]:
-        return tuple(int(part) for part in value.split(".")[:2])
-
-    if semver(reported) >= semver(floor):
+    if supported:
         assert bar.access_tokens_list() is not None, (
             f"device is at or above the declared floor {floor} but the "
             "endpoint did not answer"
