@@ -225,8 +225,12 @@ def build_notification(
     `version()` yet.
 
     >>> elements = build_notification("Laundry done", icon="check")
-    >>> [element.type for element in elements.elements]
-    ['image', 'text']
+    >>> len(elements.elements)
+    2
+    >>> elements.elements[0].type
+    'image'
+    >>> elements.elements[1].type
+    'text'
     """
     if line_2 and font not in TWO_LINE_FONTS:
         raise ValueError(
