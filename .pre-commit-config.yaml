@@ -1,22 +1,42 @@
+# The three linters run as local hooks on purpose, so their versions live in
+# exactly one place: the exact pins in pyproject.toml's dev group. Pinned
+# hook revisions here would be a second copy, and because the two files
+# belong to different dependabot ecosystems nothing could move both in one
+# pull request - every linter bump arrived as a pair that each failed on its
+# own and had to be consolidated by hand.
+#
+# `uv run` resolves each tool from the project environment, which is the same
+# environment CI installs, so a hook and the CI lint job agree by
+# construction rather than by a test that compares two files.
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.6
+  - repo: local
     hooks:
       - id: ruff-check
-        args: ["--fix"]
+        name: ruff check
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
         exclude: ^src/busylib/state_stream_proto/.*_pb2\.py$
       - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
         exclude: ^src/busylib/state_stream_proto/.*_pb2\.py$
-  - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: v2.29.3
-    hooks:
       - id: pyproject-fmt
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.411
-    hooks:
+        name: pyproject-fmt
+        entry: uv run pyproject-fmt
+        language: system
+        files: ^pyproject\.toml$
+      # Checked over the whole scope rather than the staged files, matching
+      # what the CI lint job does: per-file type checking misses errors that
+      # only appear across module boundaries.
       - id: pyright
-        files: ^(src/busylib/|tests/)
-        args: ["--pythonpath=.venv/bin/python"]
+        name: pyright
+        entry: uv run pyright src/busylib tests
+        language: system
+        types: [python]
+        pass_filenames: false
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
