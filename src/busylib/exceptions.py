@@ -249,6 +249,34 @@ class BusyBarRemovedEndpointError(BusyBarError):
         )
 
 
+class BusyBarFeatureUnavailableError(BusyBarError):
+    """
+    Raised when the firmware on this bar cannot do what was asked.
+
+    Distinct from `BusyBarRemovedEndpointError`, which is about something
+    withdrawn: here updating the firmware is exactly the fix. Distinct from
+    `BusyBarAPIVersionError` too - that one is about the library and the
+    device disagreeing overall, while this is one feature being younger than
+    the device in front of you.
+    """
+
+    def __init__(
+        self,
+        *,
+        feature: str,
+        required_version: str,
+        device_version: str | None = None,
+    ) -> None:
+        self.feature = feature
+        self.required_version = required_version
+        self.device_version = device_version
+        running = f" but this bar reports {device_version}" if device_version else ""
+        super().__init__(
+            f"{feature} needs device API {required_version} or newer"
+            f"{running}; please update the firmware."
+        )
+
+
 class BusyBarWebSocketError(BusyBarError):
     """
     Raised when WebSocket connection or stream processing fails.

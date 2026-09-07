@@ -9,6 +9,7 @@ from typing import Any, cast
 from typing_extensions import Unpack
 
 from .. import display, exceptions, types
+from .. import notification
 from ..frames import Frame
 from .base import AsyncClientBase, RequestKwargs, SyncClientBase
 
@@ -303,6 +304,52 @@ class DisplayMixin(SyncClientBase):
         """
         return Frame.from_screen(self.screen(display_id), display_id)
 
+    def display_notify(
+        self,
+        line_1: str,
+        *,
+        line_2: str | None = None,
+        icon: str | None = None,
+        font: types.DisplayFontName = notification.DEFAULT_FONT,
+        line_1_color: types.ColorInput | None = None,
+        line_2_color: types.ColorInput | None = None,
+        background_color: types.ColorInput | None = None,
+        duration: int | None = None,
+        priority: int = notification.PRIORITY_DEFAULT,
+        **request_kwargs: Unpack[RequestKwargs],
+    ) -> types.SuccessResponse:
+        """
+        Draw a laid-out notification on the front display.
+
+        The layout - which of four templates, where the text sits for this
+        font, how far an icon pushes it right - is decided by
+        `busylib.features.notification`, and the device version this client
+        already knows is passed along so a feature the firmware lacks is
+        refused rather than drawn wrong. Callers that want to place elements
+        themselves still have `display_draw`.
+        """
+        logger.info(
+            "display_notify line_2=%s icon=%s font=%s",
+            line_2 is not None,
+            icon,
+            font,
+        )
+        application_name = request_kwargs.get("application_name") or "busylib"
+        elements = notification.build_notification(
+            line_1,
+            line_2=line_2,
+            icon=icon,
+            font=font,
+            line_1_color=line_1_color,
+            line_2_color=line_2_color,
+            background_color=background_color,
+            duration=duration,
+            priority=priority,
+            application_name=application_name,
+            device_api_version=self.device_api_version,
+        )
+        return self.display_draw(elements, **request_kwargs)
+
 
 class AsyncDisplayMixin(AsyncClientBase):
     """
@@ -505,3 +552,49 @@ class AsyncDisplayMixin(AsyncClientBase):
         the layout themselves.
         """
         return Frame.from_screen(await self.screen(display_id), display_id)
+
+    async def display_notify(
+        self,
+        line_1: str,
+        *,
+        line_2: str | None = None,
+        icon: str | None = None,
+        font: types.DisplayFontName = notification.DEFAULT_FONT,
+        line_1_color: types.ColorInput | None = None,
+        line_2_color: types.ColorInput | None = None,
+        background_color: types.ColorInput | None = None,
+        duration: int | None = None,
+        priority: int = notification.PRIORITY_DEFAULT,
+        **request_kwargs: Unpack[RequestKwargs],
+    ) -> types.SuccessResponse:
+        """
+        Draw a laid-out notification on the front display.
+
+        The layout - which of four templates, where the text sits for this
+        font, how far an icon pushes it right - is decided by
+        `busylib.features.notification`, and the device version this client
+        already knows is passed along so a feature the firmware lacks is
+        refused rather than drawn wrong. Callers that want to place elements
+        themselves still have `display_draw`.
+        """
+        logger.info(
+            "async display_notify line_2=%s icon=%s font=%s",
+            line_2 is not None,
+            icon,
+            font,
+        )
+        application_name = request_kwargs.get("application_name") or "busylib"
+        elements = notification.build_notification(
+            line_1,
+            line_2=line_2,
+            icon=icon,
+            font=font,
+            line_1_color=line_1_color,
+            line_2_color=line_2_color,
+            background_color=background_color,
+            duration=duration,
+            priority=priority,
+            application_name=application_name,
+            device_api_version=self.device_api_version,
+        )
+        return await self.display_draw(elements, **request_kwargs)
