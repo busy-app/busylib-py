@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from .. import types, versioning
-from ..display import FRONT_DISPLAY
+from ..display import FRONT_DISPLAY, DisplaySpec
 from ..exceptions import BusyBarFeatureUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -155,8 +155,11 @@ def _scroll(text: str, available: int) -> tuple[int | None, int | None]:
     """
     Decide the (width, scroll_rate) that make a line scroll, or neither.
 
-    Scrolling is the text element's own feature, so this only chooses when
-    to switch it on.
+    Scrolling is the text element's own feature, so this only decides when
+    to switch it on. The threshold is a character count rather than a
+    measured width: glyph widths differ per font and the device does not
+    report them, so a short line staying still matters more than being
+    exact at the boundary.
     """
     if available <= 0:
         return None, None
@@ -166,33 +169,268 @@ def _scroll(text: str, available: int) -> tuple[int | None, int | None]:
     return available, SCROLL_RATE
 
 
-def _line(
-    element_id: str,
-    text: str,
+@dataclass(frozen=True)
+class NotificationSpec:
+    """
+    Everything a template needs, already resolved and validated.
+
+    A template receives one of these rather than raw keyword arguments, so a
+    custom template gets the icon already looked up, the geometry of the
+    panel it is drawing on, and helpers for the parts that are easy to get
+    wrong - text placement past an icon, and scrolling long lines.
+    """
+
+    line_1: str
+    line_2: str | None = None
+    icon: StockIcon | None = None
+    font: types.DisplayFontName = DEFAULT_FONT
+    line_1_color: types.ColorInput | None = None
+    line_2_color: types.ColorInput | None = None
+    background_color: types.ColorInput | None = None
+    duration: int | None = None
+    display: DisplaySpec = FRONT_DISPLAY
+
+    @property
+    def text_x(self) -> int:
+        """
+        Where text starts: past the icon, or at the plain left margin.
+
+        The shipped icons are 5, 8 and 11px wide, so this is computed from
+        the icon rather than fixed - a constant offset would overlap the
+        narrow ones and leave a gap after the wide ones.
+        """
+        if self.icon is None:
+            return TEXT_MARGIN
+        return self.icon.width + ICON_TEXT_GAP
+
+    @property
+    def available_width(self) -> int:
+        """
+        How much width is left for text after the icon.
+        """
+        return self.display.width - self.text_x
+
+    def text(
+        self,
+        element_id: str,
+        text: str,
+        *,
+        y: int,
+        align: str,
+        color: types.ColorInput | None = None,
+        x: int | None = None,
+        width: int | None = None,
+    ) -> types.TextElement:
+        """
+        Build a text element at `y`, scrolled if it cannot fit.
+
+        `x` defaults to `text_x`, which is where a left-anchored line starts
+        once the icon has had its share. A template anchoring to the right or
+        the centre has to say where instead: with `mid_right` and the default
+        x the line's right edge lands at the left margin, and the text runs
+        off the panel.
+
+        `width` is how much room the line has, and it is what scrolling is
+        decided against. It defaults to everything right of `x`, which is
+        only the room available when the line is anchored left - for any
+        other anchor, pass it. Getting this wrong does not misplace the
+        text, it scrolls it through a window a few pixels wide.
+        """
+        origin = self.text_x if x is None else x
+        room = self.display.width - origin if width is None else width
+        width, scroll_rate = _scroll(text, room)
+        return types.TextElement(
+            id=element_id,
+            text=text,
+            font=self.font,
+            color=color,
+            x=origin,
+            y=y,
+            align=align,  # type: ignore[arg-type]
+            timeout=self.duration,
+            display=self.display.name,
+            width=width,
+            scroll_rate=scroll_rate,
+        )
+
+    def icon_element(self, element_id: str = _ICON_ID) -> types.ImageElement | None:
+        """
+        Build the icon element, or None when there is no icon.
+        """
+        if self.icon is None:
+            return None
+        return types.ImageElement(
+            id=element_id,
+            stock_path=self.icon.path,
+            x=0,
+            y=self.display.height // 2,
+            align="mid_left",
+            timeout=self.duration,
+            display=self.display.name,
+        )
+
+
+class Template(Protocol):
+    """
+    A way of arranging a notification on the panel.
+
+    The built-in templates are ordinary implementations of this, so writing
+    one is the same work: declare which fonts it can place, say when it
+    applies, and return the elements. Everything version-dependent stays
+    outside - the background fill is added by `build_notification`, which
+    knows what the firmware can draw - so a template is only about layout.
+    """
+
+    @property
+    def name(self) -> str:
+        """
+        Identifies the template in errors and logs.
+        """
+        ...
+
+    @property
+    def fonts(self) -> tuple[types.DisplayFontName, ...]:
+        """
+        The fonts this template can place without clipping.
+        """
+        ...
+
+    def matches(self, spec: NotificationSpec) -> bool:
+        """
+        Whether this template suits the notification, for auto-selection.
+        """
+        ...
+
+    def render(self, spec: NotificationSpec) -> list[types.DisplayElement]:
+        """
+        Lay the notification out as display elements.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class OneLineTemplate:
+    """
+    A single line centred vertically, with the icon to its left.
+    """
+
+    name: str = "one_line"
+    fonts: tuple[types.DisplayFontName, ...] = ONE_LINE_FONTS
+
+    def matches(self, spec: NotificationSpec) -> bool:
+        return not spec.line_2
+
+    def render(self, spec: NotificationSpec) -> list[types.DisplayElement]:
+        elements: list[types.DisplayElement] = []
+        icon = spec.icon_element()
+        if icon is not None:
+            elements.append(icon)
+        elements.append(
+            spec.text(
+                _LINE_1_ID,
+                spec.line_1,
+                y=ONE_LINE_Y[spec.font],
+                align="mid_left",
+                color=spec.line_1_color,
+            )
+        )
+        return elements
+
+
+@dataclass(frozen=True)
+class TwoLineTemplate:
+    """
+    Two lines anchored to the top and bottom edges, icon to their left.
+    """
+
+    name: str = "two_lines"
+    fonts: tuple[types.DisplayFontName, ...] = TWO_LINE_FONTS
+
+    def matches(self, spec: NotificationSpec) -> bool:
+        return bool(spec.line_2)
+
+    def render(self, spec: NotificationSpec) -> list[types.DisplayElement]:
+        assert spec.line_2 is not None  # guaranteed by matches()
+        top_y, bottom_y = TWO_LINE_Y[spec.font]
+        elements: list[types.DisplayElement] = []
+        icon = spec.icon_element()
+        if icon is not None:
+            elements.append(icon)
+        elements.append(
+            spec.text(
+                _LINE_1_ID,
+                spec.line_1,
+                y=top_y,
+                align="top_left",
+                color=spec.line_1_color,
+            )
+        )
+        elements.append(
+            spec.text(
+                _LINE_2_ID,
+                spec.line_2,
+                y=bottom_y,
+                align="bottom_left",
+                color=spec.line_2_color,
+            )
+        )
+        return elements
+
+
+ONE_LINE: Template = OneLineTemplate()
+TWO_LINES: Template = TwoLineTemplate()
+
+# Consulted in order, so the more specific template gets first refusal.
+# There are two templates rather than one per layout: an icon only changes
+# where text starts, which the spec works out, so "with an icon" is not a
+# separate arrangement.
+BUILT_IN_TEMPLATES: tuple[Template, ...] = (TWO_LINES, ONE_LINE)
+
+
+def select_template(spec: NotificationSpec) -> Template:
+    """
+    Pick the built-in template that suits this notification.
+    """
+    for template in BUILT_IN_TEMPLATES:
+        if template.matches(spec):
+            return template
+    raise ValueError("no built-in template matches this notification")
+
+
+def background_element(
+    spec: NotificationSpec,
     *,
-    font: types.DisplayFontName,
-    color: types.ColorInput | None,
-    x: int,
-    y: int,
-    align: str,
-    duration: int | None,
-) -> types.TextElement:
+    device_api_version: str | None = None,
+    element_id: str = _BACKGROUND_ID,
+) -> types.RectangleElement | None:
     """
-    Build one line of a notification, scrolling it if it cannot fit.
+    Build the background fill, or None when no background was asked for.
+
+    Raises when the firmware cannot fill. A background colour is a filled
+    rectangle, and that element enters the published API at 24.3.0
+    (firmware 1.0.0-rc); below it there is none, which is why older
+    integrations faked one by tiling a dense glyph across the panel. This
+    library says so instead of carrying a second renderer.
     """
-    width, scroll_rate = _scroll(text, FRONT_DISPLAY.width - x)
-    return types.TextElement(
+    if spec.background_color is None:
+        return None
+    if versioning.at_least(device_api_version, RECTANGLE_FILL_VERSION) is False:
+        raise BusyBarFeatureUnavailableError(
+            feature="background_color",
+            required_version=RECTANGLE_FILL_VERSION,
+            device_version=device_api_version,
+        )
+    return types.RectangleElement(
         id=element_id,
-        text=text,
-        font=font,
-        color=color,
-        x=x,
-        y=y,
-        align=align,  # type: ignore[arg-type]
-        timeout=duration,
-        display=types.DisplayName.FRONT,
-        width=width,
-        scroll_rate=scroll_rate,
+        x=0,
+        y=0,
+        width=spec.display.width,
+        height=spec.display.height,
+        fill="solid",
+        fill_colors=[spec.background_color],
+        border_width=0,
+        timeout=spec.duration,
+        display=spec.display.name,
     )
 
 
@@ -209,20 +447,25 @@ def build_notification(
     priority: int = PRIORITY_DEFAULT,
     application_name: str = "busylib",
     device_api_version: str | None = None,
+    template: Template | None = None,
+    display: DisplaySpec = FRONT_DISPLAY,
 ) -> types.DisplayElements:
     """
-    Lay out a notification for the front display.
+    Lay out a notification, with a built-in template or one of your own.
 
-    Which of four layouts is used follows from the arguments - one line, one
-    line with an icon, two lines, two lines with an icon - so a caller never
-    supplies coordinates. On a 72x16 panel a wrong offset silently clips the
-    text, which is the whole reason this is not left to callers.
+    Without `template`, the built-in that suits the arguments is chosen -
+    two lines if a second was given, otherwise one. Pass `template` to use
+    your own arrangement; it is handed the same `NotificationSpec` the
+    built-ins get, so it does not have to redo icon lookup, text placement
+    or scrolling.
 
-    `device_api_version` is what the bar reports; pass it so a feature the
-    firmware lacks is refused up front instead of drawing something wrong.
-    `None` means "unknown", and the layout then assumes a current device -
-    guessing "old" would degrade every caller that simply has not called
-    `version()` yet.
+    The background fill is added here rather than by the template, because
+    whether the firmware can fill at all depends on its version, and that is
+    exactly the part a caller should not have to know.
+
+    `device_api_version` is what the bar reports. `None` means "unknown",
+    and a current device is then assumed - guessing "old" would disable the
+    feature for every caller that has not called `version()` yet.
 
     >>> elements = build_notification("Laundry done", icon="check")
     >>> len(elements.elements)
@@ -232,16 +475,6 @@ def build_notification(
     >>> elements.elements[1].type
     'text'
     """
-    if line_2 and font not in TWO_LINE_FONTS:
-        raise ValueError(
-            f"font {font!r} is too tall for two lines; use one of "
-            f"{', '.join(TWO_LINE_FONTS)}, or send a single line"
-        )
-    if font not in ONE_LINE_FONTS:
-        raise ValueError(
-            f"unknown font {font!r}; use one of {', '.join(ONE_LINE_FONTS)}"
-        )
-
     resolved_icon: StockIcon | None = None
     if icon:
         resolved_icon = STOCK_ICONS.get(icon)
@@ -250,84 +483,38 @@ def build_notification(
                 f"unknown icon {icon!r}; use one of {', '.join(sorted(STOCK_ICONS))}"
             )
 
+    spec = NotificationSpec(
+        line_1=line_1,
+        line_2=line_2,
+        icon=resolved_icon,
+        font=font,
+        line_1_color=line_1_color,
+        line_2_color=line_2_color,
+        background_color=background_color,
+        duration=duration,
+        display=display,
+    )
+
+    # An unrecognised font and a font the template cannot place are
+    # different mistakes, and the second message would send someone hunting
+    # for a template problem when they simply mistyped.
+    if font not in ONE_LINE_FONTS:
+        raise ValueError(
+            f"unknown font {font!r}; use one of {', '.join(ONE_LINE_FONTS)}"
+        )
+
+    chosen = template if template is not None else select_template(spec)
+    if font not in chosen.fonts:
+        raise ValueError(
+            f"font {font!r} does not fit the {chosen.name!r} template; use one of "
+            f"{', '.join(chosen.fonts)}"
+        )
+
     elements: list[types.DisplayElement] = []
-
-    if background_color is not None:
-        if versioning.at_least(device_api_version, RECTANGLE_FILL_VERSION) is False:
-            raise BusyBarFeatureUnavailableError(
-                feature="background_color",
-                required_version=RECTANGLE_FILL_VERSION,
-                device_version=device_api_version,
-            )
-        elements.append(
-            types.RectangleElement(
-                id=_BACKGROUND_ID,
-                x=0,
-                y=0,
-                width=FRONT_DISPLAY.width,
-                height=FRONT_DISPLAY.height,
-                fill="solid",
-                fill_colors=[background_color],
-                border_width=0,
-                timeout=duration,
-                display=types.DisplayName.FRONT,
-            )
-        )
-
-    text_x = TEXT_MARGIN
-    if resolved_icon is not None:
-        text_x = resolved_icon.width + ICON_TEXT_GAP
-        elements.append(
-            types.ImageElement(
-                id=_ICON_ID,
-                stock_path=resolved_icon.path,
-                x=0,
-                y=FRONT_DISPLAY.height // 2,
-                align="mid_left",
-                timeout=duration,
-                display=types.DisplayName.FRONT,
-            )
-        )
-
-    if line_2:
-        top_y, bottom_y = TWO_LINE_Y[font]
-        elements.append(
-            _line(
-                _LINE_1_ID,
-                line_1,
-                font=font,
-                color=line_1_color,
-                x=text_x,
-                y=top_y,
-                align="top_left",
-                duration=duration,
-            )
-        )
-        elements.append(
-            _line(
-                _LINE_2_ID,
-                line_2,
-                font=font,
-                color=line_2_color,
-                x=text_x,
-                y=bottom_y,
-                align="bottom_left",
-                duration=duration,
-            )
-        )
-    else:
-        elements.append(
-            _line(
-                _LINE_1_ID,
-                line_1,
-                font=font,
-                color=line_1_color,
-                x=text_x,
-                y=ONE_LINE_Y[font],
-                align="mid_left",
-                duration=duration,
-            )
-        )
+    background = background_element(spec, device_api_version=device_api_version)
+    if background is not None:
+        elements.append(background)
+    elements.extend(chosen.render(spec))
 
     return types.DisplayElements(
         application_name=application_name,
@@ -376,6 +563,7 @@ async def notify(
     duration: int | None = None,
     priority: int = PRIORITY_DEFAULT,
     application_name: str = "busylib",
+    template: Template | None = None,
 ) -> types.SuccessResponse:
     """
     Lay out a notification and draw it on the bar.
@@ -400,5 +588,6 @@ async def notify(
         priority=priority,
         application_name=application_name,
         device_api_version=client.device_api_version,
+        template=template,
     )
     return await client.display_draw(elements, application_name=application_name)

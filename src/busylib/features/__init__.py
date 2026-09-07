@@ -7,7 +7,14 @@ from .dashboard import (
     apply_state_stream_update,
     collect_device_snapshot,
 )
-from .notification import build_notification, notify
+from .notification import (
+    BUILT_IN_TEMPLATES,
+    NotificationSpec,
+    Template,
+    build_notification,
+    notify,
+    select_template,
+)
 
 __all__ = [
     "DeviceSnapshot",
@@ -17,4 +24,8 @@ __all__ = [
     "sync_app_assets",
     "build_notification",
     "notify",
+    "BUILT_IN_TEMPLATES",
+    "NotificationSpec",
+    "Template",
+    "select_template",
 ]

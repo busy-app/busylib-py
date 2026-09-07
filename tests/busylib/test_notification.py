@@ -104,7 +104,7 @@ def test_tall_fonts_are_refused_for_two_lines() -> None:
     for font in ("large", "extra_large"):
         assert font in notification.ONE_LINE_FONTS
         assert font not in notification.TWO_LINE_FONTS
-        with pytest.raises(ValueError, match="too tall for two lines"):
+        with pytest.raises(ValueError, match="does not fit the 'two_lines' template"):
             notification.build_notification("one", line_2="two", font=font)
 
 
@@ -294,3 +294,127 @@ async def test_notify_takes_the_device_version_from_the_client() -> None:
     current = StubClient("27.7.0")
     await notification.notify(current, "hi", background_color=[0, 0, 90])
     assert current.drawn is not None
+
+
+class CentredTemplate:
+    """
+    A user-written template: one line, centred, ignoring any icon.
+
+    Written the way the docs describe, to prove the same shape works from
+    outside the library.
+    """
+
+    name = "centred"
+    fonts = ("small", "bold")
+
+    def matches(self, spec: notification.NotificationSpec) -> bool:
+        return True
+
+    def render(self, spec: notification.NotificationSpec) -> list[types.DisplayElement]:
+        return [spec.text("1", spec.line_1, y=8, align="center")]
+
+
+def test_a_custom_template_replaces_the_built_in_choice() -> None:
+    """
+    A template passed in is used instead of the auto-selected one.
+    """
+    elements = notification.build_notification(
+        "hello", template=CentredTemplate()
+    ).elements
+
+    assert len(elements) == 1
+    assert elements[0].align == "center"
+
+
+def test_a_custom_template_gets_the_resolved_icon_and_geometry() -> None:
+    """
+    The spec hands a template the work it should not repeat.
+
+    Icon lookup and the text offset past it are the parts that are easy to
+    get wrong, so they arrive already done - a template that wants the icon
+    only has to ask for the element.
+    """
+    seen: list[notification.NotificationSpec] = []
+
+    class Recording(CentredTemplate):
+        def render(
+            self, spec: notification.NotificationSpec
+        ) -> list[types.DisplayElement]:
+            seen.append(spec)
+            return super().render(spec)
+
+    notification.build_notification("hello", icon="start", template=Recording())
+
+    spec = seen[0]
+    assert spec.icon is not None
+    assert spec.icon.width == 11, "the 11px icon, resolved from its name"
+    assert spec.text_x == 11 + notification.ICON_TEXT_GAP
+    assert spec.available_width == spec.display.width - spec.text_x
+    assert spec.icon_element() is not None
+
+
+def test_a_custom_template_declares_which_fonts_it_can_place() -> None:
+    """
+    The font check applies to a custom template on its own terms.
+    """
+    notification.build_notification("hi", font="bold", template=CentredTemplate())
+
+    with pytest.raises(ValueError, match="does not fit the 'centred' template"):
+        notification.build_notification("hi", font="tiny", template=CentredTemplate())
+
+
+def test_the_background_is_added_for_a_custom_template_too() -> None:
+    """
+    A template never has to know what the firmware can fill.
+
+    The version-gated part stays outside the template, so a user-written one
+    cannot forget it and draw a background on firmware without a fill.
+    """
+    elements = notification.build_notification(
+        "hi",
+        background_color=[0, 0, 90],
+        template=CentredTemplate(),
+        device_api_version="27.7.0",
+    ).elements
+
+    assert [element.type for element in elements] == ["rectangle", "text"]
+
+    with pytest.raises(BusyBarFeatureUnavailableError):
+        notification.build_notification(
+            "hi",
+            background_color=[0, 0, 90],
+            template=CentredTemplate(),
+            device_api_version="23.3.0",
+        )
+
+
+def test_select_template_prefers_the_more_specific_arrangement() -> None:
+    """
+    Two lines win over one when a second line was given.
+    """
+    one = notification.NotificationSpec(line_1="a")
+    two = notification.NotificationSpec(line_1="a", line_2="b")
+
+    assert notification.select_template(one).name == "one_line"
+    assert notification.select_template(two).name == "two_lines"
+
+
+def test_a_line_scrolls_against_the_room_it_was_given() -> None:
+    """
+    The scroll window follows `width`, not the space right of `x`.
+
+    Both defaults assume a left-anchored line. A right-anchored template
+    that takes them gets a line scrolling through a two-pixel window - found
+    on real hardware, where "CUSTOM" rendered as six lit pixels.
+    """
+    spec = notification.NotificationSpec(line_1="CUSTOM")
+    right = spec.display.width - 2
+
+    naive = spec.text("1", "CUSTOM", y=8, align="mid_right", x=right)
+    assert naive.width == 2, "the inferred room right of x is tiny"
+    assert naive.scroll_rate == notification.SCROLL_RATE
+
+    told = spec.text("1", "CUSTOM", y=8, align="mid_right", x=right, width=right)
+    assert told.width is None, "it fits, so it must not scroll"
+    assert told.scroll_rate is None
+    assert told.x == right
