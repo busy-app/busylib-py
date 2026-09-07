@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from busylib import notification, types
+from busylib import types
+from busylib.features import notification
 from busylib.display import FRONT_DISPLAY
 from busylib.exceptions import BusyBarFeatureUnavailableError
 
@@ -230,3 +231,66 @@ def test_the_priorities_sit_where_the_device_arbitrates() -> None:
     assert notification.build_notification("hi").priority == (
         notification.PRIORITY_DEFAULT
     )
+
+
+class StubClient:
+    """
+    Records what `notify` sends, standing in for a real client.
+    """
+
+    def __init__(self, device_api_version: str | None) -> None:
+        self._version = device_api_version
+        self.drawn: types.DisplayElements | None = None
+        self.request_kwargs: dict[str, object] = {}
+
+    @property
+    def device_api_version(self) -> str | None:
+        return self._version
+
+    async def display_draw(
+        self,
+        display_data: types.DisplayElements | dict[str, object],
+        **request_kwargs: object,
+    ) -> types.SuccessResponse:
+        assert isinstance(display_data, types.DisplayElements)
+        self.drawn = display_data
+        self.request_kwargs = request_kwargs
+        return types.SuccessResponse(result="OK")
+
+
+async def test_notify_draws_what_the_layout_produced() -> None:
+    """
+    The helper composes; it does not reimplement the layout.
+    """
+    client = StubClient("27.7.0")
+
+    result = await notification.notify(
+        client, "Laundry", icon="check", application_name="home_assistant"
+    )
+
+    assert result.result == "OK"
+    assert client.drawn is not None
+    assert [element.type for element in client.drawn.elements] == ["image", "text"]
+    assert client.drawn.application_name == "home_assistant"
+    assert client.request_kwargs["application_name"] == "home_assistant"
+
+
+async def test_notify_takes_the_device_version_from_the_client() -> None:
+    """
+    The version check cannot be forgotten by the caller.
+
+    This is the reason the helper exists at all rather than leaving callers
+    to call `build_notification` themselves: a caller who forgets to pass
+    the version loses the guard silently, and draws a background on
+    firmware that cannot fill.
+    """
+    old = StubClient("23.3.0")
+
+    with pytest.raises(BusyBarFeatureUnavailableError):
+        await notification.notify(old, "hi", background_color=[0, 0, 90])
+
+    assert old.drawn is None, "nothing should reach the device"
+
+    current = StubClient("27.7.0")
+    await notification.notify(current, "hi", background_color=[0, 0, 90])
+    assert current.drawn is not None

@@ -7,6 +7,7 @@ from .dashboard import (
     apply_state_stream_update,
     collect_device_snapshot,
 )
+from .notification import build_notification, notify
 
 __all__ = [
     "DeviceSnapshot",
@@ -14,4 +15,6 @@ __all__ = [
     "collect_device_snapshot",
     "apply_state_stream_update",
     "sync_app_assets",
+    "build_notification",
+    "notify",
 ]

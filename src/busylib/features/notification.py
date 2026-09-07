@@ -9,6 +9,11 @@ caller: a Home Assistant integration, a script and a dashboard would
 otherwise each rediscover the same offsets, and each get them subtly wrong
 on a bar running different firmware.
 
+This is a composed helper, not an endpoint: `notify()` takes a client and
+ends up calling `display_draw`, which is the one-to-one wrapper around
+POST /api/display/draw. Keeping it out of the client mixins keeps those
+readable as the firmware API and nothing else.
+
 The vertical offsets below were calibrated on real hardware. They are not
 derivable from the font names: the draw fonts have different glyph metrics
 and baselines, so the same anchor sits a pixel off for some of them.
@@ -18,10 +23,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Protocol
 
-from . import types, versioning
-from .display import FRONT_DISPLAY
-from .exceptions import BusyBarFeatureUnavailableError
+from .. import types, versioning
+from ..display import FRONT_DISPLAY
+from ..exceptions import BusyBarFeatureUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -324,3 +330,71 @@ def build_notification(
         priority=priority,
         elements=elements,
     )
+
+
+class NotifyClient(Protocol):
+    """
+    The client surface a notification needs.
+
+    Narrow on purpose: a Protocol rather than the concrete client keeps this
+    module out of the import cycle the client would otherwise create, and
+    makes the helper testable with a stub.
+    """
+
+    @property
+    def device_api_version(self) -> str | None:
+        """
+        The API version the bar reported, or None if it has not been asked.
+        """
+        ...
+
+    async def display_draw(
+        self,
+        display_data: types.DisplayElements | dict[str, object],
+        **request_kwargs: object,
+    ) -> types.SuccessResponse:
+        """
+        Send elements to the display.
+        """
+        ...
+
+
+async def notify(
+    client: NotifyClient,
+    line_1: str,
+    *,
+    line_2: str | None = None,
+    icon: str | None = None,
+    font: types.DisplayFontName = DEFAULT_FONT,
+    line_1_color: types.ColorInput | None = None,
+    line_2_color: types.ColorInput | None = None,
+    background_color: types.ColorInput | None = None,
+    duration: int | None = None,
+    priority: int = PRIORITY_DEFAULT,
+    application_name: str = "busylib",
+) -> types.SuccessResponse:
+    """
+    Lay out a notification and draw it on the bar.
+
+    The device version is taken from the client, so a caller cannot forget
+    to pass it and silently lose the check that a feature the firmware lacks
+    is refused rather than drawn wrong.
+
+    Callers that want to place elements themselves can use
+    `build_notification` and `display_draw` separately, or skip both.
+    """
+    logger.info("notify line_2=%s icon=%s font=%s", line_2 is not None, icon, font)
+    elements = build_notification(
+        line_1,
+        line_2=line_2,
+        icon=icon,
+        font=font,
+        line_1_color=line_1_color,
+        line_2_color=line_2_color,
+        background_color=background_color,
+        duration=duration,
+        priority=priority,
+        application_name=application_name,
+        device_api_version=client.device_api_version,
+    )
+    return await client.display_draw(elements, application_name=application_name)
