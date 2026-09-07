@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
-import shutil
+import subprocess
 import re
 import wave
 import zlib
@@ -115,10 +115,6 @@ def sample_files(tmp_path: Path) -> Path:
     return tmp_path
 
 
-@pytest.mark.skipif(
-    shutil.which("ffmpeg") is None,
-    reason="the tutorial converts audio, which requires ffmpeg",
-)
 def test_readme_examples_run_without_warnings(
     readme_blocks: list[str],
     sample_files: Path,
@@ -131,7 +127,20 @@ def test_readme_examples_run_without_warnings(
     This is what keeps the documented examples honest: an out-of-bounds
     coordinate or a skipped media conversion shows up as a busylib warning,
     which is exactly how the previous examples were broken.
+
+    The audio tutorial shells out to ffmpeg, which is faked here rather than
+    installed: whether the command is right is asserted in
+    tests/busylib/converter/test_audio.py, and requiring the binary meant
+    every CI job installed it from apt and broke whenever an unrelated
+    repository on the runner image had a stale index.
     """
+
+    def fake_ffmpeg(cmd, **kwargs):
+        Path(cmd[-1]).write_bytes(b"\x00\x00" * 800)
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_ffmpeg)
+
     transport = httpx2.MockTransport(_responder)
     original_init = BusyBar.__init__
 
