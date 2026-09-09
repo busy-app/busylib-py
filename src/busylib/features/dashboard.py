@@ -247,13 +247,23 @@ def apply_state_stream_update(
             connected = wifi.get("connected")
             disconnected = wifi.get("disconnected")
             if isinstance(connected, dict):
-                state_value = types.WifiState.CONNECTED
+                ssid = connected.get("ssid")
+                # A connection update carries the radio's side of the
+                # story and nothing else, so the security method and the
+                # address - which only the HTTP status reports - would be
+                # dropped on the first update after startup. They are
+                # still true while the bar is on the same network, so they
+                # are carried across; a different SSID discards them.
+                known = next_snapshot.wifi
+                same_network = known is not None and known.ssid == ssid
                 next_snapshot.wifi = types.StatusResponse(
-                    state=state_value,
-                    ssid=connected.get("ssid"),
+                    state=types.WifiState.CONNECTED,
+                    ssid=ssid,
                     bssid=connected.get("bssid"),
                     channel=_number(connected, "channel"),
                     rssi=_number(connected, "rssi"),
+                    security=known.security if same_network and known else None,
+                    ip_config=known.ip_config if same_network and known else None,
                 )
             elif disconnected is not None:
                 next_snapshot.wifi = types.StatusResponse(
