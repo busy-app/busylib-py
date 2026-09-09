@@ -11,15 +11,21 @@ step, the freshest snapshot wins, and each client works out the rest.
 So reading a snapshot tells you nothing on its own. This module does the
 arithmetic every consumer would otherwise repeat: advance the snapshot by
 the time that has passed and say what phase the timer is in.
+
+Changing a timer works the same way round: there is no "pause" endpoint,
+only a snapshot to write, and the device takes the freshest one as the
+truth. The helpers here write the snapshot each change needs - which
+includes reading the card first, because the device rejects a snapshot
+that disagrees with the card it names.
 """
 
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
-from .. import types
+from .. import exceptions, types
 
 TimerMode = Literal["not_started", "infinite", "simple", "interval"]
 TimerPhase = Literal["work", "rest"]
@@ -180,4 +186,243 @@ def timer_state(
         time_left_ms=max(0, left),
         is_finished=False,
         elapsed_ms=elapsed,
+    )
+
+
+class TimerNotRunningError(exceptions.BusyBarError):
+    """
+    Raised for a change that only makes sense while a session is running.
+
+    Pausing, resuming, moving to the next phase and setting the session's
+    theme all rewrite the running session. With nothing running there is
+    nothing to rewrite, and writing a session to make the change possible
+    would start one nobody asked for.
+    """
+
+
+class TimerClient(Protocol):
+    """
+    What these helpers need from a client.
+
+    Deliberately three methods rather than the whole client, so a caller
+    can pass anything that speaks them - including a test double.
+    """
+
+    async def busy_snapshot(self) -> types.BusySnapshot: ...
+
+    async def busy_snapshot_set(
+        self, snapshot: types.BusySnapshot
+    ) -> types.SuccessResponse: ...
+
+    async def busy_profile(self, slot: types.BusyProfileSlot) -> types.BusyProfile: ...
+
+    async def busy_profile_set(
+        self, slot: types.BusyProfileSlot, profile: types.BusyProfile
+    ) -> types.SuccessResponse: ...
+
+
+async def _apply(
+    client: TimerClient,
+    variant: types.BusySnapshotVariant,
+    *,
+    now_ms: int | None = None,
+) -> None:
+    """
+    Send one snapshot as the newest one.
+
+    The device takes the freshest snapshot as the truth, so the timestamp
+    is the moment of writing rather than anything carried over from the
+    snapshot being replaced.
+    """
+    stamp = int(time.time() * 1000) if now_ms is None else now_ms
+    await client.busy_snapshot_set(
+        types.BusySnapshot(snapshot=variant, snapshot_timestamp_ms=stamp)
+    )
+
+
+async def start(
+    client: TimerClient,
+    slot: types.BusyProfileSlot = "busy",
+    *,
+    theme: str | None = None,
+    now_ms: int | None = None,
+) -> None:
+    """
+    Start the session one of the bar's two cards describes.
+
+    A session is not started by asking for a mode: the mode comes from the
+    card. The device rejects a snapshot that disagrees with the card it
+    names - `400 Failed to parse snapshot` - so the card is read first and
+    the snapshot built from its own settings. To start a countdown of a
+    different length, write the card first.
+
+    `theme` overrides the card's theme for this session only; the card
+    keeps its own, which is what the bar returns to when the session ends.
+    """
+    profile = await client.busy_profile(slot)
+    settings = profile.busy_bar_settings
+    if theme is not None:
+        settings = settings.model_copy(update={"theme": theme})
+
+    timer = profile.timer_settings
+    variant: types.BusySnapshotVariant
+    if isinstance(timer, types.BusyTimerInfiniteSettings):
+        variant = types.BusySnapshotInfinite(
+            type="INFINITE",
+            card_id=profile.id,
+            is_paused=False,
+            busy_bar_settings=settings,
+        )
+    elif isinstance(timer, types.BusyTimerSimpleSettings):
+        variant = types.BusySnapshotSimple(
+            type="SIMPLE",
+            card_id=profile.id,
+            time_left_ms=timer.total_time_ms,
+            is_paused=False,
+            busy_bar_settings=settings,
+        )
+    else:
+        variant = types.BusySnapshotInterval(
+            type="INTERVAL",
+            card_id=profile.id,
+            current_interval=0,
+            current_interval_time_total_ms=timer.interval_work_ms,
+            current_interval_time_left_ms=timer.interval_work_ms,
+            is_paused=False,
+            interval_settings=timer,
+            busy_bar_settings=settings,
+        )
+    await _apply(client, variant, now_ms=now_ms)
+
+
+async def stop(client: TimerClient, *, now_ms: int | None = None) -> None:
+    """
+    End the session, leaving the bar with nothing running.
+
+    This is not the selector's `off` position, which is the bar's
+    do-not-disturb: it is the session going back to not started.
+    """
+    live = await client.busy_snapshot()
+    await _apply(
+        client,
+        types.BusySnapshotNotStarted(
+            type="NOT_STARTED",
+            busy_bar_settings=live.snapshot.busy_bar_settings,
+        ),
+        now_ms=now_ms,
+    )
+
+
+async def set_paused(
+    client: TimerClient, paused: bool, *, now_ms: int | None = None
+) -> None:
+    """
+    Pause or resume the running session.
+
+    Pausing writes back how much time is actually left, not the figure the
+    stored snapshot carries: that one was true when it was written, and
+    resuming from it would hand back the time the session already spent.
+    """
+    live = await client.busy_snapshot()
+    variant = live.snapshot
+    if isinstance(variant, types.BusySnapshotNotStarted):
+        raise TimerNotRunningError(
+            "no session is running, so there is nothing to pause"
+        )
+
+    update: dict[str, object] = {"is_paused": paused}
+    if paused:
+        state = timer_state(live, now_ms=now_ms)
+        if state.time_left_ms is not None:
+            field = (
+                "time_left_ms"
+                if isinstance(variant, types.BusySnapshotSimple)
+                else "current_interval_time_left_ms"
+            )
+            if field != "time_left_ms" and isinstance(
+                variant, types.BusySnapshotInterval
+            ):
+                update["current_interval"] = state.interval
+                update["current_interval_time_total_ms"] = _duration_of(
+                    state.interval or 0, variant.interval_settings
+                )
+            update[field] = state.time_left_ms
+    await _apply(client, variant.model_copy(update=update), now_ms=now_ms)
+
+
+async def next_phase(client: TimerClient, *, now_ms: int | None = None) -> None:
+    """
+    Move an interval session on to its next phase.
+
+    Work becomes rest and rest becomes the next work, at that phase's full
+    length. Past the last interval the session is over, so it is stopped
+    rather than wrapped around.
+    """
+    live = await client.busy_snapshot()
+    variant = live.snapshot
+    if not isinstance(variant, types.BusySnapshotInterval):
+        raise TimerNotRunningError(
+            "only an interval session has phases to move between"
+        )
+
+    state = timer_state(live, now_ms=now_ms)
+    following = (state.interval or 0) + 1
+    if following > _last_index(variant.interval_settings):
+        await stop(client, now_ms=now_ms)
+        return
+
+    duration = _duration_of(following, variant.interval_settings)
+    await _apply(
+        client,
+        variant.model_copy(
+            update={
+                "current_interval": following,
+                "current_interval_time_total_ms": duration,
+                "current_interval_time_left_ms": duration,
+                "is_paused": False,
+            }
+        ),
+        now_ms=now_ms,
+    )
+
+
+async def set_session_theme(
+    client: TimerClient, theme: str, *, now_ms: int | None = None
+) -> None:
+    """
+    Change the theme the running session is showing.
+
+    This lasts as long as the session: the card keeps its own theme, and
+    the bar shows that one again next time it starts. Confirmed on
+    hardware - a session switched to `dnd` came back as the card's `busy`
+    once stopped.
+    """
+    live = await client.busy_snapshot()
+    variant = live.snapshot
+    if isinstance(variant, types.BusySnapshotNotStarted):
+        raise TimerNotRunningError(
+            "no session is running, so there is no session theme to change"
+        )
+    settings = variant.busy_bar_settings.model_copy(update={"theme": theme})
+    await _apply(
+        client,
+        variant.model_copy(update={"busy_bar_settings": settings}),
+        now_ms=now_ms,
+    )
+
+
+async def set_card_theme(
+    client: TimerClient, slot: types.BusyProfileSlot, theme: str
+) -> None:
+    """
+    Change the theme one of the bar's cards starts with.
+
+    Unlike `set_session_theme` this outlasts the session, and it does not
+    touch what is on screen now - a session already running keeps the
+    theme it started with.
+    """
+    profile = await client.busy_profile(slot)
+    settings = profile.busy_bar_settings.model_copy(update={"theme": theme})
+    await client.busy_profile_set(
+        slot, profile.model_copy(update={"busy_bar_settings": settings})
     )

@@ -123,7 +123,48 @@ if state.is_paused:
     print(f"paused with {state.time_left_ms} ms left in {state.phase}")
 ```
 
-## Starting and stopping a timer
+## Changing a timer
+
+Every change is a snapshot write - there is no endpoint that pauses a session
+or moves it on a phase - and each one has a detail that is easy to get wrong.
+The helpers in `busylib.features.timer` write the right snapshot for you:
+
+```python
+from busylib.features import timer
+
+await timer.start(bar)                       # the session the "busy" card describes
+await timer.start(bar, "custom", theme="dnd")  # the other card, this session in dnd
+await timer.set_paused(bar, True)            # pause, keeping the time actually left
+await timer.set_paused(bar, False)           # resume
+await timer.next_phase(bar)                  # work -> rest, at the rest length
+await timer.set_session_theme(bar, "meeting")  # until this session ends
+await timer.set_card_theme(bar, "busy", "meeting")  # from now on
+await timer.stop(bar)                        # back to not started
+```
+
+Three things they take care of:
+
+**A session's mode comes from the card, not from you.** `start()` reads the
+card and builds a snapshot from its own settings, because the device rejects
+one that disagrees with the card it names. To start a countdown of a different
+length, write the card first.
+
+**Pausing has to recompute the remaining time.** The stored snapshot's figure
+was true when it was written; writing it back unchanged hands the session back
+the time it already spent. `set_paused()` takes the figure from
+`timer_state()`, and carries the phase across if the session moved on in the
+meantime.
+
+**A session theme and a card theme are different things.** `set_session_theme`
+lasts as long as the session - stop it and the bar shows the card's theme
+again, confirmed on hardware. `set_card_theme` outlasts the session and does
+not change what is on screen now.
+
+Anything that rewrites a running session - pausing, `next_phase`,
+`set_session_theme` - raises `TimerNotRunningError` when nothing is running,
+rather than starting a session nobody asked for.
+
+## Writing the snapshot yourself
 
 You write a snapshot, the same way the apps do:
 
