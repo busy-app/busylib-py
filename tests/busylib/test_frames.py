@@ -224,3 +224,49 @@ def test_the_wire_format_name_is_accepted_and_translated() -> None:
     assert display.decode_frame_data("PLAIN", "RGB888", device_order) == bytes(
         [1, 2, 3]
     )
+
+
+def test_scale_repeats_every_pixel_in_both_directions() -> None:
+    """
+    Enlargement is nearest-neighbour, so each pixel becomes a square block
+    of the same colour and nothing is blended into its neighbours.
+    """
+    data = bytearray(_solid((0, 0, 0)))
+    offset = (1 * FRONT.width + 2) * 3
+    data[offset : offset + 3] = b"\xff\x00\x00"
+    frame = Frame.from_screen(bytes(data), 0).scale(4)
+
+    assert (frame.width, frame.height) == (FRONT.width * 4, FRONT.height * 4)
+    for y in range(4, 8):
+        for x in range(8, 12):
+            assert frame.pixel(x, y) == (255, 0, 0)
+    assert frame.pixel(7, 4) == (0, 0, 0)
+    assert frame.pixel(8, 3) == (0, 0, 0)
+
+
+def test_scale_keeps_the_screen_it_came_from() -> None:
+    """
+    The enlarged frame still names its source screen, and says in the
+    description that its geometry is no longer the device's.
+    """
+    frame = Frame.from_screen(_solid((1, 2, 3)), 0).scale(10)
+
+    assert frame.display.name is display.DisplayName.FRONT
+    assert frame.display.description.endswith("scaled 10x")
+
+
+def test_scale_by_one_returns_the_same_frame() -> None:
+    """
+    The no-op case copies nothing.
+    """
+    frame = Frame.from_screen(_solid((1, 2, 3)), 0)
+
+    assert frame.scale(1) is frame
+
+
+def test_scale_below_one_is_rejected() -> None:
+    """
+    Shrinking would need real resampling, which belongs in Pillow.
+    """
+    with pytest.raises(ValueError, match="at least 1"):
+        Frame.from_screen(_solid((1, 2, 3)), 0).scale(0)
