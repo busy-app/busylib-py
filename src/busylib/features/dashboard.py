@@ -178,6 +178,21 @@ def _decoded_timer(update: dict[str, object]) -> types.BusySnapshot | None:
         return None
 
 
+def _number(fields: dict[str, object], key: str) -> int:
+    """
+    Read a numeric field out of a state update, treating absence as zero.
+
+    proto3 leaves out any field holding its type's default, so inside an
+    update that the device did send, a missing number means zero - not
+    "unchanged". Reading it as unknown lost every zero the bar reports:
+    volume muted, brightness at its lowest, USB unplugged.
+    """
+    value = fields.get(key, 0)
+    # Every number in these updates is a whole one - the device rejects a
+    # decimal volume - so anything else is treated as absent.
+    return int(value) if isinstance(value, (int, float)) else 0
+
+
 def apply_state_stream_update(
     snapshot: DeviceSnapshot,
     state_message: dict[str, object],
@@ -221,10 +236,10 @@ def apply_state_stream_update(
                     mapped_state = types.PowerState.DISCHARGING
                 next_snapshot.power = types.StatusPower(
                     state=mapped_state,
-                    battery_charge=known.get("battery_charge_percent"),
-                    battery_voltage=known.get("battery_voltage_mv"),
-                    battery_current=known.get("battery_current_ma"),
-                    usb_voltage=known.get("usb_voltage_mv"),
+                    battery_charge=_number(known, "battery_charge_percent"),
+                    battery_voltage=_number(known, "battery_voltage_mv"),
+                    battery_current=_number(known, "battery_current_ma"),
+                    usb_voltage=_number(known, "usb_voltage_mv"),
                 )
 
         wifi = update.get("wifi")
@@ -237,8 +252,8 @@ def apply_state_stream_update(
                     state=state_value,
                     ssid=connected.get("ssid"),
                     bssid=connected.get("bssid"),
-                    channel=connected.get("channel"),
-                    rssi=connected.get("rssi"),
+                    channel=_number(connected, "channel"),
+                    rssi=_number(connected, "rssi"),
                 )
             elif disconnected is not None:
                 next_snapshot.wifi = types.StatusResponse(
@@ -247,24 +262,21 @@ def apply_state_stream_update(
 
         brightness = update.get("brightness")
         if isinstance(brightness, dict):
-            actual = brightness.get("actual_brightness")
-            if actual is not None:
-                front = str(actual)
-                back = (
-                    None
-                    if next_snapshot.brightness is None
-                    else next_snapshot.brightness.back
-                )
-                next_snapshot.brightness = types.DisplayBrightnessInfo(
-                    front=front,
-                    back=back,
-                )
+            back = (
+                None
+                if next_snapshot.brightness is None
+                else next_snapshot.brightness.back
+            )
+            next_snapshot.brightness = types.DisplayBrightnessInfo(
+                front=str(_number(brightness, "actual_brightness")),
+                back=back,
+            )
 
         audio_volume = update.get("audio_volume")
         if isinstance(audio_volume, dict):
-            volume = audio_volume.get("volume")
-            if volume is not None:
-                next_snapshot.volume = types.AudioVolumeInfo(volume=float(volume))
+            next_snapshot.volume = types.AudioVolumeInfo(
+                volume=float(_number(audio_volume, "volume"))
+            )
 
         update_check = update.get("update_check")
         if isinstance(update_check, dict):
