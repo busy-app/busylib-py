@@ -7,7 +7,7 @@ from .dashboard import (
     apply_state_stream_update,
     collect_device_snapshot,
 )
-from .timer import TimerState, timer_state
+from .timer import TimerState, phase_of, timer_state
 from .notification import (
     BUILT_IN_TEMPLATES,
     NotificationSpec,
@@ -31,4 +31,5 @@ __all__ = [
     "select_template",
     "TimerState",
     "timer_state",
+    "phase_of",
 ]
