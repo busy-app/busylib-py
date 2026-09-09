@@ -21,7 +21,7 @@ from typing import Literal
 
 from .. import types
 
-TimerKind = Literal["not_started", "infinite", "simple", "interval"]
+TimerMode = Literal["not_started", "infinite", "simple", "interval"]
 TimerPhase = Literal["work", "rest"]
 
 
@@ -34,7 +34,7 @@ class TimerState:
     applies any more.
     """
 
-    kind: TimerKind
+    mode: TimerMode
     is_paused: bool
     phase: TimerPhase | None = None
     interval: int | None = None
@@ -47,7 +47,7 @@ class TimerState:
         """
         Whether a session is under way, paused or not.
         """
-        return self.kind != "not_started" and not self.is_finished
+        return self.mode != "not_started" and not self.is_finished
 
 
 def phase_of(interval: int) -> TimerPhase:
@@ -106,12 +106,12 @@ def timer_state(
     inner = snapshot.snapshot
 
     if isinstance(inner, types.BusySnapshotNotStarted):
-        return TimerState(kind="not_started", is_paused=False, is_finished=False)
+        return TimerState(mode="not_started", is_paused=False, is_finished=False)
 
     if isinstance(inner, types.BusySnapshotInfinite):
         # Open-ended: there is no remaining time to report.
         return TimerState(
-            kind="infinite",
+            mode="infinite",
             is_paused=inner.is_paused,
             phase="work",
             is_finished=False,
@@ -121,14 +121,14 @@ def timer_state(
     if isinstance(inner, types.BusySnapshotSimple):
         if inner.is_paused:
             return TimerState(
-                kind="simple",
+                mode="simple",
                 is_paused=True,
                 time_left_ms=inner.time_left_ms,
                 is_finished=False,
             )
         left = inner.time_left_ms - elapsed
         return TimerState(
-            kind="simple",
+            mode="simple",
             is_paused=False,
             time_left_ms=max(0, left),
             is_finished=left <= 0,
@@ -140,7 +140,7 @@ def timer_state(
 
     if inner.is_paused:
         return TimerState(
-            kind="interval",
+            mode="interval",
             is_paused=True,
             phase=phase_of(interval),
             interval=interval,
@@ -158,7 +158,7 @@ def timer_state(
         interval += 1
         if interval >= last:
             return TimerState(
-                kind="interval",
+                mode="interval",
                 is_paused=False,
                 phase=None,
                 interval=last,
@@ -173,7 +173,7 @@ def timer_state(
         left += duration
 
     return TimerState(
-        kind="interval",
+        mode="interval",
         is_paused=False,
         phase=phase_of(interval),
         interval=interval,

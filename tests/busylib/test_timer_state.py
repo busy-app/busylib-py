@@ -64,7 +64,7 @@ def test_not_started_is_not_running() -> None:
 
     state = timer_state(snapshot, now_ms=9_999_999)
 
-    assert state.kind == "not_started"
+    assert state.mode == "not_started"
     assert not state.is_running
 
 
@@ -118,7 +118,7 @@ def test_an_infinite_timer_reports_no_remaining_time() -> None:
 
     state = timer_state(snapshot, now_ms=1_000_000 + 3_600_000)
 
-    assert state.kind == "infinite"
+    assert state.mode == "infinite"
     assert state.phase == "work"
     assert state.time_left_ms is None
     assert state.is_running

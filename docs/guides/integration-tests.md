@@ -23,7 +23,7 @@ over USB.
 **Over the local network.** Put the bar on Wi-Fi — the setup wizard does this
 — and find its address with `bb.wifi_status().ip_config.address`, on the
 device screen, or via discovery. If the bar has an access key set (`bb.access()`
-reports `mode="key"`), you need that PIN: over Wi-Fi the key is enforced.
+reports `mode="key"`), you need that access key: over Wi-Fi it is enforced.
 
 **Through the cloud.** Link the bar to a BUSY account, then mint a bar-scope
 token in the [dashboard](https://cloud.busy.app/dashboard). An account-scope

@@ -32,7 +32,7 @@ from busylib.features import timer_state
 bar = BusyBar("10.0.4.20")
 state = timer_state(bar.busy_snapshot())
 
-print(state.kind)          # not_started / infinite / simple / interval
+print(state.mode)          # not_started / infinite / simple / interval
 print(state.phase)         # work / rest / None
 print(state.time_left_ms)
 print(state.is_running)
@@ -44,7 +44,7 @@ answers for any time, without polling.
 
 ## The four kinds of timer
 
-| `kind` | What it is | `phase` | `time_left_ms` |
+| `mode` | What it is | `phase` | `time_left_ms` |
 | --- | --- | --- | --- |
 | `not_started` | No session | `None` | `None` |
 | `infinite` | Runs until stopped | `work` | `None` — nothing to count down to |
@@ -52,6 +52,11 @@ answers for any time, without polling.
 | `interval` | Pomodoro: work and rest, repeated | `work` / `rest` | Remaining in the current interval |
 
 ## How an interval session is laid out
+
+Two words that are easy to mix up, and that the firmware keeps distinct: an
+**interval** is one stretch of work or of rest, and a **cycle** is a work
+interval plus the rest that follows it. `interval_work_cycles_count`
+configures cycles; `current_interval` reports intervals.
 
 An interval session is a run of intervals, numbered from zero, alternating
 work and rest. `current_interval` in the snapshot is that number, and it is
@@ -151,7 +156,7 @@ Stopping is a `NOT_STARTED` snapshot with a fresh timestamp.
 
 Two things to know, both learned the hard way:
 
-**`interval_settings` has to match the card.** Send durations of your own and
+**`interval_settings` has to match the profile.** Send durations of your own and
 the device answers `400 Failed to parse snapshot` — which is misleading,
 because the JSON parsed fine and it is the settings that disagree. Take them
 from `busy_profile()`, as above.
