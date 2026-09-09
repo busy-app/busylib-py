@@ -21,6 +21,25 @@ A Python client for the BUSY Bar API. Draw on both displays, play audio, manage
 files and assets, read device state, and forward input — from a script instead
 of the device UI.
 
+## Full documentation
+
+This file is the tour. The guides go deeper, and they are also this site's
+home page, so the links are absolute and work from PyPI and GitHub alike:
+
+| Guide | |
+| --- | --- |
+| [Connecting to a bar](https://busy-app.github.io/busylib-py/guides/connecting/) | Discovery, addresses, access keys |
+| [Drawing on the displays](https://busy-app.github.io/busylib-py/guides/displays/) | Elements, both panels, reading the screen back |
+| [Sending notifications](https://busy-app.github.io/busylib-py/guides/notifications/) | Built-in templates, and writing your own |
+| [Working with timers](https://busy-app.github.io/busylib-py/guides/timers/) | Snapshots, phases, starting and stopping |
+| [Assets and storage](https://busy-app.github.io/busylib-py/guides/assets-and-storage/) | Uploading files the bar can draw and play |
+| [Reading device state](https://busy-app.github.io/busylib-py/guides/device-state/) | One-off snapshots and streamed updates |
+| [Building a tool](https://busy-app.github.io/busylib-py/guides/building-a-tool/) | Putting a small app together |
+| [Testing against a real bar](https://busy-app.github.io/busylib-py/guides/integration-tests/) | Running the integration suite |
+
+The [API reference](https://busy-app.github.io/busylib-py/api/clients/) covers
+every client method, type and exception.
+
 ## You just unboxed a BUSY Bar
 
 This guide takes you from a bar still in its box to a small working app.
