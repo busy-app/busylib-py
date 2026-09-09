@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import struct
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from .display import (
@@ -102,6 +102,42 @@ class Frame:
         Whether every pixel is black.
         """
         return not any(self.data)
+
+    def scale(self, factor: int) -> Frame:
+        """
+        Repeat every pixel `factor` times in both directions.
+
+        The front display is 72x16, which most viewers draw as a postage
+        stamp or smooth into mush. Nearest-neighbour enlargement keeps the
+        pixels square and legible, and is the only sensible way to show a
+        frame this small at any useful size.
+
+        The returned frame reports the enlarged geometry, so `to_png` and
+        `to_pillow` follow along; `display` still names the screen it came
+        from, and `pixel()` addresses the enlarged grid.
+        """
+        if factor < 1:
+            raise ValueError(f"scale factor must be at least 1, got {factor}")
+        if factor == 1:
+            return self
+        stride = self.width * BYTES_PER_PIXEL
+        wide = bytearray()
+        for start in range(0, len(self.data), stride):
+            row = self.data[start : start + stride]
+            stretched = b"".join(
+                row[x : x + BYTES_PER_PIXEL] * factor
+                for x in range(0, stride, BYTES_PER_PIXEL)
+            )
+            wide += stretched * factor
+        return Frame(
+            data=bytes(wide),
+            display=replace(
+                self.display,
+                width=self.width * factor,
+                height=self.height * factor,
+                description=f"{self.display.description}, scaled {factor}x",
+            ),
+        )
 
     def to_png(self) -> bytes:
         """

@@ -397,3 +397,72 @@ def test_other_updates_leave_a_known_timer_alone() -> None:
     )
 
     assert later.timer is not None
+
+
+def test_a_zero_in_a_state_update_is_read_as_zero() -> None:
+    """
+    proto3 omits a field holding its default, so an update the bar did send
+    with no number in it means zero: volume muted, USB unplugged, panel at
+    its dimmest. Reading that as "unchanged" kept the old value forever.
+    """
+    snapshot = DeviceSnapshot(
+        volume=types.AudioVolumeInfo(volume=50),
+        brightness=types.DisplayBrightnessInfo(front="80"),
+        power=types.StatusPower(usb_voltage=5000, battery_charge=40),
+    )
+
+    updated = apply_state_stream_update(
+        snapshot,
+        {
+            "updates": [
+                {"audio_volume": {}},
+                {"brightness": {}},
+                {"power": {"known": {"battery_status": "DISCHARGING"}}},
+            ]
+        },
+    )
+
+    assert updated.volume is not None
+    assert updated.volume.volume == 0
+    assert updated.brightness is not None
+    assert updated.brightness.front == "0"
+    assert updated.power is not None
+    assert updated.power.usb_voltage == 0
+    assert updated.power.battery_charge == 0
+
+
+def test_a_wifi_update_keeps_what_it_does_not_carry() -> None:
+    """
+    A connection update reports the radio's view - SSID, AP, channel,
+    signal - and never the security method or the address, which only the
+    HTTP status returns. Rebuilding the object from the update alone
+    dropped both on the first update after startup.
+    """
+    snapshot = DeviceSnapshot(
+        wifi=types.StatusResponse(
+            state=types.WifiState.CONNECTED,
+            ssid="kv11",
+            security=types.WifiSecurityMethod.WPA2,
+            ip_config=types.WifiIpConfig(address="192.168.50.15"),
+        )
+    )
+
+    same = apply_state_stream_update(
+        snapshot,
+        {"updates": [{"wifi": {"connected": {"ssid": "kv11", "rssi": -63}}}]},
+    )
+
+    assert same.wifi is not None
+    assert same.wifi.security is types.WifiSecurityMethod.WPA2
+    assert same.wifi.ip_config is not None
+    assert same.wifi.ip_config.address == "192.168.50.15"
+    assert same.wifi.rssi == -63
+
+    moved = apply_state_stream_update(
+        snapshot,
+        {"updates": [{"wifi": {"connected": {"ssid": "elsewhere"}}}]},
+    )
+
+    assert moved.wifi is not None
+    assert moved.wifi.security is None
+    assert moved.wifi.ip_config is None

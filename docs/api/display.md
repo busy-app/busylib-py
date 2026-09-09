@@ -25,6 +25,17 @@ see it. And `to_png()` uses only the standard library, so writing a frame to a
 file or a web page needs nothing installed — Pillow is optional and imported
 only if you ask for `to_pillow()`.
 
+The front display is 72x16, and most viewers draw that as a postage stamp or
+smooth it into mush. `scale()` enlarges a frame by repeating whole pixels, so
+it stays square and legible at any size:
+
+```python
+open("front.png", "wb").write(front.scale(10).to_png())  # 720x160
+```
+
+The enlarged frame still names the screen it came from, and says so in its
+description; only its geometry changes.
+
 Frames also arrive on the status stream, where they are compressed and
 described by their own metadata:
 
