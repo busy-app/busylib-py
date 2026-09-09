@@ -160,6 +160,13 @@ lasts as long as the session - stop it and the bar shows the card's theme
 again, confirmed on hardware. `set_card_theme` outlasts the session and does
 not change what is on screen now.
 
+**A card write needs a fresh timestamp.** The device keeps whichever copy of a
+card is newer and silently discards the rest, answering `{"result": "OK"}`
+either way. A card read back and written unchanged carries the stored
+`profile_timestamp_ms`, which is not newer - and a bar that has never had one
+written reports `0` - so the write disappears with no error at all.
+`set_card_theme` stamps it for you.
+
 Anything that rewrites a running session - pausing, `next_phase`,
 `set_session_theme` - raises `TimerNotRunningError` when nothing is running,
 rather than starting a session nobody asked for.
