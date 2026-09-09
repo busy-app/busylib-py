@@ -301,27 +301,36 @@ class TimestampInfo(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-class BusySnapshotNotStarted(BaseModel):
-    type: Literal["NOT_STARTED"]
+class BusySnapshotBase(BaseModel):
+    """
+    Fields every snapshot variant carries.
+
+    `busy_bar_settings` is merged into the snapshot object on the wire, not
+    nested beside it, and the device requires it on write - a snapshot sent
+    without it comes back as `400 Failed to parse snapshot`. Every published
+    firmware API back to 22.2.0 includes it, so it is required here too.
+    """
+
+    busy_bar_settings: BusyBarSettings
 
     model_config = ConfigDict(extra="ignore")
 
 
-class BusySnapshotInfinite(BaseModel):
+class BusySnapshotNotStarted(BusySnapshotBase):
+    type: Literal["NOT_STARTED"]
+
+
+class BusySnapshotInfinite(BusySnapshotBase):
     type: Literal["INFINITE"]
     card_id: str
     is_paused: bool
 
-    model_config = ConfigDict(extra="ignore")
 
-
-class BusySnapshotSimple(BaseModel):
+class BusySnapshotSimple(BusySnapshotBase):
     type: Literal["SIMPLE"]
     card_id: str
     time_left_ms: int
     is_paused: bool
-
-    model_config = ConfigDict(extra="ignore")
 
 
 class BusySnapshotIntervalSettings(BaseModel):
@@ -334,7 +343,7 @@ class BusySnapshotIntervalSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-class BusySnapshotInterval(BaseModel):
+class BusySnapshotInterval(BusySnapshotBase):
     type: Literal["INTERVAL"]
     card_id: str
     current_interval: int
@@ -342,8 +351,6 @@ class BusySnapshotInterval(BaseModel):
     current_interval_time_left_ms: int
     is_paused: bool
     interval_settings: BusySnapshotIntervalSettings
-
-    model_config = ConfigDict(extra="ignore")
 
 
 BusySnapshotVariant = Annotated[
