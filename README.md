@@ -608,9 +608,10 @@ firmware 1.0.2 instead raises `BusyBarAPIVersionError`, which tells you to
 update firmware or use a matching library release before invoking newer API
 methods.
 
-For migrations and diagnostics, methods can expose the minimum firmware
-OpenAPI version their current implementation targets (not necessarily the
-version where the underlying device endpoint first appeared).
+For migrations and diagnostics, methods can expose the minimum device API
+version their current implementation targets - the number the bar reports as
+`api_semver` - which is not necessarily the version where the underlying
+endpoint first appeared.
 
 ```python
 metadata = bb.method_compatibility("log_dump")

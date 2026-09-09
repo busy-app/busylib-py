@@ -249,6 +249,14 @@ def test_busy_snapshot_sync() -> None:
                             "card_id": "card",
                             "time_left_ms": 9000,
                             "is_paused": False,
+                            # The device merges these into the snapshot
+                            # object and requires them; a mock without them
+                            # describes a response no firmware sends.
+                            "busy_bar_settings": {
+                                "theme": "busy",
+                                "show_work_phase_only": False,
+                                "trigger_smart_home": True,
+                            },
                         },
                         "snapshot_timestamp_ms": 123,
                     },
@@ -344,6 +352,14 @@ async def test_busy_snapshot_async() -> None:
                             "card_id": "card",
                             "time_left_ms": 9000,
                             "is_paused": False,
+                            # The device merges these into the snapshot
+                            # object and requires them; a mock without them
+                            # describes a response no firmware sends.
+                            "busy_bar_settings": {
+                                "theme": "busy",
+                                "show_work_phase_only": False,
+                                "trigger_smart_home": True,
+                            },
                         },
                         "snapshot_timestamp_ms": 123,
                     },
