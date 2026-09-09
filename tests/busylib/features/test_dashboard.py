@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import json
+
 from typing import cast
 
 import pytest
@@ -7,6 +10,7 @@ import pytest
 from busylib.client import AsyncBusyBar
 from busylib import types
 from busylib.features import (
+    timer_state,
     DeviceSnapshot,
     DeviceStateStore,
     apply_state_stream_update,
@@ -50,6 +54,20 @@ class _OkClient:
         Return a valid power status payload.
         """
         return types.StatusPower()
+
+    async def busy_snapshot(self) -> types.BusySnapshot:
+        """
+        Return an idle timer.
+        """
+        return types.BusySnapshot(
+            snapshot=types.BusySnapshotNotStarted(
+                type="NOT_STARTED",
+                busy_bar_settings=types.BusyBarSettings(
+                    theme="busy", show_work_phase_only=False, trigger_smart_home=True
+                ),
+            ),
+            snapshot_timestamp_ms=0,
+        )
 
     async def time(self) -> types.DeviceTimeResponse:
         """
@@ -285,3 +303,97 @@ def test_device_state_store_unsubscribe_stops_callbacks() -> None:
 
     assert state_calls == 0
     assert diff_calls == 0
+
+
+def _timer_update(snapshot_json: str) -> dict[str, object]:
+    """
+    Shape one `/api/status/ws` message carrying a timer snapshot.
+    """
+    encoded = base64.b64encode(snapshot_json.encode()).decode()
+    message: dict[str, object] = {"updates": [{"timer": {"json": {"data": encoded}}}]}
+    return message
+
+
+def test_a_streamed_timer_update_lands_on_the_snapshot() -> None:
+    """
+    The stream carries the timer as base64 JSON, and it parses.
+
+    This is what makes a push-driven consumer possible: the payload is the
+    same document `busy_snapshot()` returns, so it needs no separate poll.
+    """
+    document = json.dumps(
+        {
+            "snapshot": {
+                "type": "INTERVAL",
+                "card_id": "00000000-0000-0000-0000-000000000000",
+                "current_interval": 1,
+                "current_interval_time_total_ms": 300_000,
+                "current_interval_time_left_ms": 120_000,
+                "is_paused": False,
+                "interval_settings": {
+                    "type": "INTERVAL",
+                    "interval_work_ms": 1_200_000,
+                    "interval_rest_ms": 300_000,
+                    "interval_work_cycles_count": 3,
+                    "is_autostart_enabled": False,
+                },
+                "busy_bar_settings": {
+                    "theme": "busy",
+                    "show_work_phase_only": False,
+                    "trigger_smart_home": True,
+                },
+            },
+            "snapshot_timestamp_ms": 1_000_000,
+        }
+    )
+
+    updated = apply_state_stream_update(DeviceSnapshot(), _timer_update(document))
+
+    assert updated.timer is not None
+    assert updated.timer.snapshot.type == "INTERVAL"
+
+    # and it feeds the state helper straight away
+    state = timer_state(updated.timer, now_ms=1_000_000 + 60_000)
+    assert state.phase == "rest"
+    assert state.time_left_ms == 60_000
+
+
+def test_an_undecodable_timer_update_is_dropped() -> None:
+    """
+    A stream that cannot be decoded must not take down the consumer.
+    """
+    payloads: tuple[dict[str, object], ...] = (
+        {"updates": [{"timer": {"json": {"data": "not base64 at all!!"}}}]},
+        {"updates": [{"timer": {"json": {"data": base64.b64encode(b"{}").decode()}}}]},
+        {"updates": [{"timer": {}}]},
+        {"updates": [{"timer": "nonsense"}]},
+    )
+    for payload in payloads:
+        updated = apply_state_stream_update(DeviceSnapshot(), payload)
+        assert updated.timer is None
+
+
+def test_other_updates_leave_a_known_timer_alone() -> None:
+    """
+    A frame or a Wi-Fi change must not clear what is already known.
+    """
+    document = json.dumps(
+        {
+            "snapshot": {
+                "type": "NOT_STARTED",
+                "busy_bar_settings": {
+                    "theme": "busy",
+                    "show_work_phase_only": False,
+                    "trigger_smart_home": True,
+                },
+            },
+            "snapshot_timestamp_ms": 1_000_000,
+        }
+    )
+    with_timer = apply_state_stream_update(DeviceSnapshot(), _timer_update(document))
+
+    later = apply_state_stream_update(
+        with_timer, {"updates": [{"wifi": {"disconnected": {}}}]}
+    )
+
+    assert later.timer is not None

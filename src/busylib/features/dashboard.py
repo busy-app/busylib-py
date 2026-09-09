@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
@@ -25,6 +27,7 @@ class DeviceSnapshot(BaseModel):
     wifi: types.StatusResponse | None = None
     brightness: types.DisplayBrightnessInfo | None = None
     volume: types.AudioVolumeInfo | None = None
+    timer: types.BusySnapshot | None = None
     ble: types.BleStatus | None = None
     storage: types.StorageStatus | None = None
     update_available_version: str | None = None
@@ -85,6 +88,9 @@ async def collect_device_snapshot(client: AsyncBusyBar) -> DeviceSnapshot:
         "status": asyncio.create_task(_safe("status", client.status())),
         "system": asyncio.create_task(_safe("system", client.status_system())),
         "power": asyncio.create_task(_safe("power", client.status_power())),
+        # Without this a consumer driven by the stream knows nothing about the
+        # timer until it next changes, which for an idle bar is never.
+        "timer": asyncio.create_task(_safe("timer", client.busy_snapshot())),
         "time": asyncio.create_task(_safe("time", client.time())),
         "wifi": asyncio.create_task(_safe("wifi", client.wifi_status())),
         "brightness": asyncio.create_task(
@@ -133,6 +139,7 @@ async def collect_device_snapshot(client: AsyncBusyBar) -> DeviceSnapshot:
         status=_as_type(results.get("status"), types.Status),
         system=_as_type(results.get("system"), types.StatusSystem),
         power=_as_type(results.get("power"), types.StatusPower),
+        timer=_as_type(results.get("timer"), types.BusySnapshot),
         time=parsed_time,
         wifi=_as_type(results.get("wifi"), types.StatusResponse),
         brightness=_as_type(results.get("brightness"), types.DisplayBrightnessInfo),
@@ -142,6 +149,33 @@ async def collect_device_snapshot(client: AsyncBusyBar) -> DeviceSnapshot:
         field_errors=field_errors,
         raw_time=raw_time,
     )
+
+
+def _decoded_timer(update: dict[str, object]) -> types.BusySnapshot | None:
+    """
+    Pull a timer snapshot out of one stream update, if it carries one.
+
+    The stream sends the snapshot as base64-encoded JSON under
+    `timer.json.data` - the same document `busy_snapshot()` returns, so it
+    parses into the same model and feeds `timer_state()` directly. A
+    malformed payload is dropped rather than raised: a state stream that
+    cannot be decoded should not take down a consumer that is only watching
+    for changes.
+    """
+    timer = update.get("timer")
+    if not isinstance(timer, dict):
+        return None
+    envelope = timer.get("json")
+    if not isinstance(envelope, dict):
+        return None
+    data = envelope.get("data")
+    if not isinstance(data, str):
+        return None
+    try:
+        return types.BusySnapshot.model_validate_json(base64.b64decode(data))
+    except (ValueError, binascii.Error):
+        logger.debug("state stream carried an undecodable timer update")
+        return None
 
 
 def apply_state_stream_update(
@@ -168,6 +202,10 @@ def apply_state_stream_update(
             name = device_name.get("name")
             if isinstance(name, str) and name:
                 next_snapshot.name = name
+
+        timer = _decoded_timer(update)
+        if timer is not None:
+            next_snapshot.timer = timer
 
         power = update.get("power")
         if isinstance(power, dict):
