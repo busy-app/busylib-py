@@ -80,9 +80,7 @@ class FakeBar:
 
 
 def _not_started() -> types.BusySnapshotNotStarted:
-    return types.BusySnapshotNotStarted(
-        type="NOT_STARTED", busy_bar_settings=SETTINGS
-    )
+    return types.BusySnapshotNotStarted(type="NOT_STARTED", busy_bar_settings=SETTINGS)
 
 
 def _running(
@@ -126,7 +124,9 @@ async def test_start_follows_a_countdown_card() -> None:
     """
     bar = FakeBar(
         _not_started(),
-        timer_settings=types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=90_000),
+        timer_settings=types.BusyTimerSimpleSettings(
+            type="SIMPLE", total_time_ms=90_000
+        ),
     )
 
     await timer.start(bar)
@@ -272,3 +272,19 @@ async def test_changes_that_need_a_session_say_so(call) -> None:
         await call(bar)
 
     assert not bar.written
+
+
+async def test_a_card_write_is_stamped_with_now() -> None:
+    """
+    The device keeps whichever copy of a card is newer and silently drops
+    the rest, answering OK either way. A card read back and written
+    unchanged carries the stored timestamp - and a bar fresh from the
+    factory reports 0 - so the write has to carry its own.
+    """
+    bar = FakeBar(_not_started())
+
+    await timer.set_card_theme(bar, "busy", "lunch", now_ms=7_000_000)
+
+    written = bar.profiles_written[-1]
+    assert written.profile_timestamp_ms == 7_000_000
+    assert written.busy_bar_settings.theme == "lunch"

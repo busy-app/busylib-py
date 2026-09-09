@@ -412,7 +412,11 @@ async def set_session_theme(
 
 
 async def set_card_theme(
-    client: TimerClient, slot: types.BusyProfileSlot, theme: str
+    client: TimerClient,
+    slot: types.BusyProfileSlot,
+    theme: str,
+    *,
+    now_ms: int | None = None,
 ) -> None:
     """
     Change the theme one of the bar's cards starts with.
@@ -420,9 +424,20 @@ async def set_card_theme(
     Unlike `set_session_theme` this outlasts the session, and it does not
     touch what is on screen now - a session already running keeps the
     theme it started with.
+
+    The profile is stamped with the moment of writing, for the same reason
+    a snapshot is: the device keeps whichever copy is newer and silently
+    discards the rest. A card read back and written unchanged carries the
+    stored timestamp, which is not newer - and a bar fresh from the
+    factory reports `profile_timestamp_ms: 0`, so the write is dropped
+    while still answering `{"result": "OK"}`. Confirmed on firmware r971.
     """
     profile = await client.busy_profile(slot)
     settings = profile.busy_bar_settings.model_copy(update={"theme": theme})
+    stamp = int(time.time() * 1000) if now_ms is None else now_ms
     await client.busy_profile_set(
-        slot, profile.model_copy(update={"busy_bar_settings": settings})
+        slot,
+        profile.model_copy(
+            update={"busy_bar_settings": settings, "profile_timestamp_ms": stamp}
+        ),
     )
