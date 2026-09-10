@@ -36,6 +36,18 @@ open("front.png", "wb").write(front.scale(10).to_png())  # 720x160
 The enlarged frame still names the screen it came from, and says so in its
 description; only its geometry changes.
 
+Anything that shows a picture in a fixed shape - a square tile, a round
+thumbnail - crops a 72x16 strip to nothing. `pad()` centres the frame in a
+larger one instead, so the whole display survives:
+
+```python
+big = front.scale(8)
+square = big.pad(big.width, big.width)  # 576x576, the strip in the middle
+```
+
+The fill is black by default, which is what an unlit panel looks like, so the
+result reads as the strip with the rest of the bar around it.
+
 Frames also arrive on the status stream, where they are compressed and
 described by their own metadata:
 

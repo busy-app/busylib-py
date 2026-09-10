@@ -270,3 +270,55 @@ def test_scale_below_one_is_rejected() -> None:
     """
     with pytest.raises(ValueError, match="at least 1"):
         Frame.from_screen(_solid((1, 2, 3)), 0).scale(0)
+
+
+def test_pad_centres_the_frame_and_fills_the_rest() -> None:
+    """
+    The whole display survives padding: nothing is cropped, and the fill
+    goes around it.
+    """
+    frame = Frame.from_screen(_solid((1, 2, 3)), 0).pad(100, 40)
+
+    assert (frame.width, frame.height) == (100, 40)
+    left = (100 - FRONT.width) // 2
+    top = (40 - FRONT.height) // 2
+    assert frame.pixel(left, top) == (1, 2, 3)
+    assert frame.pixel(left + FRONT.width - 1, top + FRONT.height - 1) == (1, 2, 3)
+    assert frame.pixel(left - 1, top) == (0, 0, 0)
+    assert frame.pixel(left, top - 1) == (0, 0, 0)
+    assert frame.pixel(left + FRONT.width, top) == (0, 0, 0)
+
+
+def test_pad_takes_a_fill_colour() -> None:
+    frame = Frame.from_screen(_solid((0, 0, 0)), 0).pad(80, 20, fill=(9, 9, 9))
+
+    assert frame.pixel(0, 0) == (9, 9, 9)
+
+
+def test_pad_to_the_same_size_returns_the_same_frame() -> None:
+    frame = Frame.from_screen(_solid((1, 2, 3)), 0)
+
+    assert frame.pad(FRONT.width, FRONT.height) is frame
+
+
+def test_pad_cannot_shrink() -> None:
+    """
+    Padding smaller would have to crop, which is what it exists to avoid.
+    """
+    with pytest.raises(ValueError, match="cannot pad"):
+        Frame.from_screen(_solid((1, 2, 3)), 0).pad(10, 10)
+
+
+def test_scale_then_pad_makes_a_square_that_keeps_the_whole_display() -> None:
+    """
+    The combination the Home Assistant integration uses: enlarge by whole
+    pixels, then square it off so a thumbnail shows all of it.
+    """
+    data = bytearray(_solid((0, 0, 0)))
+    data[0:3] = b"\xff\x00\x00"  # top-left pixel, the first thing a crop loses
+    scaled = Frame.from_screen(bytes(data), 0).scale(8)
+    square = scaled.pad(scaled.width, scaled.width)
+
+    assert square.width == square.height == FRONT.width * 8
+    top = (square.height - scaled.height) // 2
+    assert square.pixel(0, top) == (255, 0, 0)

@@ -139,6 +139,52 @@ class Frame:
             ),
         )
 
+    def pad(
+        self, width: int, height: int, *, fill: tuple[int, int, int] = (0, 0, 0)
+    ) -> Frame:
+        """
+        Centre this frame inside a larger one, filling the rest with `fill`.
+
+        The front display is a 72x16 strip, and anything that shows a
+        picture in a fixed shape - a square thumbnail, a tile, a round
+        avatar - crops a strip to nothing. Padding it to the shape the
+        viewer wants means the whole display survives, small but complete,
+        instead of its leftmost fifth.
+
+        Black is the default fill because it is what an unlit panel looks
+        like: the padded picture reads as the strip with the rest of the
+        bar around it, rather than as a picture with a border.
+        """
+        if width < self.width or height < self.height:
+            raise ValueError(
+                f"cannot pad a {self.width}x{self.height} frame down to "
+                f"{width}x{height}"
+            )
+        if (width, height) == (self.width, self.height):
+            return self
+
+        left = (width - self.width) // 2
+        top = (height - self.height) // 2
+        row = bytes(fill) * width
+        blank = row * top
+        stride = self.width * BYTES_PER_PIXEL
+        middle = b"".join(
+            bytes(fill) * left
+            + self.data[i : i + stride]
+            + bytes(fill) * (width - self.width - left)
+            for i in range(0, len(self.data), stride)
+        )
+        data = blank + middle + row * (height - self.height - top)
+        return Frame(
+            data=data,
+            display=replace(
+                self.display,
+                width=width,
+                height=height,
+                description=f"{self.display.description}, padded to {width}x{height}",
+            ),
+        )
+
     def to_png(self) -> bytes:
         """
         Encode the frame as a PNG, using only the standard library.
