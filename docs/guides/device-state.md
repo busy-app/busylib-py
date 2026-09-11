@@ -117,3 +117,38 @@ Because the frame describes its own encoding, no guessing by payload size is
 involved — see `busylib.display.decode_frame_data`. A decoded frame whose size
 doesn't match the target display is logged and dropped rather than stored, so a
 malformed update can't reach a renderer.
+
+## Buttons, the selector and the wheel
+
+Physical input arrives on the same stream, as `input` updates.
+`input_events()` turns one state message into the events it carried, so a
+consumer reacts to a press rather than to a nested dictionary of the
+firmware's enum names:
+
+```python
+from busylib.features import input_events
+from busylib.features.input_events import ButtonEvent, EncoderEvent, SelectorEvent
+
+async for message in bb.stream_status_ws():
+    for event in input_events(message):
+        match event:
+            case ButtonEvent(button="ok") if event.is_press:
+                confirm()
+            case SelectorEvent(position=position):
+                print(f"selector moved to {position}")
+            case EncoderEvent(delta=delta):
+                scroll(delta)
+```
+
+Both halves of a press are reported, so a long press is distinguishable from
+a short one; `is_press` is there because most callers only want one of them.
+
+Two things worth knowing. The bar reports the selector **only when it moves** -
+nothing answers "where is it now" - so its position is unknown until the first
+move after you start listening. And the same events come back when input is
+sent with `input()`, because the firmware makes no distinction between a
+button pressed by a finger and one pressed over HTTP:
+
+```python
+await bb.input("ok")  # a key by name, or types.InputKey.OK
+```
