@@ -28,12 +28,13 @@ def test_a_press_and_a_release_are_both_reported() -> None:
         )
     )
 
-    assert events == [
-        ButtonEvent(button="ok", action="press"),
-        ButtonEvent(button="ok", action="release"),
-    ]
-    assert events[0].is_press
-    assert not events[1].is_press
+    pressed, released = events
+    assert pressed == ButtonEvent(button="ok", action="press")
+    assert released == ButtonEvent(button="ok", action="release")
+    # The narrowing is for the type checker as much as the reader: the
+    # list holds the union of every input event.
+    assert isinstance(pressed, ButtonEvent) and pressed.is_press
+    assert isinstance(released, ButtonEvent) and not released.is_press
 
 
 def test_the_firmwares_first_enum_values_survive_being_omitted() -> None:
