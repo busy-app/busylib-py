@@ -74,6 +74,14 @@ class FakeBar:
         self.profiles_written.append(profile)
         return types.SuccessResponse(result="OK")
 
+    async def storage_list(self, path: str) -> types.StorageList:
+        return types.StorageList(
+            list=[
+                types.StorageDirElement(type="dir", name=name)
+                for name in ("dnd", "lunch", "meeting")
+            ]
+        )
+
     @property
     def last(self) -> types.BusySnapshotVariant:
         return self.written[-1].snapshot
@@ -291,10 +299,11 @@ async def test_a_card_write_is_stamped_with_now() -> None:
 
 
 class FakeAssets:
-    """A bar with a themes directory and nothing else."""
+    """A bar with a themes directory and two cards."""
 
-    def __init__(self, *names: str) -> None:
+    def __init__(self, *names: str, card_theme: str = "busy") -> None:
         self.names = names
+        self.card_theme = card_theme
         self.asked: list[str] = []
 
     async def storage_list(self, path: str) -> types.StorageList:
@@ -303,20 +312,69 @@ class FakeAssets:
             list=[types.StorageDirElement(type="dir", name=name) for name in self.names]
         )
 
+    async def busy_profile(self, slot: types.BusyProfileSlot) -> types.BusyProfile:
+        return types.BusyProfile(
+            sort_order=0,
+            title=slot.upper(),
+            id=CARD,
+            timer_settings=INTERVAL_SETTINGS,
+            busy_bar_settings=SETTINGS.model_copy(update={"theme": self.card_theme}),
+            profile_timestamp_ms=1,
+        )
+
 
 async def test_themes_are_read_from_the_bar() -> None:
     """
-    The set is whatever the firmware ships, so it is read rather than
-    written down here where it would go stale.
+    Themes are assets: one bar has what the firmware shipped, another has
+    one its owner uploaded, a third is missing one its owner deleted. So
+    the set is read rather than written down where it would go stale.
     """
-    bar = FakeAssets("meeting", "dnd", "lunch")
+    bar = FakeAssets("meeting", "dnd", "lunch", card_theme="dnd")
 
-    assert await timer.themes(bar) == ["busy", "dnd", "lunch", "meeting"]
+    assert await timer.themes(bar) == ["dnd", "lunch", "meeting"]
     assert bar.asked == [timer.THEMES_PATH]
 
 
-async def test_the_default_theme_is_in_the_list_without_a_directory() -> None:
+async def test_a_theme_a_card_uses_counts_even_without_a_directory() -> None:
     """
-    Every bar has it, and it has no directory of its own.
+    The firmware's built-in default has no asset directory, so a listing
+    alone would report that a bar cannot show the theme it is showing
+    right now. A theme one of its own cards is set to is real by
+    definition - and this is what makes the default survive being renamed
+    in a future firmware, rather than a constant here going stale.
     """
-    assert await timer.themes(FakeAssets()) == ["busy"]
+    assert await timer.themes(FakeAssets("lunch", card_theme="busy")) == [
+        "busy",
+        "lunch",
+    ]
+
+
+async def test_a_theme_the_bar_does_not_have_is_refused() -> None:
+    """
+    The device stores a theme that does not exist and reads it back
+    happily - confirmed on firmware r971, where a card set to
+    "no_such_theme_at_all" came back as exactly that - so the check has
+    to happen here or every layer reports success.
+    """
+    bar = FakeBar(_running())
+
+    with pytest.raises(timer.UnknownThemeError, match="no theme 'meating'"):
+        await timer.set_session_theme(bar, "meating")
+    with pytest.raises(timer.UnknownThemeError) as refused:
+        await timer.set_card_theme(bar, "busy", "meating")
+
+    assert refused.value.available == ["busy", "dnd", "lunch", "meeting"]
+    assert not bar.written
+    assert not bar.profiles_written
+
+
+async def test_a_known_set_can_be_passed_in_to_save_the_lookup() -> None:
+    """
+    A caller that already listed the themes - to offer them to someone -
+    should not make the bar list them again on every write.
+    """
+    bar = FakeBar(_running())
+
+    await timer.set_card_theme(bar, "busy", "whatever", known=["whatever"])
+
+    assert bar.profiles_written[-1].busy_bar_settings.theme == "whatever"

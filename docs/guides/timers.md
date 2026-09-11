@@ -160,14 +160,27 @@ lasts as long as the session - stop it and the bar shows the card's theme
 again, confirmed on hardware. `set_card_theme` outlasts the session and does
 not change what is on screen now.
 
-**Which themes there are is a question for the bar.** A theme is a free
-string on the wire, and the set is whatever the firmware ships, so
-`timer.themes(bar)` reads it from the bar rather than leaving a consumer to
-copy a list that goes stale, or to learn it by sending a wrong one:
+**Which themes there are is a question for the bar.** Themes are assets:
+one bar has what the firmware shipped, another has one its owner uploaded, a
+third is missing one its owner deleted. So there is no list to write down -
+`timer.themes(bar)` reads it:
 
 ```python
 options = await timer.themes(bar)  # ['back_soon', 'booked', 'busy', 'coding', ...]
 ```
+
+It reads two things, because neither alone is the answer: the asset
+directories, and whichever themes the bar's own cards are set to. The second
+is how the firmware's built-in default gets in - it has no directory, so a
+listing alone would report that a bar cannot show the theme it is showing
+right now.
+
+Setting a theme checks it against that list first, because **the device will
+not**: a card naming a theme that does not exist is stored and read back
+happily, and only the bar's screen shows that anything is wrong. A theme it
+does not have raises `UnknownThemeError`, which carries what it does have. If
+you already have the list - because you offered it to someone - pass it as
+`known=` and save the lookup.
 
 **A card write needs a fresh timestamp.** The device keeps whichever copy of a
 card is newer and silently discards the rest, answering `{"result": "OK"}`

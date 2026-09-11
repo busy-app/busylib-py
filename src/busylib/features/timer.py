@@ -22,6 +22,7 @@ that disagrees with the card it names.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -200,19 +201,37 @@ class TimerNotRunningError(exceptions.BusyBarError):
     """
 
 
-# Where the bar keeps the themes it can show, one directory each.
+# Where the bar keeps the themes it has assets for, one directory each.
 THEMES_PATH = "/ext/apps_assets/busy/themes"
 
-# The theme every bar has, which has no directory of its own.
-DEFAULT_THEME = "busy"
+
+class UnknownThemeError(exceptions.BusyBarError):
+    """
+    Raised for a theme this bar does not have.
+
+    The device does not raise it: a profile naming a theme that does not
+    exist is stored and read back happily, and only the bar's own screen
+    shows that something is wrong. So the check has to happen here, or a
+    typo leaves a card pointing at nothing with every layer reporting
+    success.
+    """
+
+    def __init__(self, theme: str, available: Sequence[str]) -> None:
+        self.theme = theme
+        self.available = list(available)
+        super().__init__(
+            f"this bar has no theme {theme!r}; it has: {', '.join(self.available)}"
+        )
 
 
 class ThemeCatalogueClient(Protocol):
     """
-    What `themes()` needs: one call, so a caller can pass anything.
+    What `themes()` needs, which is less than the whole client.
     """
 
     async def storage_list(self, path: str) -> types.StorageList: ...
+
+    async def busy_profile(self, slot: types.BusyProfileSlot) -> types.BusyProfile: ...
 
 
 class TimerClient(Protocol):
@@ -234,6 +253,8 @@ class TimerClient(Protocol):
     async def busy_profile_set(
         self, slot: types.BusyProfileSlot, profile: types.BusyProfile
     ) -> types.SuccessResponse: ...
+
+    async def storage_list(self, path: str) -> types.StorageList: ...
 
 
 async def _apply(
@@ -402,7 +423,11 @@ async def next_phase(client: TimerClient, *, now_ms: int | None = None) -> None:
 
 
 async def set_session_theme(
-    client: TimerClient, theme: str, *, now_ms: int | None = None
+    client: TimerClient,
+    theme: str,
+    *,
+    known: Sequence[str] | None = None,
+    now_ms: int | None = None,
 ) -> None:
     """
     Change the theme the running session is showing.
@@ -418,6 +443,7 @@ async def set_session_theme(
         raise TimerNotRunningError(
             "no session is running, so there is no session theme to change"
         )
+    await _checked(client, theme, known)
     settings = variant.busy_bar_settings.model_copy(update={"theme": theme})
     await _apply(
         client,
@@ -431,6 +457,7 @@ async def set_card_theme(
     slot: types.BusyProfileSlot,
     theme: str,
     *,
+    known: Sequence[str] | None = None,
     now_ms: int | None = None,
 ) -> None:
     """
@@ -447,6 +474,7 @@ async def set_card_theme(
     factory reports `profile_timestamp_ms: 0`, so the write is dropped
     while still answering `{"result": "OK"}`. Confirmed on firmware r971.
     """
+    await _checked(client, theme, known)
     profile = await client.busy_profile(slot)
     settings = profile.busy_bar_settings.model_copy(update={"theme": theme})
     stamp = int(time.time() * 1000) if now_ms is None else now_ms
@@ -462,15 +490,16 @@ async def themes(client: ThemeCatalogueClient) -> list[str]:
     """
     Which themes this bar can show.
 
-    A theme is a free string on the wire, and the set is not an enum
-    anyone can write down: it is whatever the firmware ships, and it grows
-    between releases. So it is read from the bar - the themes are one
-    directory each - rather than copied into consumers where it goes stale,
-    or discovered by sending a wrong one and reading the result.
+    Not a fixed set and not an enum: themes are assets, so one bar has
+    what the firmware shipped, another has one the owner uploaded, and a
+    third is missing one the owner deleted. It is read from the bar rather
+    than written down anywhere that would go stale.
 
-    The theme setters do not check against this list, because that would
-    cost a directory listing on every write. Ask for it once, offer it to
-    whoever is choosing, and pass what they chose.
+    Two sources, because neither alone is the answer. The assets are one
+    directory each under `THEMES_PATH`. And whichever themes the bar's own
+    cards are set to are real by definition, which is how the firmware's
+    built-in default gets in - it has no directory, so a listing alone
+    would report a bar cannot show the theme it is showing right now.
     """
     listing = await client.storage_list(THEMES_PATH)
     names = {
@@ -479,5 +508,19 @@ async def themes(client: ThemeCatalogueClient) -> list[str]:
         # One directory per theme; anything else in there is not a theme.
         if entry.name and entry.type == "dir"
     }
-    names.add(DEFAULT_THEME)
+    for slot in ("busy", "custom"):
+        profile = await client.busy_profile(slot)
+        if profile.busy_bar_settings.theme:
+            names.add(profile.busy_bar_settings.theme)
     return sorted(names)
+
+
+async def _checked(
+    client: ThemeCatalogueClient, theme: str, known: Sequence[str] | None
+) -> None:
+    """
+    Refuse a theme this bar does not have, since the device will not.
+    """
+    available = list(known) if known is not None else await themes(client)
+    if theme not in available:
+        raise UnknownThemeError(theme, available)
