@@ -8,6 +8,14 @@ from .dashboard import (
     collect_device_snapshot,
 )
 
+from .input_events import (
+    ButtonEvent,
+    EncoderEvent,
+    InputEvent,
+    SelectorEvent,
+    input_events,
+)
+
 # The timer's control helpers are deliberately not re-exported here:
 # `start`, `stop` and `next_phase` say nothing on their own at this level.
 # Import the module and call them through it - `timer.start(client)`.
@@ -45,5 +53,10 @@ __all__ = [
     "timer",
     "TimerClient",
     "TimerNotRunningError",
+    "ButtonEvent",
+    "EncoderEvent",
+    "InputEvent",
+    "SelectorEvent",
+    "input_events",
     "phase_of",
 ]
