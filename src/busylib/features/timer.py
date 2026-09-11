@@ -200,6 +200,21 @@ class TimerNotRunningError(exceptions.BusyBarError):
     """
 
 
+# Where the bar keeps the themes it can show, one directory each.
+THEMES_PATH = "/ext/apps_assets/busy/themes"
+
+# The theme every bar has, which has no directory of its own.
+DEFAULT_THEME = "busy"
+
+
+class ThemeCatalogueClient(Protocol):
+    """
+    What `themes()` needs: one call, so a caller can pass anything.
+    """
+
+    async def storage_list(self, path: str) -> types.StorageList: ...
+
+
 class TimerClient(Protocol):
     """
     What these helpers need from a client.
@@ -441,3 +456,28 @@ async def set_card_theme(
             update={"busy_bar_settings": settings, "profile_timestamp_ms": stamp}
         ),
     )
+
+
+async def themes(client: ThemeCatalogueClient) -> list[str]:
+    """
+    Which themes this bar can show.
+
+    A theme is a free string on the wire, and the set is not an enum
+    anyone can write down: it is whatever the firmware ships, and it grows
+    between releases. So it is read from the bar - the themes are one
+    directory each - rather than copied into consumers where it goes stale,
+    or discovered by sending a wrong one and reading the result.
+
+    The theme setters do not check against this list, because that would
+    cost a directory listing on every write. Ask for it once, offer it to
+    whoever is choosing, and pass what they chose.
+    """
+    listing = await client.storage_list(THEMES_PATH)
+    names = {
+        entry.name
+        for entry in (listing.list or [])
+        # One directory per theme; anything else in there is not a theme.
+        if entry.name and entry.type == "dir"
+    }
+    names.add(DEFAULT_THEME)
+    return sorted(names)

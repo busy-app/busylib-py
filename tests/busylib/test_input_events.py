@@ -96,15 +96,17 @@ def test_an_event_this_version_does_not_know_is_skipped() -> None:
     assert events == [ButtonEvent(button="back", action="press")]
 
 
-def test_a_key_can_be_named_as_a_string() -> None:
+def test_a_key_that_slipped_past_the_type_checker_is_still_checked() -> None:
     """
-    A key read out of configuration is a string, and passing one used to
-    fail inside the request with "'str' object has no attribute 'value'".
+    The signature is the enum, so this is only about the call that got
+    past it: a key read out of configuration, or a dynamically typed
+    caller. It used to fail inside the request with "'str' object has no
+    attribute 'value'".
     """
-    assert _as_key("ok") is types.InputKey.OK
     assert _as_key(types.InputKey.BACK) is types.InputKey.BACK
+    assert _as_key("ok") is types.InputKey.OK  # type: ignore[arg-type]
 
 
 def test_an_unknown_key_says_what_the_bar_has() -> None:
     with pytest.raises(ValueError, match="the bar has: apps, back, busy"):
-        _as_key("middle")
+        _as_key("middle")  # type: ignore[arg-type]

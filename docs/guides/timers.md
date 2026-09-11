@@ -160,6 +160,15 @@ lasts as long as the session - stop it and the bar shows the card's theme
 again, confirmed on hardware. `set_card_theme` outlasts the session and does
 not change what is on screen now.
 
+**Which themes there are is a question for the bar.** A theme is a free
+string on the wire, and the set is whatever the firmware ships, so
+`timer.themes(bar)` reads it from the bar rather than leaving a consumer to
+copy a list that goes stale, or to learn it by sending a wrong one:
+
+```python
+options = await timer.themes(bar)  # ['back_soon', 'booked', 'busy', 'coding', ...]
+```
+
 **A card write needs a fresh timestamp.** The device keeps whichever copy of a
 card is newer and silently discards the rest, answering `{"result": "OK"}`
 either way. A card read back and written unchanged carries the stored

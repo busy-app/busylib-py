@@ -288,3 +288,35 @@ async def test_a_card_write_is_stamped_with_now() -> None:
     written = bar.profiles_written[-1]
     assert written.profile_timestamp_ms == 7_000_000
     assert written.busy_bar_settings.theme == "lunch"
+
+
+class FakeAssets:
+    """A bar with a themes directory and nothing else."""
+
+    def __init__(self, *names: str) -> None:
+        self.names = names
+        self.asked: list[str] = []
+
+    async def storage_list(self, path: str) -> types.StorageList:
+        self.asked.append(path)
+        return types.StorageList(
+            list=[types.StorageDirElement(type="dir", name=name) for name in self.names]
+        )
+
+
+async def test_themes_are_read_from_the_bar() -> None:
+    """
+    The set is whatever the firmware ships, so it is read rather than
+    written down here where it would go stale.
+    """
+    bar = FakeAssets("meeting", "dnd", "lunch")
+
+    assert await timer.themes(bar) == ["busy", "dnd", "lunch", "meeting"]
+    assert bar.asked == [timer.THEMES_PATH]
+
+
+async def test_the_default_theme_is_in_the_list_without_a_directory() -> None:
+    """
+    Every bar has it, and it has no directory of its own.
+    """
+    assert await timer.themes(FakeAssets()) == ["busy"]
