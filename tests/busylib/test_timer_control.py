@@ -378,3 +378,17 @@ async def test_a_known_set_can_be_passed_in_to_save_the_lookup() -> None:
     await timer.set_card_theme(bar, "busy", "whatever", known=["whatever"])
 
     assert bar.profiles_written[-1].busy_bar_settings.theme == "whatever"
+
+
+def test_both_errors_are_importable_from_the_package() -> None:
+    """
+    A caller catching one of these should not have to know which module
+    it lives in - and having to import one from `busylib.features` and
+    the other from `busylib.features.timer` is the kind of inconsistency
+    nobody discovers until it bites.
+    """
+    from busylib import features
+
+    assert features.TimerNotRunningError is timer.TimerNotRunningError
+    assert features.UnknownThemeError is timer.UnknownThemeError
+    assert {"TimerNotRunningError", "UnknownThemeError"} <= set(features.__all__)

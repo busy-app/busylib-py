@@ -191,7 +191,20 @@ written reports `0` - so the write disappears with no error at all.
 
 Anything that rewrites a running session - pausing, `next_phase`,
 `set_session_theme` - raises `TimerNotRunningError` when nothing is running,
-rather than starting a session nobody asked for.
+rather than starting a session nobody asked for. Both errors these helpers
+raise are importable from `busylib.features`, next to everything else a
+caller catches:
+
+```python
+from busylib.features import TimerNotRunningError, UnknownThemeError, timer
+
+try:
+    await timer.set_session_theme(bar, theme)
+except TimerNotRunningError:
+    ...  # nothing is running, so there is no session theme to change
+except UnknownThemeError as err:
+    print(f"this bar has {', '.join(err.available)}")
+```
 
 ## Writing the snapshot yourself
 

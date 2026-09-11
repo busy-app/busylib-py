@@ -24,6 +24,7 @@ from .timer import (
     TimerClient,
     TimerNotRunningError,
     TimerState,
+    UnknownThemeError,
     phase_of,
     timer_state,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "timer",
     "TimerClient",
     "TimerNotRunningError",
+    "UnknownThemeError",
     "ButtonEvent",
     "EncoderEvent",
     "InputEvent",
