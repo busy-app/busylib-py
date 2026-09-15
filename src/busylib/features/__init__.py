@@ -28,6 +28,7 @@ from .timer import (
     phase_of,
     timer_state,
 )
+from . import notification
 from .notification import (
     BUILT_IN_TEMPLATES,
     NotificationSpec,
@@ -52,6 +53,7 @@ __all__ = [
     "TimerState",
     "timer_state",
     "timer",
+    "notification",
     "TimerClient",
     "TimerNotRunningError",
     "UnknownThemeError",
