@@ -118,6 +118,22 @@ involved — see `busylib.display.decode_frame_data`. A decoded frame whose size
 doesn't match the target display is logged and dropped rather than stored, so a
 malformed update can't reach a renderer.
 
+## What an update leaves out
+
+proto3 omits any field holding its type's default, so an update the bar did
+send can be missing the very thing it is about. Two of those bite:
+
+- a number that is absent means zero - a muted volume, an unplugged USB, a
+  panel at its dimmest;
+- `battery_status` absent means `DISCHARGING`, because that is the first
+  value of the firmware's enum. A bar simply running on its battery reports
+  the most common state of all as nothing at all.
+
+`apply_state_stream_update` reads both the way the device means them. What it
+cannot do is tell you whether a cable is plugged in: the firmware knows
+(`vbus_present` internally) but does not put it on the wire, and `usb_voltage`
+reads non-zero on a bar that is discharging with nothing attached.
+
 ## Buttons, the selector and the wheel
 
 Physical input arrives on the same stream, as `input` updates.
