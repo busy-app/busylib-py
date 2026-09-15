@@ -236,14 +236,34 @@ def test_the_priorities_sit_where_the_device_arbitrates() -> None:
 class StubClient:
     """
     Records what `notify` sends, standing in for a real client.
+
+    It answers the storage calls too, because an icon that is not one of
+    the eight with a friendly name is looked up on the bar - a real client
+    has these, and a stub that did not would only be pretending.
     """
 
-    def __init__(self, device_api_version: str | None) -> None:
+    def __init__(
+        self, device_api_version: str | None, icons: dict[str, bytes] | None = None
+    ) -> None:
         self._version = device_api_version
         self.drawn: types.DisplayElements | None = None
         self.request_kwargs: dict[str, object] = {}
         self.played: str | None = None
         self.play_kwargs: dict[str, object] = {}
+        self.icons = icons or {}
+
+    async def storage_list(self, path: str) -> types.StorageList:
+        prefix = path.removeprefix(f"{notification.ASSETS_ROOT}/")
+        return types.StorageList(
+            list=[
+                types.StorageFileElement(type="file", name=name.split("/")[-1], size=1)
+                for name in self.icons
+                if name.rsplit("/", 1)[0] == prefix
+            ]
+        )
+
+    async def storage_read(self, path: str) -> bytes:
+        return self.icons[path.removeprefix(f"{notification.ASSETS_ROOT}/")]
 
     @property
     def device_api_version(self) -> str | None:
