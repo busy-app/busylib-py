@@ -482,3 +482,75 @@ async def test_configuring_nothing_writes_nothing() -> None:
     await timer.configure(bar)
 
     assert not bar.profiles_written
+
+
+async def test_a_card_can_change_what_kind_of_timer_it_holds() -> None:
+    """
+    A different kind of timer is a different object, not an edit: an
+    endless card has no lengths to keep. Verified on firmware r971, where
+    a card went endless -> pomodoro -> countdown -> endless.
+    """
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    written = await timer.configure(bar, "custom", kind="pomodoro", now_ms=1)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == timer.DEFAULT_WORK_MS
+    assert settings.interval_rest_ms == timer.DEFAULT_REST_MS
+    assert settings.interval_work_cycles_count == timer.DEFAULT_CYCLES
+
+
+async def test_a_new_kind_takes_the_lengths_it_was_given() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    written = await timer.configure(
+        bar, "custom", kind="countdown", total_ms=45 * 60_000, now_ms=1
+    )
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 45 * 60_000
+
+
+async def test_asking_for_the_kind_it_already_is_edits_rather_than_replaces() -> None:
+    """
+    Otherwise setting the kind on a card that already holds it would throw
+    its lengths away.
+    """
+    bar = FakeBar(_not_started())  # an interval card, 20/5/3
+
+    written = await timer.configure(bar, "busy", kind="pomodoro", work_ms=30 * 60_000)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == 30 * 60_000
+    assert settings.interval_rest_ms == REST
+    assert settings.interval_work_cycles_count == 3
+
+
+async def test_a_new_kind_still_refuses_a_phase_the_bar_would_drop() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    with pytest.raises(timer.PhaseTooShortError):
+        await timer.configure(bar, "custom", kind="pomodoro", work_ms=60_000)
+
+    assert not bar.profiles_written
+
+
+def test_the_kind_of_a_card_is_readable() -> None:
+    assert timer.kind_of(INTERVAL_SETTINGS) == "pomodoro"
+    assert timer.kind_of(types.BusyTimerInfiniteSettings(type="INFINITE")) == "endless"
+    assert (
+        timer.kind_of(types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=1))
+        == "countdown"
+    )
