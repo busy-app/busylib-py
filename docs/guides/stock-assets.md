@@ -50,23 +50,29 @@ square. Nothing stops you drawing either one anywhere; it will just look wrong.
 
 ## What is there
 
-The set follows the firmware, so the tables below are a map rather than a
-contract - [ask the bar](#reading-the-map-from-a-bar) when it matters. The
-counts come from a bar, and `make stock-assets` puts them back in sync:
+The counts below come from the firmware sources, not from a bar: a bar
+carries whatever its owner has uploaded or deleted, and a bar on an older
+build has whatever that build shipped - as this one does, with 19 of the 20
+status animations, because the twentieth landed a week after it was built. So
+this is what a bar ships with, and [asking a bar](#reading-the-map-from-a-bar)
+is how you find out what one actually has.
+
+`make stock-assets FIRMWARE=<checkout>` regenerates the table, and `CHECK=1`
+reports drift without writing:
 
 <!-- begin stock assets map -->
-Counted on firmware `r971`:
+Counted from the firmware sources at `736af4c78, 2026-09-11`:
 
-| | Folder | How many |
-| --- | --- | --- |
-| Icons and pictures | `shared/images/` | 84, 66 of them the `dt_*` sticker set |
-| Status animations | `shared/animations/` | 19 |
-| Fonts | `shared/fonts/` | 10 |
-| Notification sounds | `shared/sounds/` | 3 |
-| Timer animations | `busy/animations/` | 22 |
-| Timer pictures | `busy/images/` | 13 |
-| Timer sounds | `busy/sounds/` | 3 |
-| Themes | `busy/themes/` | 12 |
+| | On the device | How many | Since | Last changed |
+| --- | --- | --- | --- | --- |
+| Icons and pictures | `shared/images/` | 84, 66 of them the `dt_*` sticker set | 0.8.1 | 2026-08-07 |
+| Status animations | `shared/animations/` | 20 | 0.8.1 | 2026-09-11 |
+| Fonts | `shared/fonts/` | 10 | 0.8.1 | 2026-05-15 |
+| Notification sounds | `shared/sounds/` | 3 | 0.8.1 | 2026-05-12 |
+| Timer animations | `busy/animations/` | 22 | 0.1.0 | 2026-07-16 |
+| Timer pictures | `busy/images/` | 13 | 0.1.0 | 2026-07-16 |
+| Timer sounds | `busy/sounds/` | 3 | 0.1.0 | 2026-03-20 |
+| Themes | `busy/themes/` | 12 | 0.7.2 | 2026-05-13 |
 <!-- end stock assets map -->
 
 ### Icons
@@ -154,16 +160,46 @@ await timer.set_card_theme(bar, "busy", "dnd")  # from now on
 A theme a bar does not have raises `UnknownThemeError` rather than being
 written and silently ignored. See [timers](timers.md).
 
+## Your own assets
+
+An application can upload its own, and they are drawn and played the same way
+- with one difference worth knowing. Uploads live in
+`/ext/user_assets/<application>/`, and the device resolves a `path` inside the
+folder of the application making the call. So an upload is named by file name
+alone, the same name in two applications is two different files, and one
+application cannot draw another's:
+
+```python
+from busylib import converter
+from busylib.features import notification
+
+name, payload = converter.convert_for_storage("logo.png", open("logo.png", "rb").read())
+await bar.assets_upload(application_name="my-app", filename=name, data=payload)
+
+await notification.notify(bar, "Deploy done", icon="logo", application_name="my-app")
+```
+
+The size comes from the file - a PNG's IHDR, or the firmware format's own
+header - because an icon's width is what the text is placed after, and an icon
+wider than the panel pushes the text off the display. One that does not fit is
+refused rather than drawn.
+
 ## Reading the map from a bar
 
 Firmware adds and removes assets, and an owner can upload their own, so the
 bar is the only authority:
 
 ```python
-listing = await bar.storage_list("/ext/apps_assets/shared/images")
-print([item.name for item in listing.list])
+from busylib.features import assets
+
+for asset in await assets.discover_assets(bar):
+    print(asset.kind, asset.name, asset.reference, asset.application)
 ```
 
-`notification.icons(bar)` and `timer.themes(bar)` do exactly this for the two
-cases where a name has to be offered to a person - an icon picker, a theme
-dropdown - and neither has a list written down in the library to go stale.
+`discover_assets` reads both roots and every kind - images, animations,
+sounds, fonts and themes - and gives back what to pass in a call:
+`stock_path` for a shipped asset, `path` for an upload. `assets.of_kind(bar,
+"image")` is the same thing as the name-to-path mapping a picker wants, and
+`notification.icons(bar)` and `timer.themes(bar)` are the two shorthands for
+the lists most often offered to a person. None of them has a copy written down
+in the library to go stale.

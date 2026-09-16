@@ -19,7 +19,7 @@ from .input_events import (
 # The timer's control helpers are deliberately not re-exported here:
 # `start`, `stop` and `next_phase` say nothing on their own at this level.
 # Import the module and call them through it - `timer.start(client)`.
-from . import timer
+from . import assets, timer
 from .timer import (
     TimerClient,
     TimerNotRunningError,
@@ -31,6 +31,12 @@ from .timer import (
     kind_of_snapshot,
     phase_of,
     timer_state,
+)
+from . import notification
+from .assets import (
+    Asset,
+    AssetKind,
+    discover_assets,
 )
 from .notification import (
     BUILT_IN_TEMPLATES,
@@ -46,6 +52,10 @@ __all__ = [
     "DeviceStateStore",
     "collect_device_snapshot",
     "apply_state_stream_update",
+    "assets",
+    "Asset",
+    "AssetKind",
+    "discover_assets",
     "sync_app_assets",
     "build_notification",
     "notify",
@@ -56,6 +66,7 @@ __all__ = [
     "TimerState",
     "timer_state",
     "timer",
+    "notification",
     "TimerClient",
     "TimerNotRunningError",
     "UnknownThemeError",
