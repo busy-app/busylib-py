@@ -244,8 +244,18 @@ def apply_state_stream_update(
 
         wifi = update.get("wifi")
         if isinstance(wifi, dict):
-            connected = wifi.get("connected")
-            disconnected = wifi.get("disconnected")
+            # The stream renamed these states: `connected` and
+            # `disconnected` became `active` and `inactive` in the schema
+            # the current firmware ships. Both are read, because reading
+            # only one means a bar on the other side of that rename stops
+            # reporting its network without anything looking broken -
+            # which is exactly what happened here.
+            connected = wifi.get("active") or wifi.get("connected")
+            disconnected = (
+                wifi.get("inactive")
+                if wifi.get("inactive") is not None
+                else wifi.get("disconnected")
+            )
             if isinstance(connected, dict):
                 ssid = connected.get("ssid")
                 # A connection update carries the radio's side of the

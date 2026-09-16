@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-cov lint typecheck quality format clean build upload docs docs-serve run-example proto-sync
+.PHONY: help install install-dev test test-cov lint typecheck quality format clean build upload docs docs-serve run-example proto-sync stock-assets
 
 PROTO_REPO ?= https://github.com/flipperdevices/bsb-protobuf
 PROTO_DIR ?= .cache/bsb-protobuf
@@ -42,6 +42,7 @@ help:
 	@echo "  docs        - Build the documentation site into ./site"
 	@echo "  docs-serve  - Serve the documentation locally with live reload"
 	@echo "  proto-sync  - Pull proto schema from flipperdevices/bsb-protobuf and regenerate state stream Python files"
+	@echo "  stock-assets - Refresh the asset counts in the stock assets guide from a bar (BAR=, PIN=, CHECK=1)"
 	@echo "  run-example - Run example main module via uv (usage: make run-example <name> [args...])"
 
 # Install package
@@ -103,6 +104,14 @@ docs:
 # Serve the documentation locally with live reload
 docs-serve:
 	uv run --extra docs mkdocs serve
+
+# Refresh the counts in docs/guides/stock-assets.md from a real bar.
+# Usage: make stock-assets BAR=192.168.1.50 PIN=123456 [CHECK=1]
+stock-assets:
+	@test -n "$(BAR)" || (echo "BAR is empty - pass the bar's address" && exit 1)
+	@test -n "$(PIN)" || (echo "PIN is empty - pass the bar's PIN or a token" && exit 1)
+	uv run python scripts/stock_assets_map.py --host "$(BAR)" --token "$(PIN)" \
+		$(if $(CHECK),--check,)
 
 # Regenerate protobuf models for status websocket stream support.
 # By default this target keeps a local checkout in .cache/bsb-protobuf.

@@ -542,6 +542,7 @@ DisplayFontName = Literal[
     "large",
     "extra_large",
     "global",
+    "superscript",
 ]
 
 

@@ -51,7 +51,23 @@ square. Nothing stops you drawing either one anywhere; it will just look wrong.
 ## What is there
 
 The set follows the firmware, so the tables below are a map rather than a
-contract - [ask the bar](#reading-the-map-from-a-bar) when it matters.
+contract - [ask the bar](#reading-the-map-from-a-bar) when it matters. The
+counts come from a bar, and `make stock-assets` puts them back in sync:
+
+<!-- begin stock assets map -->
+Counted on firmware `r971`:
+
+| | Folder | How many |
+| --- | --- | --- |
+| Icons and pictures | `shared/images/` | 84, 66 of them the `dt_*` sticker set |
+| Status animations | `shared/animations/` | 19 |
+| Fonts | `shared/fonts/` | 10 |
+| Notification sounds | `shared/sounds/` | 3 |
+| Timer animations | `busy/animations/` | 22 |
+| Timer pictures | `busy/images/` | 13 |
+| Timer sounds | `busy/sounds/` | 3 |
+| Themes | `busy/themes/` | 12 |
+<!-- end stock assets map -->
 
 ### Icons
 
@@ -76,10 +92,9 @@ await notification.notify(bar, "Laundry done", icon="check", application_name="m
 ```
 
 `notification.icons(bar)` returns every image the bar actually holds, each with
-the width read from its file header - 84 of them on current firmware, of which
-66 are the `dt_*` sticker set (food, faces, activities: `dt_coffee`,
-`dt_emoji_happy`, `dt_work` ...). Pass a `StockIcon` from that list anywhere a
-name is taken.
+the width read from its file header - the `dt_*` sticker set included (food,
+faces, activities: `dt_coffee`, `dt_emoji_happy`, `dt_work` ...). Pass a
+`StockIcon` from that list anywhere a name is taken.
 
 ### Animations
 
@@ -117,9 +132,10 @@ The first three have short names in `notification.STOCK_SOUNDS` (`event`,
 
 ### Fonts
 
-Ten files in `shared/fonts/`, and text names a font rather than pointing at
-one: `tiny`, `small`, `normal`, `condensed`, `bold`, `large`, `extra_large`.
-The largest do not fit two lines on the front display, which is why
+Text names a font rather than pointing at one: `tiny`, `small`, `normal`,
+`condensed`, `bold`, `large`, `extra_large`, and `superscript` - which the
+firmware added in OpenAPI 27.6 for the raised digits a countdown draws. The
+largest do not fit two lines on the front display, which is why
 `notification.TWO_LINE_FONTS` is the shorter list.
 
 ### Themes
