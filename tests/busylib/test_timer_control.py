@@ -392,3 +392,93 @@ def test_both_errors_are_importable_from_the_package() -> None:
     assert features.TimerNotRunningError is timer.TimerNotRunningError
     assert features.UnknownThemeError is timer.UnknownThemeError
     assert {"TimerNotRunningError", "UnknownThemeError"} <= set(features.__all__)
+
+
+async def test_a_card_gets_its_own_length() -> None:
+    """
+    The only way a session runs for twenty-five minutes: the device
+    refuses a snapshot whose settings disagree with the card it names.
+    """
+    bar = FakeBar(_not_started())
+
+    written = await timer.configure(bar, "busy", work_ms=25 * 60_000, now_ms=9_000)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == 25 * 60_000
+    # Untouched by a change that did not mention them.
+    assert settings.interval_rest_ms == REST
+    assert settings.interval_work_cycles_count == 3
+    assert written.profile_timestamp_ms == 9_000
+    assert bar.profiles_written[-1] is written
+
+
+async def test_a_phase_the_bar_would_drop_is_refused() -> None:
+    """
+    A card written with a four-minute phase comes back with the phase it
+    had, and every layer reports success - so the caller has to be told
+    here or find out by watching a bar run the wrong timer.
+    """
+    bar = FakeBar(_not_started())
+
+    with pytest.raises(timer.PhaseTooShortError, match="4 minutes"):
+        await timer.configure(bar, work_ms=4 * 60_000)
+    with pytest.raises(timer.PhaseTooShortError):
+        await timer.configure(bar, rest_ms=60_000)
+
+    assert not bar.profiles_written
+
+
+async def test_five_minutes_is_allowed() -> None:
+    """
+    The floor, found by bisection against a real bar: four is dropped and
+    five is kept.
+    """
+    bar = FakeBar(_not_started())
+
+    await timer.configure(bar, work_ms=timer.MINIMUM_PHASE_MS)
+
+    assert bar.profiles_written
+
+
+async def test_a_length_the_card_cannot_use_is_an_error() -> None:
+    """
+    An interval card has no total, and the device would treat one as a
+    no-op rather than complain.
+    """
+    bar = FakeBar(_not_started())
+
+    with pytest.raises(ValueError, match="use work_ms and rest_ms"):
+        await timer.configure(bar, total_ms=25 * 60_000)
+
+    countdown = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerSimpleSettings(
+            type="SIMPLE", total_time_ms=15 * 60_000
+        ),
+    )
+    with pytest.raises(ValueError, match="use total_ms"):
+        await timer.configure(countdown, work_ms=25 * 60_000)
+
+
+async def test_a_countdown_card_takes_a_total() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerSimpleSettings(
+            type="SIMPLE", total_time_ms=15 * 60_000
+        ),
+    )
+
+    written = await timer.configure(bar, total_ms=25 * 60_000)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 25 * 60_000
+
+
+async def test_configuring_nothing_writes_nothing() -> None:
+    bar = FakeBar(_not_started())
+
+    await timer.configure(bar)
+
+    assert not bar.profiles_written

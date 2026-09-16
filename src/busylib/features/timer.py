@@ -204,6 +204,14 @@ class TimerNotRunningError(exceptions.BusyBarError):
 # Where the bar keeps the themes it has assets for, one directory each.
 THEMES_PATH = "/ext/apps_assets/busy/themes"
 
+# The shortest phase the device will accept. Anything under it is stored
+# nowhere: the write answers {"result": "OK"} and the card keeps what it
+# had. Found by bisection on firmware r971 - four minutes is ignored, five
+# is kept, six and seven are kept, so it is a floor rather than a step -
+# and documented nowhere, the bar's own OpenAPI even showing 120000 as its
+# example.
+MINIMUM_PHASE_MS = 5 * 60 * 1000
+
 
 class UnknownThemeError(exceptions.BusyBarError):
     """
@@ -221,6 +229,25 @@ class UnknownThemeError(exceptions.BusyBarError):
         self.available = list(available)
         super().__init__(
             f"this bar has no theme {theme!r}; it has: {', '.join(self.available)}"
+        )
+
+
+class PhaseTooShortError(exceptions.BusyBarError):
+    """
+    Raised for a phase the device would silently refuse to store.
+
+    It does not reject them: a card written with a two-minute work phase
+    comes back with the phase it had before, and every layer reports
+    success. So a caller that is not told here finds out by watching a bar
+    run the wrong timer.
+    """
+
+    def __init__(self, field: str, given_ms: int) -> None:
+        self.field = field
+        self.given_ms = given_ms
+        super().__init__(
+            f"{field} is {given_ms / 60000:g} minutes; the bar silently ignores "
+            f"anything under {MINIMUM_PHASE_MS // 60000} and keeps what it had"
         )
 
 
@@ -524,3 +551,85 @@ async def _checked(
     available = list(known) if known is not None else await themes(client)
     if theme not in available:
         raise UnknownThemeError(theme, available)
+
+
+def _phase(field: str, value: int | None) -> int | None:
+    """
+    Check one duration, since the device checks none of them out loud.
+    """
+    if value is not None and value < MINIMUM_PHASE_MS:
+        raise PhaseTooShortError(field, value)
+    return value
+
+
+async def configure(
+    client: TimerClient,
+    slot: types.BusyProfileSlot = "busy",
+    *,
+    work_ms: int | None = None,
+    rest_ms: int | None = None,
+    cycles: int | None = None,
+    total_ms: int | None = None,
+    theme: str | None = None,
+    known_themes: Sequence[str] | None = None,
+    now_ms: int | None = None,
+) -> types.BusyProfile:
+    """
+    Change one of the bar's two cards, leaving the rest of it alone.
+
+    This is how a session gets its own length. The device refuses a
+    snapshot whose settings disagree with the card it names, so there is no
+    way to run a timer for twenty-five minutes without the card saying
+    twenty-five minutes - which is why this exists and why the change
+    outlasts the session. The bar and the phone app see it too; that is the
+    same thing they do to each other.
+
+    Only what is given is changed. `work_ms`, `rest_ms` and `cycles` apply
+    to an interval card, `total_ms` to a countdown; giving one the card
+    cannot use is an error rather than a silent no-op, since the device
+    would treat it as one.
+
+    Returns the profile as written, so a caller can see what the card now
+    holds.
+    """
+    profile = await client.busy_profile(slot)
+    settings = profile.timer_settings
+
+    if theme is not None:
+        await _checked(client, theme, known_themes)
+
+    updates: dict[str, object] = {}
+    if isinstance(settings, types.BusySnapshotIntervalSettings):
+        if total_ms is not None:
+            raise ValueError(f"the {slot} card runs intervals; use work_ms and rest_ms")
+        if work_ms is not None:
+            updates["interval_work_ms"] = _phase("work_ms", work_ms)
+        if rest_ms is not None:
+            updates["interval_rest_ms"] = _phase("rest_ms", rest_ms)
+        if cycles is not None:
+            updates["interval_work_cycles_count"] = cycles
+    elif isinstance(settings, types.BusyTimerSimpleSettings):
+        if work_ms is not None or rest_ms is not None or cycles is not None:
+            raise ValueError(f"the {slot} card runs a countdown; use total_ms")
+        if total_ms is not None:
+            updates["total_time_ms"] = _phase("total_ms", total_ms)
+    elif work_ms is not None or rest_ms is not None or total_ms is not None:
+        raise ValueError(f"the {slot} card runs without a clock; it has no length")
+
+    changed: dict[str, object] = {}
+    if updates:
+        changed["timer_settings"] = settings.model_copy(update=updates)
+    if theme is not None:
+        changed["busy_bar_settings"] = profile.busy_bar_settings.model_copy(
+            update={"theme": theme}
+        )
+    if not changed:
+        return profile
+
+    # Stamped, or the device keeps the copy it has and says OK anyway.
+    changed["profile_timestamp_ms"] = (
+        int(time.time() * 1000) if now_ms is None else now_ms
+    )
+    written = profile.model_copy(update=changed)
+    await client.busy_profile_set(slot, written)
+    return written

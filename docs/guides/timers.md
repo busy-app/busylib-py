@@ -182,6 +182,26 @@ does not have raises `UnknownThemeError`, which carries what it does have. If
 you already have the list - because you offered it to someone - pass it as
 `known=` and save the lookup.
 
+**A session cannot have a length of its own.** The device refuses a
+snapshot whose settings disagree with the card it names, so running a timer
+for twenty-five minutes means the card says twenty-five minutes.
+`timer.configure()` writes that, changing only what you give it:
+
+```python
+await timer.configure(bar, "busy", work_ms=25 * 60_000)
+await timer.start(bar, "busy")
+```
+
+The change outlasts the session, and the bar and the phone app see it - which
+is the same thing they do to each other.
+
+**Phases under five minutes are dropped in silence.** The device stores
+nothing and answers `{"result": "OK"}`; the card keeps what it had. Found by
+bisection on firmware r971 - four minutes ignored, five, six and seven kept -
+and documented nowhere, the bar's own OpenAPI even offering `120000` as its
+example. `configure()` raises `PhaseTooShortError` rather than let a caller
+watch a bar run the wrong timer.
+
 **A card write needs a fresh timestamp.** The device keeps whichever copy of a
 card is newer and silently discards the rest, answering `{"result": "OK"}`
 either way. A card read back and written unchanged carries the stored
