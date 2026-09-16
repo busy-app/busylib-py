@@ -694,6 +694,43 @@ async def resolve_icon(
     raise ValueError(f"this bar has no icon {name!r}; it has: {', '.join(available)}")
 
 
+async def resolve_sound(
+    client: IconCatalogueClient,
+    name: str,
+    *,
+    application_name: str | None = None,
+) -> assets.Asset:
+    """
+    Resolve a sound name to the asset a playback call can name.
+
+    Same reasoning as `resolve_icon`: the three sounds with friendly
+    names are a convenience, not the list - a bar holds the timer's own
+    sounds too, and whatever an application uploaded. The short names in
+    `STOCK_SOUNDS` are answered first and without asking the bar.
+    """
+    known = STOCK_SOUNDS.get(name)
+    if known is not None:
+        return assets.Asset(name=name, reference=known, kind="sound")
+
+    catalogue = await assets.discover_assets(client)
+    for asset in catalogue:
+        if asset.kind != "sound":
+            continue
+        if asset.name != name and asset.reference != name:
+            continue
+        if asset.is_upload and asset.application != application_name:
+            continue
+        return asset
+
+    available = sorted(
+        asset.name
+        for asset in catalogue
+        if asset.kind == "sound"
+        and (not asset.is_upload or asset.application == application_name)
+    )
+    raise ValueError(f"this bar has no sound {name!r}; it has: {', '.join(available)}")
+
+
 class NotifyClient(IconCatalogueClient, Protocol):
     """
     The client surface a notification needs.
@@ -723,11 +760,12 @@ class NotifyClient(IconCatalogueClient, Protocol):
     async def audio_play(
         self,
         *,
+        path: str | None = None,
         stock_path: str | None = None,
         **request_kwargs: object,
     ) -> types.SuccessResponse:
         """
-        Play a built-in sound.
+        Play a sound the bar holds, shipped or uploaded.
         """
         ...
 
@@ -774,13 +812,12 @@ async def notify(
         font,
         sound,
     )
-    stock_sound: str | None = None
+    # Any sound the bar has, for the same reason as the icons: the three
+    # with friendly names are a convenience, and the timer's own sounds
+    # and anything uploaded are equally playable.
+    playable: assets.Asset | None = None
     if sound:
-        stock_sound = STOCK_SOUNDS.get(sound)
-        if stock_sound is None:
-            raise ValueError(
-                f"unknown sound {sound!r}; use one of {', '.join(sorted(STOCK_SOUNDS))}"
-            )
+        playable = await resolve_sound(client, sound, application_name=application_name)
 
     # Any icon the bar has, not only the handful with a friendly name: the
     # Draw Tool's set is on the device too, and so is anything this
@@ -813,8 +850,10 @@ async def notify(
         template=template,
     )
     drawn = await client.display_draw(elements, application_name=application_name)
-    if stock_sound is not None:
+    if playable is not None:
         await client.audio_play(
-            stock_path=stock_sound, application_name=application_name
+            stock_path=None if playable.is_upload else playable.reference,
+            path=playable.reference if playable.is_upload else None,
+            application_name=application_name,
         )
     return drawn

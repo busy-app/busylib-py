@@ -160,16 +160,46 @@ await timer.set_card_theme(bar, "busy", "dnd")  # from now on
 A theme a bar does not have raises `UnknownThemeError` rather than being
 written and silently ignored. See [timers](timers.md).
 
+## Your own assets
+
+An application can upload its own, and they are drawn and played the same way
+- with one difference worth knowing. Uploads live in
+`/ext/user_assets/<application>/`, and the device resolves a `path` inside the
+folder of the application making the call. So an upload is named by file name
+alone, the same name in two applications is two different files, and one
+application cannot draw another's:
+
+```python
+from busylib import converter
+from busylib.features import notification
+
+name, payload = converter.convert_for_storage("logo.png", open("logo.png", "rb").read())
+await bar.assets_upload(application_name="my-app", filename=name, data=payload)
+
+await notification.notify(bar, "Deploy done", icon="logo", application_name="my-app")
+```
+
+The size comes from the file - a PNG's IHDR, or the firmware format's own
+header - because an icon's width is what the text is placed after, and an icon
+wider than the panel pushes the text off the display. One that does not fit is
+refused rather than drawn.
+
 ## Reading the map from a bar
 
 Firmware adds and removes assets, and an owner can upload their own, so the
 bar is the only authority:
 
 ```python
-listing = await bar.storage_list("/ext/apps_assets/shared/images")
-print([item.name for item in listing.list])
+from busylib.features import assets
+
+for asset in await assets.discover_assets(bar):
+    print(asset.kind, asset.name, asset.reference, asset.application)
 ```
 
-`notification.icons(bar)` and `timer.themes(bar)` do exactly this for the two
-cases where a name has to be offered to a person - an icon picker, a theme
-dropdown - and neither has a list written down in the library to go stale.
+`discover_assets` reads both roots and every kind - images, animations,
+sounds, fonts and themes - and gives back what to pass in a call:
+`stock_path` for a shipped asset, `path` for an upload. `assets.of_kind(bar,
+"image")` is the same thing as the name-to-path mapping a picker wants, and
+`notification.icons(bar)` and `timer.themes(bar)` are the two shorthands for
+the lists most often offered to a person. None of them has a copy written down
+in the library to go stale.
