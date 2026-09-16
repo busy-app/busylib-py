@@ -237,6 +237,10 @@ DEFAULT_REST_MS = 5 * 60 * 1000
 DEFAULT_CYCLES = 4
 DEFAULT_TOTAL_MS = 25 * 60 * 1000
 
+# What a session names when it is given no theme and has no card to take
+# one from. The firmware's built-in, which every bar has.
+DEFAULT_THEME = "busy"
+
 # The firmware's own words, lowercased. Naming them anything else - the
 # app's words, or nicer ones - would mean three vocabularies for one
 # thing: what the device reports, what a consumer writes, and what a
@@ -385,6 +389,7 @@ async def start(
     client: TimerClient,
     slot: types.BusyProfileSlot = "busy",
     *,
+    card_id: str | None = None,
     kind: TimerKind | None = None,
     duration_ms: int | None = None,
     rest_ms: int | None = None,
@@ -407,24 +412,44 @@ async def start(
     The card is still named, because a snapshot names one and the app
     shows that card's name and its own decoration for the running session.
 
-    What the device will not take, as a parse error about the whole
-    snapshot rather than anything helpful: an interval phase under five
-    minutes, or fewer than two or more than thirty-two work phases. A
-    countdown has no such floor. All three checked against firmware r971.
-    """
-    profile = await client.busy_profile(slot)
-    settings = profile.busy_bar_settings
-    if theme is not None:
-        settings = settings.model_copy(update={"theme": theme})
+    `card_id` names a card directly instead of taking the one in a slot,
+    and then nothing on the bar is read at all. The point is a card that
+    is in neither position: the bar keeps two, the app keeps more, and a
+    session naming one of the others runs without either of the bar's own
+    two being involved even by name. Such a session has no card to fall
+    back on, so its kind and lengths are the ones given here, or the
+    defaults below.
 
-    stored = profile.timer_settings
-    wanted = kind or kind_of(stored)
+    What the device will not take, as a parse error about the whole
+    snapshot rather than anything helpful: an interval phase outside five
+    minutes to eight hours, fewer than two or more than thirty-five work
+    phases, or a countdown over a day. Those are the firmware's own
+    bounds, in `busy_timer_common.h`, confirmed on a bar.
+    """
+    if card_id is None:
+        profile = await client.busy_profile(slot)
+        card_id = profile.id
+        stored: types.BusyTimerSettings | None = profile.timer_settings
+        settings = profile.busy_bar_settings
+        if theme is not None:
+            settings = settings.model_copy(update={"theme": theme})
+    else:
+        # Nothing to read: a card outside the two positions is the app's,
+        # and the bar will not answer for it. So the session is described
+        # entirely by this call.
+        stored = None
+        settings = types.BusyBarSettings(
+            theme=theme or DEFAULT_THEME,
+            show_work_phase_only=False,
+            trigger_smart_home=True,
+        )
+    wanted = kind or (kind_of(stored) if stored is not None else "infinite")
 
     variant: types.BusySnapshotVariant
     if wanted == "infinite":
         variant = types.BusySnapshotInfinite(
             type="INFINITE",
-            card_id=profile.id,
+            card_id=card_id,
             is_paused=False,
             busy_bar_settings=settings,
         )
@@ -438,7 +463,7 @@ async def start(
             )
         variant = types.BusySnapshotSimple(
             type="SIMPLE",
-            card_id=profile.id,
+            card_id=card_id,
             time_left_ms=total,
             is_paused=False,
             busy_bar_settings=settings,
@@ -471,7 +496,7 @@ async def start(
         _cycles(running.interval_work_cycles_count)
         variant = types.BusySnapshotInterval(
             type="INTERVAL",
-            card_id=profile.id,
+            card_id=card_id,
             current_interval=0,
             current_interval_time_total_ms=running.interval_work_ms,
             current_interval_time_left_ms=running.interval_work_ms,
