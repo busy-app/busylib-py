@@ -212,6 +212,42 @@ THEMES_PATH = "/ext/apps_assets/busy/themes"
 # example.
 MINIMUM_PHASE_MS = 5 * 60 * 1000
 
+# What a card is given when it changes to a kind of timer it was not
+# running before. There is nothing to carry over in that case - an
+# infinite card has no lengths at all - so these are the values a fresh
+# interval or
+# countdown starts from, and a caller can pass its own alongside.
+DEFAULT_WORK_MS = 25 * 60 * 1000
+DEFAULT_REST_MS = 5 * 60 * 1000
+DEFAULT_CYCLES = 4
+DEFAULT_TOTAL_MS = 25 * 60 * 1000
+
+# The firmware's own words, lowercased. Naming them anything else - the
+# app's words, or nicer ones - would mean three vocabularies for one
+# thing: what the device reports, what a consumer writes, and what a
+# person reads. These are also exactly the values `timer_state` reports
+# as a session's mode.
+TimerKind = Literal["infinite", "simple", "interval"]
+
+# The firmware's names for them, which the wire uses.
+_KIND_TO_TYPE: dict[TimerKind, str] = {
+    "infinite": "INFINITE",
+    "simple": "SIMPLE",
+    "interval": "INTERVAL",
+}
+_TYPE_TO_KIND: dict[str, TimerKind] = {
+    "INFINITE": "infinite",
+    "SIMPLE": "simple",
+    "INTERVAL": "interval",
+}
+
+
+def kind_of(settings: types.BusyTimerSettings) -> TimerKind:
+    """
+    Which kind of timer a card holds, in this package's words.
+    """
+    return _TYPE_TO_KIND[settings.type]
+
 
 class UnknownThemeError(exceptions.BusyBarError):
     """
@@ -562,10 +598,39 @@ def _phase(field: str, value: int | None) -> int | None:
     return value
 
 
+def _settings_for(
+    kind: TimerKind,
+    *,
+    work_ms: int | None,
+    rest_ms: int | None,
+    cycles: int | None,
+    total_ms: int | None,
+    autostart: bool,
+) -> types.BusyTimerSettings:
+    """
+    Build a fresh timer of one kind, for a card changing to it.
+    """
+    if kind == "infinite":
+        return types.BusyTimerInfiniteSettings(type="INFINITE")
+    if kind == "simple":
+        return types.BusyTimerSimpleSettings(
+            type="SIMPLE",
+            total_time_ms=_phase("total_ms", total_ms) or DEFAULT_TOTAL_MS,
+        )
+    return types.BusySnapshotIntervalSettings(
+        type="INTERVAL",
+        interval_work_ms=_phase("work_ms", work_ms) or DEFAULT_WORK_MS,
+        interval_rest_ms=_phase("rest_ms", rest_ms) or DEFAULT_REST_MS,
+        interval_work_cycles_count=cycles or DEFAULT_CYCLES,
+        is_autostart_enabled=autostart,
+    )
+
+
 async def configure(
     client: TimerClient,
     slot: types.BusyProfileSlot = "busy",
     *,
+    kind: TimerKind | None = None,
     work_ms: int | None = None,
     rest_ms: int | None = None,
     cycles: int | None = None,
@@ -598,6 +663,24 @@ async def configure(
     if theme is not None:
         await _checked(client, theme, known_themes)
 
+    changed: dict[str, object] = {}
+    if kind is not None and kind != kind_of(settings):
+        # A different kind of timer is a different object, not an edit: an
+        # infinite card has no lengths to keep, and the device stores
+        # whichever one it is given. Verified on firmware r971, where a
+        # card went infinite -> interval -> simple -> infinite and kept
+        # each one.
+        changed["timer_settings"] = _settings_for(
+            kind,
+            work_ms=work_ms,
+            rest_ms=rest_ms,
+            cycles=cycles,
+            total_ms=total_ms,
+            autostart=getattr(settings, "is_autostart_enabled", False),
+        )
+        work_ms = rest_ms = cycles = total_ms = None
+        settings = changed["timer_settings"]  # type: ignore[assignment]
+
     updates: dict[str, object] = {}
     if isinstance(settings, types.BusySnapshotIntervalSettings):
         if total_ms is not None:
@@ -616,7 +699,6 @@ async def configure(
     elif work_ms is not None or rest_ms is not None or total_ms is not None:
         raise ValueError(f"the {slot} card runs without a clock; it has no length")
 
-    changed: dict[str, object] = {}
     if updates:
         changed["timer_settings"] = settings.model_copy(update=updates)
     if theme is not None:
