@@ -461,13 +461,15 @@ async def test_notify_without_a_sound_plays_nothing() -> None:
     assert client.played is None
 
 
-async def test_notify_refuses_an_unknown_sound_before_drawing() -> None:
+async def test_notify_refuses_a_sound_the_bar_does_not_have() -> None:
     """
-    A mistyped sound fails outright rather than drawing silently.
+    A mistyped sound fails outright rather than drawing silently, and the
+    name is checked against the bar - the three with friendly names are a
+    convenience, not the list of what a bar can play.
     """
     client = StubClient("27.7.0")
 
-    with pytest.raises(ValueError, match="unknown sound"):
+    with pytest.raises(ValueError, match="no sound 'fanfare'"):
         await notification.notify(client, "Laundry", sound="fanfare")
 
     assert client.drawn is None, "nothing should reach the device"
