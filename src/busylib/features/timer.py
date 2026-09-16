@@ -820,7 +820,7 @@ async def configure(
     changed: dict[str, object] = {}
     if kind is not None and kind != kind_of(settings):
         # A different kind of timer is a different object, not an edit: an
-        # endless card has no lengths to keep, and the device stores
+        # infinite card has no lengths to keep, and the device stores
         # whichever one it is given. Verified on firmware r971, where a
         # card went infinite -> interval -> simple -> infinite and kept
         # each one.
