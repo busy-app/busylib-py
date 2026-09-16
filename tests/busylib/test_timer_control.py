@@ -495,7 +495,7 @@ async def test_a_card_can_change_what_kind_of_timer_it_holds() -> None:
         timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
     )
 
-    written = await timer.configure(bar, "custom", kind="pomodoro", now_ms=1)
+    written = await timer.configure(bar, "custom", kind="interval", now_ms=1)
 
     settings = written.timer_settings
     assert isinstance(settings, types.BusySnapshotIntervalSettings)
@@ -526,7 +526,7 @@ async def test_asking_for_the_kind_it_already_is_edits_rather_than_replaces() ->
     """
     bar = FakeBar(_not_started())  # an interval card, 20/5/3
 
-    written = await timer.configure(bar, "busy", kind="pomodoro", work_ms=30 * 60_000)
+    written = await timer.configure(bar, "busy", kind="interval", work_ms=30 * 60_000)
 
     settings = written.timer_settings
     assert isinstance(settings, types.BusySnapshotIntervalSettings)
@@ -542,14 +542,14 @@ async def test_a_new_kind_still_refuses_a_phase_the_bar_would_drop() -> None:
     )
 
     with pytest.raises(timer.PhaseTooShortError):
-        await timer.configure(bar, "custom", kind="pomodoro", work_ms=60_000)
+        await timer.configure(bar, "custom", kind="interval", work_ms=60_000)
 
     assert not bar.profiles_written
 
 
 def test_the_kind_of_a_card_is_readable() -> None:
-    assert timer.kind_of(INTERVAL_SETTINGS) == "pomodoro"
-    assert timer.kind_of(types.BusyTimerInfiniteSettings(type="INFINITE")) == "off"
+    assert timer.kind_of(INTERVAL_SETTINGS) == "interval"
+    assert timer.kind_of(types.BusyTimerInfiniteSettings(type="INFINITE")) == "infinite"
     assert (
         timer.kind_of(types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=1))
         == "simple"
