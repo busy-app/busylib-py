@@ -200,7 +200,7 @@ lands where that kind of card keeps it - the total of a countdown, the work
 phase of a pomodoro - so a caller does not have to know which:
 
 ```python
-await timer.configure(bar, "custom", kind="countdown", duration_ms=40 * 60_000)
+await timer.configure(bar, "custom", kind="simple", duration_ms=40 * 60_000)
 await timer.start(bar, "custom")
 ```
 
@@ -212,7 +212,7 @@ await timer.configure(bar, "custom", kind="pomodoro", work_ms=25 * 60_000)
 print(timer.kind_of((await bar.busy_profile("custom")).timer_settings))  # 'pomodoro'
 ```
 
-`endless`, `countdown` and `pomodoro` are what this package calls the
+`off`, `simple` and `pomodoro` are what this package calls the
 firmware's `INFINITE`, `SIMPLE` and `INTERVAL`. Changing to a kind a card
 was not already running replaces its timer rather than editing it, because
 there is nothing to carry over - an endless card has no lengths at all -

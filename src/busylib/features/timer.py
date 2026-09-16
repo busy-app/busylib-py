@@ -221,17 +221,20 @@ DEFAULT_REST_MS = 5 * 60 * 1000
 DEFAULT_CYCLES = 4
 DEFAULT_TOTAL_MS = 25 * 60 * 1000
 
-TimerKind = Literal["endless", "countdown", "pomodoro"]
+# The app's words for them, so that a person reading Home Assistant and a
+# person reading the BUSY app are told the same thing. The firmware's own
+# names - INFINITE, SIMPLE, INTERVAL - stay on the wire.
+TimerKind = Literal["off", "simple", "pomodoro"]
 
 # The firmware's names for them, which the wire uses.
 _KIND_TO_TYPE: dict[TimerKind, str] = {
-    "endless": "INFINITE",
-    "countdown": "SIMPLE",
+    "off": "INFINITE",
+    "simple": "SIMPLE",
     "pomodoro": "INTERVAL",
 }
 _TYPE_TO_KIND: dict[str, TimerKind] = {
-    "INFINITE": "endless",
-    "SIMPLE": "countdown",
+    "INFINITE": "off",
+    "SIMPLE": "simple",
     "INTERVAL": "pomodoro",
 }
 
@@ -604,9 +607,9 @@ def _settings_for(
     """
     Build a fresh timer of one kind, for a card changing to it.
     """
-    if kind == "endless":
+    if kind == "off":
         return types.BusyTimerInfiniteSettings(type="INFINITE")
-    if kind == "countdown":
+    if kind == "simple":
         return types.BusyTimerSimpleSettings(
             type="SIMPLE",
             total_time_ms=_phase("total_ms", total_ms) or DEFAULT_TOTAL_MS,
@@ -661,11 +664,11 @@ async def configure(
     # card that runs endlessly has neither.
     if duration_ms is not None:
         wanted = kind or kind_of(settings)
-        if wanted == "endless":
+        if wanted == "off":
             raise ValueError(
-                f"the {slot} card runs without a clock; it has no length to set"
+                f"the {slot} card has its timer off; it has no length to set"
             )
-        if wanted == "countdown":
+        if wanted == "simple":
             total_ms = duration_ms if total_ms is None else total_ms
         else:
             work_ms = duration_ms if work_ms is None else work_ms

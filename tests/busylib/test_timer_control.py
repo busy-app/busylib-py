@@ -511,7 +511,7 @@ async def test_a_new_kind_takes_the_lengths_it_was_given() -> None:
     )
 
     written = await timer.configure(
-        bar, "custom", kind="countdown", total_ms=45 * 60_000, now_ms=1
+        bar, "custom", kind="simple", total_ms=45 * 60_000, now_ms=1
     )
 
     settings = written.timer_settings
@@ -549,10 +549,10 @@ async def test_a_new_kind_still_refuses_a_phase_the_bar_would_drop() -> None:
 
 def test_the_kind_of_a_card_is_readable() -> None:
     assert timer.kind_of(INTERVAL_SETTINGS) == "pomodoro"
-    assert timer.kind_of(types.BusyTimerInfiniteSettings(type="INFINITE")) == "endless"
+    assert timer.kind_of(types.BusyTimerInfiniteSettings(type="INFINITE")) == "off"
     assert (
         timer.kind_of(types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=1))
-        == "countdown"
+        == "simple"
     )
 
 
@@ -589,7 +589,7 @@ async def test_a_duration_follows_the_kind_being_asked_for() -> None:
         timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
     )
 
-    await timer.configure(bar, "custom", kind="countdown", duration_ms=40 * 60_000)
+    await timer.configure(bar, "custom", kind="simple", duration_ms=40 * 60_000)
 
     settings = bar.profiles_written[-1].timer_settings
     assert isinstance(settings, types.BusyTimerSimpleSettings)
