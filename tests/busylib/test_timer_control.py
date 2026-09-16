@@ -108,8 +108,8 @@ def _running(
 
 async def test_start_builds_the_session_the_card_describes() -> None:
     """
-    The mode comes from the card, not from the caller: the device rejects
-    a snapshot that disagrees with the card it names.
+    With nothing but a slot, the session is the one the card holds - what
+    the bar's own switch would start.
     """
     bar = FakeBar(_not_started())
 
@@ -155,6 +155,61 @@ async def test_start_can_override_the_theme_for_one_session() -> None:
 
     assert bar.last.busy_bar_settings.theme == "meeting"
     assert not bar.profiles_written
+
+
+async def test_start_can_run_a_countdown_the_card_does_not_hold() -> None:
+    """
+    A length of its own is the point of this: an automation asking for
+    forty-five minutes must not rewrite a card somebody arranged by hand.
+    """
+    bar = FakeBar(_not_started())
+
+    await timer.start(bar, kind="simple", duration_ms=45 * 60 * 1000)
+
+    written = bar.last
+    assert isinstance(written, types.BusySnapshotSimple)
+    assert written.time_left_ms == 45 * 60 * 1000
+    # Still that card's session - the app shows it under the card's name.
+    assert written.card_id == CARD
+    assert not bar.profiles_written
+
+
+async def test_start_can_run_a_pomodoro_of_its_own() -> None:
+    """
+    Lengths and cycles travel in the snapshot together, and the ones the
+    caller leaves out come from the card.
+    """
+    bar = FakeBar(_not_started())
+
+    await timer.start(bar, kind="interval", duration_ms=30 * 60 * 1000, cycles=6)
+
+    written = bar.last
+    assert isinstance(written, types.BusySnapshotInterval)
+    assert written.interval_settings.interval_work_ms == 30 * 60 * 1000
+    assert written.interval_settings.interval_rest_ms == REST  # the card's
+    assert written.interval_settings.interval_work_cycles_count == 6
+    assert written.current_interval_time_left_ms == 30 * 60 * 1000
+    assert not bar.profiles_written
+
+
+async def test_start_refuses_lengths_the_bar_would_reject() -> None:
+    """
+    The bar answers a short phase with a parse error about the whole
+    snapshot, and a bad cycle count the same way, so neither is worth
+    sending. A countdown has no floor, and is sent.
+    """
+    bar = FakeBar(_not_started())
+
+    with pytest.raises(timer.PhaseTooShortError):
+        await timer.start(bar, kind="interval", rest_ms=60 * 1000)
+    with pytest.raises(ValueError):
+        await timer.start(bar, kind="interval", cycles=1)
+    with pytest.raises(ValueError):
+        await timer.start(bar, kind="interval", cycles=36)
+    assert not bar.written
+
+    await timer.start(bar, kind="simple", duration_ms=2 * 60 * 1000)
+    assert bar.last.time_left_ms == 2 * 60 * 1000
 
 
 async def test_pausing_writes_back_the_time_actually_left() -> None:
@@ -392,3 +447,215 @@ def test_both_errors_are_importable_from_the_package() -> None:
     assert features.TimerNotRunningError is timer.TimerNotRunningError
     assert features.UnknownThemeError is timer.UnknownThemeError
     assert {"TimerNotRunningError", "UnknownThemeError"} <= set(features.__all__)
+
+
+async def test_a_card_gets_its_own_length() -> None:
+    """
+    The only way a session runs for twenty-five minutes: the device
+    refuses a snapshot whose settings disagree with the card it names.
+    """
+    bar = FakeBar(_not_started())
+
+    written = await timer.configure(bar, "busy", work_ms=25 * 60_000, now_ms=9_000)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == 25 * 60_000
+    # Untouched by a change that did not mention them.
+    assert settings.interval_rest_ms == REST
+    assert settings.interval_work_cycles_count == 3
+    assert written.profile_timestamp_ms == 9_000
+    assert bar.profiles_written[-1] is written
+
+
+async def test_a_phase_the_bar_would_drop_is_refused() -> None:
+    """
+    A card written with a four-minute phase comes back with the phase it
+    had, and every layer reports success - so the caller has to be told
+    here or find out by watching a bar run the wrong timer.
+    """
+    bar = FakeBar(_not_started())
+
+    with pytest.raises(timer.PhaseTooShortError, match="4 minutes"):
+        await timer.configure(bar, work_ms=4 * 60_000)
+    with pytest.raises(timer.PhaseTooShortError):
+        await timer.configure(bar, rest_ms=60_000)
+
+    assert not bar.profiles_written
+
+
+async def test_five_minutes_is_allowed() -> None:
+    """
+    The floor, found by bisection against a real bar: four is dropped and
+    five is kept.
+    """
+    bar = FakeBar(_not_started())
+
+    await timer.configure(bar, work_ms=timer.MINIMUM_PHASE_MS)
+
+    assert bar.profiles_written
+
+
+async def test_a_length_the_card_cannot_use_is_an_error() -> None:
+    """
+    An interval card has no total, and the device would treat one as a
+    no-op rather than complain.
+    """
+    bar = FakeBar(_not_started())
+
+    with pytest.raises(ValueError, match="use work_ms and rest_ms"):
+        await timer.configure(bar, total_ms=25 * 60_000)
+
+    countdown = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerSimpleSettings(
+            type="SIMPLE", total_time_ms=15 * 60_000
+        ),
+    )
+    with pytest.raises(ValueError, match="use total_ms"):
+        await timer.configure(countdown, work_ms=25 * 60_000)
+
+
+async def test_a_countdown_card_takes_a_total() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerSimpleSettings(
+            type="SIMPLE", total_time_ms=15 * 60_000
+        ),
+    )
+
+    written = await timer.configure(bar, total_ms=25 * 60_000)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 25 * 60_000
+
+
+async def test_configuring_nothing_writes_nothing() -> None:
+    bar = FakeBar(_not_started())
+
+    await timer.configure(bar)
+
+    assert not bar.profiles_written
+
+
+async def test_a_card_can_change_what_kind_of_timer_it_holds() -> None:
+    """
+    A different kind of timer is a different object, not an edit: an
+    endless card has no lengths to keep. Verified on firmware r971, where
+    a card went endless -> pomodoro -> countdown -> endless.
+    """
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    written = await timer.configure(bar, "custom", kind="interval", now_ms=1)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == timer.DEFAULT_WORK_MS
+    assert settings.interval_rest_ms == timer.DEFAULT_REST_MS
+    assert settings.interval_work_cycles_count == timer.DEFAULT_CYCLES
+
+
+async def test_a_new_kind_takes_the_lengths_it_was_given() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    written = await timer.configure(
+        bar, "custom", kind="simple", total_ms=45 * 60_000, now_ms=1
+    )
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 45 * 60_000
+
+
+async def test_asking_for_the_kind_it_already_is_edits_rather_than_replaces() -> None:
+    """
+    Otherwise setting the kind on a card that already holds it would throw
+    its lengths away.
+    """
+    bar = FakeBar(_not_started())  # an interval card, 20/5/3
+
+    written = await timer.configure(bar, "busy", kind="interval", work_ms=30 * 60_000)
+
+    settings = written.timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == 30 * 60_000
+    assert settings.interval_rest_ms == REST
+    assert settings.interval_work_cycles_count == 3
+
+
+async def test_a_new_kind_still_refuses_a_phase_the_bar_would_drop() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    with pytest.raises(timer.PhaseTooShortError):
+        await timer.configure(bar, "custom", kind="interval", work_ms=60_000)
+
+    assert not bar.profiles_written
+
+
+def test_the_kind_of_a_card_is_readable() -> None:
+    assert timer.kind_of(INTERVAL_SETTINGS) == "interval"
+    assert timer.kind_of(types.BusyTimerInfiniteSettings(type="INFINITE")) == "infinite"
+    assert (
+        timer.kind_of(types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=1))
+        == "simple"
+    )
+
+
+async def test_a_duration_lands_where_the_card_keeps_it() -> None:
+    """
+    "How long should it run" is one question with two answers - a
+    countdown has a total, a pomodoro has a work phase - and a caller
+    starting a session should not have to know which.
+    """
+    pomodoro = FakeBar(_not_started())
+    await timer.configure(pomodoro, "busy", duration_ms=30 * 60_000)
+    settings = pomodoro.profiles_written[-1].timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == 30 * 60_000
+
+    countdown = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=1),
+    )
+    await timer.configure(countdown, "custom", duration_ms=30 * 60_000)
+    settings = countdown.profiles_written[-1].timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 30 * 60_000
+
+
+async def test_a_duration_follows_the_kind_being_asked_for() -> None:
+    """
+    Changing the kind and giving a length in one call is the whole point:
+    the length belongs to the kind the card is about to be, not the one
+    it is leaving.
+    """
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    await timer.configure(bar, "custom", kind="simple", duration_ms=40 * 60_000)
+
+    settings = bar.profiles_written[-1].timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 40 * 60_000
+
+
+async def test_an_endless_card_has_no_length_to_set() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    with pytest.raises(ValueError, match="no length"):
+        await timer.configure(bar, "custom", duration_ms=25 * 60_000)
