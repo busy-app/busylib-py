@@ -496,3 +496,27 @@ def test_the_other_battery_states_still_arrive_named() -> None:
         )
         assert updated.power is not None
         assert updated.power.state is expected
+
+
+def test_wifi_reads_the_schema_s_new_state_names() -> None:
+    """
+    The stream renamed `connected` and `disconnected` to `active` and
+    `inactive`. A bar on either side of that rename has to be understood,
+    because reading only one name loses the network quietly.
+    """
+    snapshot = DeviceSnapshot()
+
+    joined = apply_state_stream_update(
+        snapshot,
+        {"updates": [{"wifi": {"active": {"ssid": "kv11", "rssi": -66}}}]},
+    )
+
+    assert joined.wifi is not None
+    assert joined.wifi.state is types.WifiState.CONNECTED
+    assert joined.wifi.ssid == "kv11"
+    assert joined.wifi.rssi == -66
+
+    left = apply_state_stream_update(joined, {"updates": [{"wifi": {"inactive": {}}}]})
+
+    assert left.wifi is not None
+    assert left.wifi.state is types.WifiState.DISCONNECTED

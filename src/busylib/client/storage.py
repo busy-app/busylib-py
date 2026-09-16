@@ -21,13 +21,21 @@ class StorageMixin(SyncClientBase):
         path: str,
         data: bytes,
         *,
+        append: bool = False,
         timeout: float | None = 60.0,
         progress_callback: Callable[[int, int], None] | None = None,
         chunk_size: int = 64 * 1024,
     ) -> types.SuccessResponse:
+        """
+        Write a file, converting it for the device first.
+
+        `append` adds to the file instead of replacing it, creating it if
+        it is not there - which is what makes a log or a growing asset
+        possible without reading the whole file back first.
+        """
         new_path, payload = convert_for_storage(path, data)
         total = len(payload)
-        logger.info("storage_write path=%s size=%s", new_path, total)
+        logger.info("storage_write path=%s size=%s append=%s", new_path, total, append)
 
         def _iter_payload() -> Iterator[bytes]:
             sent = 0
@@ -41,7 +49,10 @@ class StorageMixin(SyncClientBase):
         response = self._request(
             "POST",
             "/api/storage/write",
-            params={"path": new_path},
+            # Only when asked: the firmware defaults to replacing, and
+            # sending the default would put a parameter on every write
+            # that most callers never think about.
+            params={"path": new_path} | ({"append": 1} if append else {}),
             headers={"Content-Length": str(total)} if progress_callback else None,
             data=_iter_payload() if progress_callback else payload,
             timeout=timeout,
@@ -131,6 +142,7 @@ class AsyncStorageMixin(AsyncClientBase):
         path: str,
         data: bytes,
         *,
+        append: bool = False,
         timeout: float | None = 60.0,
         progress_callback: Callable[[int, int], None] | None = None,
         chunk_size: int = 64 * 1024,
@@ -151,7 +163,10 @@ class AsyncStorageMixin(AsyncClientBase):
         response = await self._request(
             "POST",
             "/api/storage/write",
-            params={"path": new_path},
+            # Only when asked: the firmware defaults to replacing, and
+            # sending the default would put a parameter on every write
+            # that most callers never think about.
+            params={"path": new_path} | ({"append": 1} if append else {}),
             headers={"Content-Length": str(total)} if progress_callback else None,
             data=_aiter_payload() if progress_callback else payload,
             timeout=timeout,
