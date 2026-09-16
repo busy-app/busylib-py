@@ -108,8 +108,8 @@ def _running(
 
 async def test_start_builds_the_session_the_card_describes() -> None:
     """
-    The mode comes from the card, not from the caller: the device rejects
-    a snapshot that disagrees with the card it names.
+    With nothing but a slot, the session is the one the card holds - what
+    the bar's own switch would start.
     """
     bar = FakeBar(_not_started())
 
@@ -155,6 +155,63 @@ async def test_start_can_override_the_theme_for_one_session() -> None:
 
     assert bar.last.busy_bar_settings.theme == "meeting"
     assert not bar.profiles_written
+
+
+async def test_start_can_run_a_countdown_the_card_does_not_hold() -> None:
+    """
+    A length of its own is the point of this: an automation asking for
+    forty-five minutes must not rewrite a card somebody arranged by hand.
+    """
+    bar = FakeBar(_not_started())
+
+    await timer.start(bar, kind="simple", duration_ms=45 * 60 * 1000)
+
+    written = bar.last
+    assert isinstance(written, types.BusySnapshotSimple)
+    assert written.time_left_ms == 45 * 60 * 1000
+    # Still that card's session - the app shows it under the card's name.
+    assert written.card_id == CARD
+    assert not bar.profiles_written
+
+
+async def test_start_can_run_an_interval_of_its_own() -> None:
+    """
+    Lengths and cycles travel in the snapshot together, and the ones the
+    caller leaves out come from the card.
+    """
+    bar = FakeBar(_not_started())
+
+    await timer.start(bar, kind="interval", duration_ms=30 * 60 * 1000, cycles=6)
+
+    written = bar.last
+    assert isinstance(written, types.BusySnapshotInterval)
+    assert written.interval_settings.interval_work_ms == 30 * 60 * 1000
+    assert written.interval_settings.interval_rest_ms == REST  # the card's
+    assert written.interval_settings.interval_work_cycles_count == 6
+    assert written.current_interval_time_left_ms == 30 * 60 * 1000
+    assert not bar.profiles_written
+
+
+async def test_start_refuses_lengths_the_bar_would_reject() -> None:
+    """
+    The bar answers a short phase with a parse error about the whole
+    snapshot, and a bad cycle count the same way, so neither is worth
+    sending. A countdown has no floor, and is sent.
+    """
+    bar = FakeBar(_not_started())
+
+    with pytest.raises(timer.PhaseTooShortError):
+        await timer.start(bar, kind="interval", rest_ms=60 * 1000)
+    with pytest.raises(ValueError):
+        await timer.start(bar, kind="interval", cycles=1)
+    with pytest.raises(ValueError):
+        await timer.start(bar, kind="interval", cycles=36)
+    assert not bar.written
+
+    await timer.start(bar, kind="simple", duration_ms=2 * 60 * 1000)
+    written = bar.last
+    assert isinstance(written, types.BusySnapshotSimple)
+    assert written.time_left_ms == 2 * 60 * 1000
 
 
 async def test_pausing_writes_back_the_time_actually_left() -> None:

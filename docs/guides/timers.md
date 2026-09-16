@@ -134,6 +134,9 @@ from busylib.features import timer
 
 await timer.start(bar)                       # the session the "busy" card describes
 await timer.start(bar, "custom", theme="dnd")  # the other card, this session in dnd
+await timer.start(bar, kind="simple", duration_ms=45 * 60_000)   # 45 minutes, card untouched
+await timer.start(bar, kind="interval", duration_ms=25 * 60_000,
+                  rest_ms=5 * 60_000, cycles=4)  # an interval of your own
 await timer.set_paused(bar, True)            # pause, keeping the time actually left
 await timer.set_paused(bar, False)           # resume
 await timer.next_phase(bar)                  # work -> rest, at the rest length
@@ -144,10 +147,22 @@ await timer.stop(bar)                        # back to not started
 
 Three things they take care of:
 
-**A session's mode comes from the card, not from you.** `start()` reads the
-card and builds a snapshot from its own settings, because the device rejects
-one that disagrees with the card it names. To start a countdown of a different
-length, write the card first.
+**A session may have settings of its own, and they do not touch the card.**
+With nothing but a slot, `start()` runs what that card describes - the thing
+the bar's own switch would start. Give it a kind or a length and the session
+runs that instead, travelling in the snapshot: the card keeps its name, its
+lengths and its theme, and the app still shows the session under that card's
+name. This is what an automation wants - "a countdown for forty-five minutes"
+should not rewrite a card somebody arranged by hand.
+
+**The bar will not run just any length.** Both ends are checked, and the
+firmware says so nowhere useful: a card written with a two-minute work phase
+answers `OK` and keeps what it had, and a session with one comes back as
+`400 Failed to parse snapshot`. An interval phase runs 5 minutes to 8 hours,
+a session has 2 to 35 work phases, and a countdown - checked at the top only -
+runs up to 24 hours with no floor at all. `busylib` raises before the write
+rather than letting either silence through. The numbers are the firmware's own
+(`applications/services/busy_timer/busy_timer_common.h`), confirmed on a bar.
 
 **Pausing has to recompute the remaining time.** The stored snapshot's figure
 was true when it was written; writing it back unchanged hands the session back
