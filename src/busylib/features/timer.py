@@ -224,12 +224,16 @@ DEFAULT_TOTAL_MS = 25 * 60 * 1000
 TimerKind = Literal["endless", "countdown", "pomodoro"]
 
 # The firmware's names for them, which the wire uses.
-_KIND_TO_TYPE: dict[str, str] = {
+_KIND_TO_TYPE: dict[TimerKind, str] = {
     "endless": "INFINITE",
     "countdown": "SIMPLE",
     "pomodoro": "INTERVAL",
 }
-_TYPE_TO_KIND = {value: key for key, value in _KIND_TO_TYPE.items()}
+_TYPE_TO_KIND: dict[str, TimerKind] = {
+    "INFINITE": "endless",
+    "SIMPLE": "countdown",
+    "INTERVAL": "pomodoro",
+}
 
 
 def kind_of(settings: types.BusyTimerSettings) -> TimerKind:
