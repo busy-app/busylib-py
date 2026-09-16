@@ -487,8 +487,8 @@ async def test_configuring_nothing_writes_nothing() -> None:
 async def test_a_card_can_change_what_kind_of_timer_it_holds() -> None:
     """
     A different kind of timer is a different object, not an edit: an
-    endless card has no lengths to keep. Verified on firmware r971, where
-    a card went endless -> pomodoro -> countdown -> endless.
+    card without a clock has no lengths to keep. Verified on firmware
+    r971, where a card went infinite -> interval -> simple -> infinite.
     """
     bar = FakeBar(
         _not_started(),
@@ -559,12 +559,12 @@ def test_the_kind_of_a_card_is_readable() -> None:
 async def test_a_duration_lands_where_the_card_keeps_it() -> None:
     """
     "How long should it run" is one question with two answers - a
-    countdown has a total, a pomodoro has a work phase - and a caller
+    countdown has a total, an interval has a work phase - and a caller
     starting a session should not have to know which.
     """
-    pomodoro = FakeBar(_not_started())
-    await timer.configure(pomodoro, "busy", duration_ms=30 * 60_000)
-    settings = pomodoro.profiles_written[-1].timer_settings
+    interval = FakeBar(_not_started())
+    await timer.configure(interval, "busy", duration_ms=30 * 60_000)
+    settings = interval.profiles_written[-1].timer_settings
     assert isinstance(settings, types.BusySnapshotIntervalSettings)
     assert settings.interval_work_ms == 30 * 60_000
 
@@ -596,7 +596,7 @@ async def test_a_duration_follows_the_kind_being_asked_for() -> None:
     assert settings.total_time_ms == 40 * 60_000
 
 
-async def test_an_endless_card_has_no_length_to_set() -> None:
+async def test_a_card_without_a_clock_has_no_length_to_set() -> None:
     bar = FakeBar(
         _not_started(),
         timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),

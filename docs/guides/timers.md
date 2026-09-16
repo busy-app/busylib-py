@@ -197,7 +197,7 @@ is the same thing they do to each other.
 
 **One call is enough to start something of a given length.** `duration_ms`
 lands where that kind of card keeps it - the total of a countdown, the work
-phase of a pomodoro - so a caller does not have to know which:
+phase of an interval session - so a caller does not have to know which:
 
 ```python
 await timer.configure(bar, "custom", kind="simple", duration_ms=40 * 60_000)
