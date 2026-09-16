@@ -554,3 +554,53 @@ def test_the_kind_of_a_card_is_readable() -> None:
         timer.kind_of(types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=1))
         == "countdown"
     )
+
+
+async def test_a_duration_lands_where_the_card_keeps_it() -> None:
+    """
+    "How long should it run" is one question with two answers - a
+    countdown has a total, a pomodoro has a work phase - and a caller
+    starting a session should not have to know which.
+    """
+    pomodoro = FakeBar(_not_started())
+    await timer.configure(pomodoro, "busy", duration_ms=30 * 60_000)
+    settings = pomodoro.profiles_written[-1].timer_settings
+    assert isinstance(settings, types.BusySnapshotIntervalSettings)
+    assert settings.interval_work_ms == 30 * 60_000
+
+    countdown = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerSimpleSettings(type="SIMPLE", total_time_ms=1),
+    )
+    await timer.configure(countdown, "custom", duration_ms=30 * 60_000)
+    settings = countdown.profiles_written[-1].timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 30 * 60_000
+
+
+async def test_a_duration_follows_the_kind_being_asked_for() -> None:
+    """
+    Changing the kind and giving a length in one call is the whole point:
+    the length belongs to the kind the card is about to be, not the one
+    it is leaving.
+    """
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    await timer.configure(bar, "custom", kind="countdown", duration_ms=40 * 60_000)
+
+    settings = bar.profiles_written[-1].timer_settings
+    assert isinstance(settings, types.BusyTimerSimpleSettings)
+    assert settings.total_time_ms == 40 * 60_000
+
+
+async def test_an_endless_card_has_no_length_to_set() -> None:
+    bar = FakeBar(
+        _not_started(),
+        timer_settings=types.BusyTimerInfiniteSettings(type="INFINITE"),
+    )
+
+    with pytest.raises(ValueError, match="no length"):
+        await timer.configure(bar, "custom", duration_ms=25 * 60_000)
