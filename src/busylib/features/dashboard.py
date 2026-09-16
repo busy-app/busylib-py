@@ -178,6 +178,14 @@ def _decoded_timer(update: dict[str, object]) -> types.BusySnapshot | None:
         return None
 
 
+# What the firmware calls each battery state, and what this package does.
+_BATTERY_STATUS = {
+    "DISCHARGING": types.PowerState.DISCHARGING,
+    "CHARGING": types.PowerState.CHARGING,
+    "CHARGED": types.PowerState.CHARGED,
+}
+
+
 def _number(fields: dict[str, object], key: str) -> int:
     """
     Read a numeric field out of a state update, treating absence as zero.
@@ -226,14 +234,14 @@ def apply_state_stream_update(
         if isinstance(power, dict):
             known = power.get("known")
             if isinstance(known, dict):
-                battery_status = known.get("battery_status")
-                mapped_state = None
-                if battery_status == "CHARGING":
-                    mapped_state = types.PowerState.CHARGING
-                elif battery_status == "CHARGED":
-                    mapped_state = types.PowerState.CHARGED
-                elif battery_status == "DISCHARGING":
-                    mapped_state = types.PowerState.DISCHARGING
+                # DISCHARGING is the first value of the firmware's enum, so
+                # proto3 leaves the field out for it - and a bar that is
+                # simply running on its battery sends the most common
+                # state of all as nothing at all. Reading that absence as
+                # "unknown" is why a bar with no cable in it reported that
+                # it could not say whether it was charging.
+                battery_status = known.get("battery_status", "DISCHARGING")
+                mapped_state = _BATTERY_STATUS.get(str(battery_status))
                 next_snapshot.power = types.StatusPower(
                     state=mapped_state,
                     battery_charge=_number(known, "battery_charge_percent"),
