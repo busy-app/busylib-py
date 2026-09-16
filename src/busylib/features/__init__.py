@@ -27,6 +27,8 @@ from .timer import (
     TimerKind,
     TimerState,
     UnknownThemeError,
+    kind_of,
+    kind_of_snapshot,
     phase_of,
     timer_state,
 )
@@ -59,6 +61,8 @@ __all__ = [
     "TimerClient",
     "TimerNotRunningError",
     "UnknownThemeError",
+    "kind_of",
+    "kind_of_snapshot",
     "PhaseTooShortError",
     "TimerKind",
     "ButtonEvent",

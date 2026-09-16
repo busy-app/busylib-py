@@ -136,7 +136,9 @@ await timer.start(bar)                       # the session the "busy" card descr
 await timer.start(bar, "custom", theme="dnd")  # the other card, this session in dnd
 await timer.start(bar, kind="simple", duration_ms=45 * 60_000)   # 45 minutes, card untouched
 await timer.start(bar, kind="interval", duration_ms=25 * 60_000,
-                  rest_ms=5 * 60_000, cycles=4)  # a pomodoro of your own
+                  rest_ms=5 * 60_000, cycles=4)  # an interval of your own
+await timer.start(bar, card_id=other, kind="simple",
+                  duration_ms=30 * 60_000)       # a card outside both positions
 await timer.set_paused(bar, True)            # pause, keeping the time actually left
 await timer.set_paused(bar, False)           # resume
 await timer.next_phase(bar)                  # work -> rest, at the rest length
@@ -154,6 +156,12 @@ runs that instead, travelling in the snapshot: the card keeps its name, its
 lengths and its theme, and the app still shows the session under that card's
 name. This is what an automation wants - "a countdown for forty-five minutes"
 should not rewrite a card somebody arranged by hand.
+
+**A session can name a card the bar does not hold.** The bar keeps two cards,
+one per switch position; the BUSY app keeps more. `card_id` names any of them,
+and then nothing on the bar is read or written - the two cards are not involved
+even by name, and the app shows the session under the card it does know. Such a
+session has no card to inherit from, so its kind and lengths come from the call.
 
 **The bar will not run just any length.** Both ends are checked, and the
 firmware says so nowhere useful: a card written with a two-minute work phase
