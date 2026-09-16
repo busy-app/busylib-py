@@ -268,6 +268,17 @@ def kind_of(settings: types.BusyTimerSettings) -> TimerKind:
     return _TYPE_TO_KIND[settings.type]
 
 
+def kind_of_snapshot(snapshot: types.BusySnapshotVariant) -> TimerKind | None:
+    """
+    Which kind of timer is running, or `None` if none is.
+
+    A snapshot has a state the three kinds do not - nothing started - so
+    this answers with `None` rather than pretending the bar is idling in
+    one of them.
+    """
+    return _TYPE_TO_KIND.get(snapshot.type)
+
+
 class UnknownThemeError(exceptions.BusyBarError):
     """
     Raised for a theme this bar does not have.
