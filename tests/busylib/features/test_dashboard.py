@@ -466,3 +466,33 @@ def test_a_wifi_update_keeps_what_it_does_not_carry() -> None:
     assert moved.wifi is not None
     assert moved.wifi.security is None
     assert moved.wifi.ip_config is None
+
+
+def test_a_bar_on_battery_is_discharging_not_unknown() -> None:
+    """
+    DISCHARGING is the first value of the firmware's enum, so proto3
+    leaves the field out for it: the most common state of all arrives as
+    nothing at all. Reading that as unknown made a bar with no cable in
+    it report that it could not say whether it was charging.
+    """
+    updated = apply_state_stream_update(
+        DeviceSnapshot(),
+        {"updates": [{"power": {"known": {"battery_charge_percent": 62}}}]},
+    )
+
+    assert updated.power is not None
+    assert updated.power.state is types.PowerState.DISCHARGING
+    assert updated.power.battery_charge == 62
+
+
+def test_the_other_battery_states_still_arrive_named() -> None:
+    for name, expected in (
+        ("CHARGING", types.PowerState.CHARGING),
+        ("CHARGED", types.PowerState.CHARGED),
+    ):
+        updated = apply_state_stream_update(
+            DeviceSnapshot(),
+            {"updates": [{"power": {"known": {"battery_status": name}}}]},
+        )
+        assert updated.power is not None
+        assert updated.power.state is expected
