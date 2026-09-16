@@ -205,7 +205,7 @@ await timer.start(bar, "custom")
 ```
 
 **A card can change what kind of timer it holds**, which is how a mode
-that runs without a clock becomes a pomodoro:
+that runs without a clock becomes an interval session:
 
 ```python
 await timer.configure(bar, "custom", kind="interval", work_ms=25 * 60_000)
@@ -215,7 +215,7 @@ print(timer.kind_of((await bar.busy_profile("custom")).timer_settings))  # 'inte
 `infinite`, `simple` and `interval` are what this package calls the
 firmware's `INFINITE`, `SIMPLE` and `INTERVAL`. Changing to a kind a card
 was not already running replaces its timer rather than editing it, because
-there is nothing to carry over - an endless card has no lengths at all -
+there is nothing to carry over - an infinite card has no lengths at all -
 and anything you do not pass comes from the defaults. Asking for the kind a
 card already holds edits it instead, so its lengths survive.
 
@@ -296,4 +296,4 @@ Reading a snapshot gives it to you, so the active theme and
 And one device quirk worth knowing if you try to make a short session for
 testing: `PUT /api/busy/profiles/{slot}` answers `{"result": "OK"}` and
 silently keeps the old settings when given short interval durations, so a
-six-second pomodoro cannot be configured through the API.
+six-second interval session cannot be configured through the API.

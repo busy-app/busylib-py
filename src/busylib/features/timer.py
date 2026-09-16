@@ -214,7 +214,7 @@ MINIMUM_PHASE_MS = 5 * 60 * 1000
 
 # What a card is given when it changes to a kind of timer it was not
 # running before. There is nothing to carry over in that case - an endless
-# card has no lengths at all - so these are the values a fresh pomodoro or
+# card has no lengths at all - so these are the values a fresh interval or
 # countdown starts from, and a caller can pass its own alongside.
 DEFAULT_WORK_MS = 25 * 60 * 1000
 DEFAULT_REST_MS = 5 * 60 * 1000
@@ -681,9 +681,9 @@ async def configure(
     changed: dict[str, object] = {}
     if kind is not None and kind != kind_of(settings):
         # A different kind of timer is a different object, not an edit: an
-        # endless card has no lengths to keep, and the device stores
+        # infinite card has no lengths to keep, and the device stores
         # whichever one it is given. Verified on firmware r971, where a
-        # card went endless -> pomodoro -> countdown -> endless and kept
+        # card went infinite -> interval -> simple -> infinite and kept
         # each one.
         changed["timer_settings"] = _settings_for(
             kind,
