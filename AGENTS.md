@@ -157,3 +157,49 @@ uv run pytest -q
 uv run pyright src tests
 uv run python -m pre_commit run --all-files
 ```
+
+## Pull Requests
+
+- Title says what changes, in the imperative and without a ticket number.
+- Body is two short paragraphs at most: what the reader gets, and why the
+  previous behaviour was not enough. No walk-through of the diff, no history
+  of how the change was arrived at, no checklists.
+- Say what was verified against a real bar, when anything was.
+- No trailers, footers or co-author lines.
+- If a later change proves an earlier body wrong, correct that body rather
+  than leaving the claim standing - a merged pull request is documentation.
+
+## When The Firmware Updates
+
+A BUSY Bar release can move things this library states as fact. Work through
+this before assuming a bug is in `busylib`:
+
+1. **Pull the protobuf schema and regenerate the state stream:**
+
+   ```bash
+   make proto-sync
+   ```
+
+   Then run the tests: a field that changed type or went away shows up there
+   first. Remember that proto3 omits any field holding its type's default, so
+   "missing" and "zero" arrive identically and every reader has to say which
+   it means.
+
+2. **Re-read the OpenAPI spec from the bar itself** (`/openapi.yaml`), not
+   from a checkout: the spec on a development bar is ahead of the release,
+   and the cloud's copy keyed by firmware version is the released truth.
+
+3. **Check the stock asset map** in `docs/guides/stock-assets.md` against a
+   bar - `storage_list("/ext/apps_assets/shared/images")` and its siblings.
+   Icons, animations, sounds and themes come and go with the firmware, and
+   anything the library names in a table can go stale.
+
+4. **Re-measure the limits the firmware does not document.** Timer phases,
+   cycle counts and the like are checked in `busy_timer_common.h` and refused
+   with unhelpful errors - a silent `OK` for a profile, `400 Failed to parse
+   snapshot` for a session. If the constants in `features/timer.py` and the
+   firmware's disagree, the firmware wins.
+
+5. **Ask what a new feature makes possible for consumers** - the Home
+   Assistant integration is the first one to check - and whether anything
+   this library carries as a local copy should now be read from the bar.
