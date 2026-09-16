@@ -1,87 +1,146 @@
 """
-Refresh the counts in the stock assets guide from a bar.
+Refresh the counts in the stock assets guide from the firmware sources.
 
-The guide names individual assets by hand, because a table is written for
-a reader and not generated for one - but the counts go stale quietly with
-every firmware release, and a stale count is what makes a reader stop
-trusting the rest. So this reads the folders off a bar and rewrites the
-numbers between the markers in the guide, leaving the prose alone.
+From the firmware, not from a bar: a bar carries whatever its owner has
+uploaded or deleted since it was unboxed, so counting one describes that
+bar rather than the product. The firmware repository is where "what every
+bar ships with" is actually decided.
 
-    uv run python scripts/stock_assets_map.py --host 192.168.1.50 --token PIN
+    uv run python scripts/stock_assets_map.py --firmware ../bsb-firmware
 
-`--check` reports what would change and exits non-zero instead of
-writing, which is what a firmware bump wants: see the drift, decide what
-the prose should say about it.
+It reads the tree with `git ls-tree`, so any ref works and the checkout
+does not have to be on it. `--check` reports drift and exits non-zero
+instead of writing, which is what a firmware release wants.
+
+The guide names individual assets by hand - a table is written for a
+reader, not generated for one - but the counts go stale quietly with
+every release, and a stale count is what makes a reader stop trusting the
+prose around it. So only the counts are generated.
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import pathlib
 import re
+import subprocess
 import sys
-
-from busylib import AsyncBusyBar
 
 GUIDE = pathlib.Path(__file__).resolve().parent.parent / "docs/guides/stock-assets.md"
 
 BEGIN = "<!-- begin stock assets map -->"
 END = "<!-- end stock assets map -->"
 
-# What to count, in the order the table reads.
-FOLDERS = (
-    ("Icons and pictures", "shared/images"),
-    ("Status animations", "shared/animations"),
-    ("Fonts", "shared/fonts"),
-    ("Notification sounds", "shared/sounds"),
-    ("Timer animations", "busy/animations"),
-    ("Timer pictures", "busy/images"),
-    ("Timer sounds", "busy/sounds"),
-    ("Themes", "busy/themes"),
+# Where each folder on the device comes from in the firmware tree, and
+# which files in it end up there. The extensions differ because the build
+# converts them: a .png becomes an .image, a .zip an .anim, a .wav a .snd.
+SOURCES = (
+    ("Icons and pictures", "shared/images", "assets/shared/images/external", ".png"),
+    ("Status animations", "shared/animations", "assets/shared/animations", ".zip"),
+    ("Fonts", "shared/fonts", "assets/shared/fonts", ".font"),
+    ("Notification sounds", "shared/sounds", "assets/shared/sounds", ".wav"),
+    ("Timer animations", "busy/animations", "assets/animations/busy", ".zip"),
+    ("Timer pictures", "busy/images", "assets/images/external/busy", ".png"),
+    ("Timer sounds", "busy/sounds", "assets/sounds/busy", ".wav"),
+    (
+        "Themes",
+        "busy/themes",
+        "applications/main/busy/resources/apps_assets/busy/themes",
+        "theme.json",
+    ),
 )
 
-ROOT = "/ext/apps_assets"
+
+def _git(firmware: pathlib.Path, *args: str) -> str:
+    """
+    Run one git command in the firmware checkout.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(firmware), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout
 
 
-async def _count(client: AsyncBusyBar, folder: str) -> tuple[int, list[str]]:
+def _files(firmware: pathlib.Path, ref: str, path: str, suffix: str) -> list[str]:
     """
-    How many assets a folder holds, and their names.
+    The files one folder contributes, ignoring anything else living there.
+
+    Fonts keep their TrueType sources next to the built ones and themes
+    are a directory each, so the suffix does the filtering rather than a
+    plain listing.
     """
-    listing = await client.storage_list(f"{ROOT}/{folder}")
-    names = sorted(item.name for item in listing.list)
-    return len(names), names
+    listing = _git(firmware, "ls-tree", "-r", "--name-only", ref, "--", path)
+    return sorted(
+        name for name in listing.splitlines() if name.endswith(suffix) and name
+    )
 
 
-async def collect(host: str, token: str) -> str:
+def _since(firmware: pathlib.Path, ref: str, path: str) -> str:
     """
-    Read every folder and render the table the guide carries.
+    The earliest firmware release that carried this folder.
+
+    Taken from the release containing the commit that added its first
+    file: someone asking "can I rely on this" is asking which firmware,
+    not which commit. Release candidates are ignored, and a folder no
+    release has reached yet says so.
     """
-    opener = AsyncBusyBar(host, token=token)
-    async with opener:
-        access = (await opener.access_token_mint("stock-assets-map")).token
+    added = _git(
+        firmware, "log", "--diff-filter=A", "--format=%H", "--reverse", ref, "--", path
+    ).split()
+    if not added:
+        return "-"
+    tags = [
+        tag
+        for tag in _git(firmware, "tag", "--contains", added[0]).split()
+        if "rc" not in tag and tag[:1].isdigit()
+    ]
+    if not tags:
+        return "unreleased"
+    return min(tags, key=lambda tag: [int(part) for part in tag.split(".")])
+
+
+def _last_change(firmware: pathlib.Path, ref: str, path: str) -> str:
+    """
+    When the folder last changed, which says whether it has settled.
+    """
+    return (
+        _git(
+            firmware, "log", "-1", "--format=%ad", "--date=short", ref, "--", path
+        ).strip()
+        or "-"
+    )
+
+
+def collect(firmware: pathlib.Path, ref: str) -> str:
+    """
+    Render the table the guide carries.
+    """
+    described = _git(firmware, "log", "-1", "--format=%h, %ad", "--date=short", ref)
 
     rows = []
-    async with AsyncBusyBar(host, token=access) as client:
-        firmware = (await client.status_firmware()).version
-        for title, folder in FOLDERS:
-            total, names = await _count(client, folder)
-            note = ""
-            if folder == "shared/images":
-                stickers = sum(1 for name in names if name.startswith("dt_"))
-                note = f", {stickers} of them the `dt_*` sticker set"
-            rows.append(f"| {title} | `{folder}/` | {total}{note} |")
+    for title, target, path, suffix in SOURCES:
+        names = _files(firmware, ref, path, suffix)
+        note = ""
+        if target == "shared/images":
+            stickers = sum(1 for name in names if "/dt_" in name)
+            note = f", {stickers} of them the `dt_*` sticker set"
+        rows.append(
+            f"| {title} | `{target}/` | {len(names)}{note} "
+            f"| {_since(firmware, ref, path)} | {_last_change(firmware, ref, path)} |"
+        )
 
-    table = "\n".join(
+    return "\n".join(
         [
-            f"Counted on firmware `{firmware}`:",
+            f"Counted from the firmware sources at `{described.strip()}`:",
             "",
-            "| | Folder | How many |",
-            "| --- | --- | --- |",
+            "| | On the device | How many | Since | Last changed |",
+            "| --- | --- | --- | --- | --- |",
             *rows,
         ]
     )
-    return table
 
 
 def rewrite(table: str, *, check: bool) -> int:
@@ -101,7 +160,9 @@ def rewrite(table: str, *, check: bool) -> int:
         print("stock assets map is current")
         return 0
     if check:
-        print("stock assets map is out of date - run make stock-assets", file=sys.stderr)
+        print(
+            "stock assets map is out of date - run make stock-assets", file=sys.stderr
+        )
         return 1
     GUIDE.write_text(updated)
     print(f"{GUIDE}: updated")
@@ -110,8 +171,17 @@ def rewrite(table: str, *, check: bool) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", required=True, help="bar address")
-    parser.add_argument("--token", required=True, help="PIN or access token")
+    parser.add_argument(
+        "--firmware",
+        type=pathlib.Path,
+        required=True,
+        help="path to a bsb-firmware checkout",
+    )
+    parser.add_argument(
+        "--ref",
+        default="origin/dev",
+        help="which ref to read (default: origin/dev)",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -119,7 +189,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    table = asyncio.run(collect(args.host, args.token))
+    if not (args.firmware / ".git").exists():
+        print(f"{args.firmware}: not a git checkout", file=sys.stderr)
+        return 2
+
+    try:
+        table = collect(args.firmware, args.ref)
+    except subprocess.CalledProcessError as error:
+        print(error.stderr.strip() or "git failed", file=sys.stderr)
+        return 2
     return rewrite(table, check=args.check)
 
 
