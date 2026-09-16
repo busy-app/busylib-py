@@ -14,9 +14,15 @@ the time that has passed and say what phase the timer is in.
 
 Changing a timer works the same way round: there is no "pause" endpoint,
 only a snapshot to write, and the device takes the freshest one as the
-truth. The helpers here write the snapshot each change needs - which
-includes reading the card first, because the device rejects a snapshot
-that disagrees with the card it names.
+truth. The helpers here write the snapshot each change needs - which includes
+reading the card first, since a snapshot names one and inherits whatever
+it does not say for itself.
+
+A session may say a great deal for itself, though: its own kind, its own
+lengths, its own theme, none of which touch the card. That is how the
+BUSY app runs a card with a timer the card does not hold, and it is what
+lets an automation start a forty-five minute countdown without rewriting
+the two cards their owner arranged.
 """
 
 from __future__ import annotations
@@ -204,13 +210,23 @@ class TimerNotRunningError(exceptions.BusyBarError):
 # Where the bar keeps the themes it has assets for, one directory each.
 THEMES_PATH = "/ext/apps_assets/busy/themes"
 
-# The shortest phase the device will accept. Anything under it is stored
-# nowhere: the write answers {"result": "OK"} and the card keeps what it
-# had. Found by bisection on firmware r971 - four minutes is ignored, five
-# is kept, six and seven are kept, so it is a floor rather than a step -
-# and documented nowhere, the bar's own OpenAPI even showing 120000 as its
-# example.
+# What the device will accept, mirroring the firmware's own constants in
+# `applications/services/busy_timer/busy_timer_common.h`. They are checked
+# here because the bar checks them silently: a card written with a
+# two-minute work phase answers {"result": "OK"} and keeps the phase it
+# had, and a snapshot with one comes back as `400 Failed to parse
+# snapshot`, which says nothing about which number was wrong. None of it
+# is documented - the bar's own OpenAPI shows 120000 as its example.
 MINIMUM_PHASE_MS = 5 * 60 * 1000
+MAXIMUM_PHASE_MS = 8 * 60 * 60 * 1000
+
+# A countdown is checked at the top only, which is why it alone may run
+# for two minutes.
+MAXIMUM_TOTAL_MS = 24 * 60 * 60 * 1000
+
+# And how many work phases a session may have.
+MINIMUM_CYCLES = 2
+MAXIMUM_CYCLES = 35
 
 # What a card is given when it changes to a kind of timer it was not
 # running before. There is nothing to carry over in that case - an endless
@@ -269,20 +285,34 @@ class UnknownThemeError(exceptions.BusyBarError):
 
 class PhaseTooShortError(exceptions.BusyBarError):
     """
-    Raised for a phase the device would silently refuse to store.
+    Raised for a duration the device would refuse, at either end.
 
-    It does not reject them: a card written with a two-minute work phase
-    comes back with the phase it had before, and every layer reports
-    success. So a caller that is not told here finds out by watching a bar
-    run the wrong timer.
+    It never says so usefully. A card written with a two-minute work phase
+    comes back with the phase it had before and every layer reports
+    success; a session with one is refused as an unparseable snapshot. So
+    a caller that is not told here finds out by watching a bar run the
+    wrong timer.
+
+    The name is the common case - too short - but the same class carries
+    the ceiling, since to a caller they are one mistake: a length the bar
+    will not run.
     """
 
-    def __init__(self, field: str, given_ms: int) -> None:
+    def __init__(
+        self,
+        field: str,
+        given_ms: int,
+        *,
+        minimum_ms: int = MINIMUM_PHASE_MS,
+        maximum_ms: int = MAXIMUM_PHASE_MS,
+    ) -> None:
         self.field = field
         self.given_ms = given_ms
+        self.minimum_ms = minimum_ms
+        self.maximum_ms = maximum_ms
         super().__init__(
-            f"{field} is {given_ms / 60000:g} minutes; the bar silently ignores "
-            f"anything under {MINIMUM_PHASE_MS // 60000} and keeps what it had"
+            f"{field} is {given_ms / 60000:g} minutes; the bar runs between "
+            f"{minimum_ms // 60000} and {maximum_ms // 60000}"
         )
 
 
@@ -338,56 +368,115 @@ async def _apply(
     )
 
 
+def _cycles(count: int | None) -> int | None:
+    """
+    Check a cycle count, since the device answers a bad one with a parse
+    error about the whole snapshot.
+    """
+    if count is not None and not MINIMUM_CYCLES <= count <= MAXIMUM_CYCLES:
+        raise ValueError(
+            f"a session runs between {MINIMUM_CYCLES} and {MAXIMUM_CYCLES} "
+            f"work phases; {count} is refused by the bar"
+        )
+    return count
+
+
 async def start(
     client: TimerClient,
     slot: types.BusyProfileSlot = "busy",
     *,
+    kind: TimerKind | None = None,
+    duration_ms: int | None = None,
+    rest_ms: int | None = None,
+    cycles: int | None = None,
     theme: str | None = None,
     now_ms: int | None = None,
 ) -> None:
     """
-    Start the session one of the bar's two cards describes.
+    Start a session, optionally with settings of its own.
 
-    A session is not started by asking for a mode: the mode comes from the
-    card. The device rejects a snapshot that disagrees with the card it
-    names - `400 Failed to parse snapshot` - so the card is read first and
-    the snapshot built from its own settings. To start a countdown of a
-    different length, write the card first.
+    With nothing but a slot, this runs what that card describes - the
+    thing the bar's own switch would start.
 
-    `theme` overrides the card's theme for this session only; the card
-    keeps its own, which is what the bar returns to when the session ends.
+    Give a kind or any length and the session runs those instead, and
+    **the card is not touched**: the settings travel in the snapshot. That
+    is how the BUSY app starts a card with a different timer, and it is
+    what makes "run a countdown for forty-five minutes" leave the two
+    cards exactly as their owner arranged them.
+
+    The card is still named, because a snapshot names one and the app
+    shows that card's name and its own decoration for the running session.
+
+    What the device will not take, as a parse error about the whole
+    snapshot rather than anything helpful: an interval phase under five
+    minutes, or fewer than two or more than thirty-two work phases. A
+    countdown has no such floor. All three checked against firmware r971.
     """
     profile = await client.busy_profile(slot)
     settings = profile.busy_bar_settings
     if theme is not None:
         settings = settings.model_copy(update={"theme": theme})
 
-    timer = profile.timer_settings
+    stored = profile.timer_settings
+    wanted = kind or kind_of(stored)
+
     variant: types.BusySnapshotVariant
-    if isinstance(timer, types.BusyTimerInfiniteSettings):
+    if wanted == "infinite":
         variant = types.BusySnapshotInfinite(
             type="INFINITE",
             card_id=profile.id,
             is_paused=False,
             busy_bar_settings=settings,
         )
-    elif isinstance(timer, types.BusyTimerSimpleSettings):
+    elif wanted == "simple":
+        total = _total("duration_ms", duration_ms)
+        if total is None:
+            total = (
+                stored.total_time_ms
+                if isinstance(stored, types.BusyTimerSimpleSettings)
+                else DEFAULT_TOTAL_MS
+            )
         variant = types.BusySnapshotSimple(
             type="SIMPLE",
             card_id=profile.id,
-            time_left_ms=timer.total_time_ms,
+            time_left_ms=total,
             is_paused=False,
             busy_bar_settings=settings,
         )
     else:
+        running = (
+            stored
+            if isinstance(stored, types.BusySnapshotIntervalSettings)
+            else types.BusySnapshotIntervalSettings(
+                type="INTERVAL",
+                interval_work_ms=DEFAULT_WORK_MS,
+                interval_rest_ms=DEFAULT_REST_MS,
+                interval_work_cycles_count=DEFAULT_CYCLES,
+                is_autostart_enabled=False,
+            )
+        )
+        running = running.model_copy(
+            update={
+                key: value
+                for key, value in (
+                    ("interval_work_ms", _phase("duration_ms", duration_ms)),
+                    ("interval_rest_ms", _phase("rest_ms", rest_ms)),
+                    ("interval_work_cycles_count", _cycles(cycles)),
+                )
+                if value is not None
+            }
+        )
+        _phase("work", running.interval_work_ms)
+        _phase("rest", running.interval_rest_ms)
+        _cycles(running.interval_work_cycles_count)
         variant = types.BusySnapshotInterval(
             type="INTERVAL",
             card_id=profile.id,
             current_interval=0,
-            current_interval_time_total_ms=timer.interval_work_ms,
-            current_interval_time_left_ms=timer.interval_work_ms,
+            current_interval_time_total_ms=running.interval_work_ms,
+            current_interval_time_left_ms=running.interval_work_ms,
             is_paused=False,
-            interval_settings=timer,
+            interval_settings=running,
             busy_bar_settings=settings,
         )
     await _apply(client, variant, now_ms=now_ms)
@@ -588,13 +677,28 @@ async def _checked(
         raise UnknownThemeError(theme, available)
 
 
-def _phase(field: str, value: int | None) -> int | None:
+def _phase(
+    field: str,
+    value: int | None,
+    *,
+    minimum_ms: int = MINIMUM_PHASE_MS,
+    maximum_ms: int = MAXIMUM_PHASE_MS,
+) -> int | None:
     """
     Check one duration, since the device checks none of them out loud.
     """
-    if value is not None and value < MINIMUM_PHASE_MS:
-        raise PhaseTooShortError(field, value)
+    if value is not None and not minimum_ms <= value <= maximum_ms:
+        raise PhaseTooShortError(
+            field, value, minimum_ms=minimum_ms, maximum_ms=maximum_ms
+        )
     return value
+
+
+def _total(field: str, value: int | None) -> int | None:
+    """
+    Check a countdown, which the firmware bounds at the top only.
+    """
+    return _phase(field, value, minimum_ms=0, maximum_ms=MAXIMUM_TOTAL_MS)
 
 
 def _settings_for(
@@ -614,7 +718,7 @@ def _settings_for(
     if kind == "simple":
         return types.BusyTimerSimpleSettings(
             type="SIMPLE",
-            total_time_ms=_phase("total_ms", total_ms) or DEFAULT_TOTAL_MS,
+            total_time_ms=_total("total_ms", total_ms) or DEFAULT_TOTAL_MS,
         )
     return types.BusySnapshotIntervalSettings(
         type="INTERVAL",
@@ -710,7 +814,7 @@ async def configure(
         if work_ms is not None or rest_ms is not None or cycles is not None:
             raise ValueError(f"the {slot} card runs a countdown; use total_ms")
         if total_ms is not None:
-            updates["total_time_ms"] = _phase("total_ms", total_ms)
+            updates["total_time_ms"] = _total("total_ms", total_ms)
     elif work_ms is not None or rest_ms is not None or total_ms is not None:
         raise ValueError(f"the {slot} card runs without a clock; it has no length")
 
