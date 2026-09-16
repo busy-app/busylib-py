@@ -174,7 +174,7 @@ async def test_start_can_run_a_countdown_the_card_does_not_hold() -> None:
     assert not bar.profiles_written
 
 
-async def test_start_can_run_a_pomodoro_of_its_own() -> None:
+async def test_start_can_run_an_interval_of_its_own() -> None:
     """
     Lengths and cycles travel in the snapshot together, and the ones the
     caller leaves out come from the card.

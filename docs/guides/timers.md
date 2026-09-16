@@ -136,7 +136,7 @@ await timer.start(bar)                       # the session the "busy" card descr
 await timer.start(bar, "custom", theme="dnd")  # the other card, this session in dnd
 await timer.start(bar, kind="simple", duration_ms=45 * 60_000)   # 45 minutes, card untouched
 await timer.start(bar, kind="interval", duration_ms=25 * 60_000,
-                  rest_ms=5 * 60_000, cycles=4)  # a pomodoro of your own
+                  rest_ms=5 * 60_000, cycles=4)  # an interval of your own
 await timer.set_paused(bar, True)            # pause, keeping the time actually left
 await timer.set_paused(bar, False)           # resume
 await timer.next_phase(bar)                  # work -> rest, at the rest length
