@@ -181,18 +181,27 @@ this before assuming a bug is in `busylib`:
    ```
 
    Then run the tests: a field that changed type or went away shows up there
-   first. Remember that proto3 omits any field holding its type's default, so
-   "missing" and "zero" arrive identically and every reader has to say which
-   it means.
+   first. Remember two things this has already cost us: proto3 omits any
+   field holding its type's default, so "missing" and "zero" arrive
+   identically; and a renamed field breaks nothing loudly - when the Wi-Fi
+   states became `active` and `inactive`, the old readers simply stopped
+   seeing a network. Check renames against
+   `git -C .cache/bsb-protobuf log -p`, and read both names for a while.
 
 2. **Re-read the OpenAPI spec from the bar itself** (`/openapi.yaml`), not
    from a checkout: the spec on a development bar is ahead of the release,
    and the cloud's copy keyed by firmware version is the released truth.
 
-3. **Check the stock asset map** in `docs/guides/stock-assets.md` against a
-   bar - `storage_list("/ext/apps_assets/shared/images")` and its siblings.
-   Icons, animations, sounds and themes come and go with the firmware, and
-   anything the library names in a table can go stale.
+3. **Check the stock asset map** in `docs/guides/stock-assets.md`:
+
+   ```bash
+   make stock-assets BAR=<address> PIN=<pin> CHECK=1   # report drift
+   make stock-assets BAR=<address> PIN=<pin>           # write the new counts
+   ```
+
+   Icons, animations, sounds and themes come and go with the firmware. The
+   counts are generated; the prose around them is not, so read what moved
+   and say it in words.
 
 4. **Re-measure the limits the firmware does not document.** Timer phases,
    cycle counts and the like are checked in `busy_timer_common.h` and refused

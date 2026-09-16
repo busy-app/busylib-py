@@ -4,6 +4,7 @@ import base64
 import binascii
 import logging
 import re
+from collections.abc import Sequence
 from typing import Any, cast
 
 from typing_extensions import Unpack
@@ -13,6 +14,18 @@ from ..frames import Frame
 from .base import AsyncClientBase, RequestKwargs, SyncClientBase
 
 logger = logging.getLogger(__name__)
+
+
+def _deletion_payload(element_ids: Sequence[str] | None) -> dict[str, Any] | None:
+    """
+    The body DELETE /api/display/draw takes, or nothing for "all of it".
+
+    The firmware reads an absent `element_ids` as every element, so an
+    empty list has to stay absent too - sending one would ask the device
+    to delete nothing and look like a no-op bug.
+    """
+    return {"element_ids": list(element_ids)} if element_ids else None
+
 
 DISPLAY_DRAW_PATH = "/api/display/draw"
 _EMOJI_AND_SYMBOLS_PATTERN = re.compile(
@@ -222,20 +235,28 @@ class DisplayMixin(SyncClientBase):
 
     def display_clear(
         self,
+        *,
+        element_ids: Sequence[str] | None = None,
         **request_kwargs: Unpack[RequestKwargs],
     ) -> types.SuccessResponse:
         """
         Clear display content through DELETE /api/display/draw.
 
+        Without `element_ids` this removes everything the application drew.
+        With them, only those elements go - which is how a drawing built
+        from several pieces loses one of them without being redrawn whole.
+
         Uses API-like naming for callers that mirror firmware endpoints.
         """
         logger.info(
-            "display_clear application_name=%s",
+            "display_clear application_name=%s element_ids=%s",
             request_kwargs.get("application_name"),
+            "all" if element_ids is None else len(element_ids),
         )
         data = self._request(
             "DELETE",
             DISPLAY_DRAW_PATH,
+            json_payload=_deletion_payload(element_ids),
             **request_kwargs,
         )
         return types.SuccessResponse.model_validate(data)
@@ -425,20 +446,28 @@ class AsyncDisplayMixin(AsyncClientBase):
 
     async def display_clear(
         self,
+        *,
+        element_ids: Sequence[str] | None = None,
         **request_kwargs: Unpack[RequestKwargs],
     ) -> types.SuccessResponse:
         """
         Clear display content through async DELETE /api/display/draw.
 
+        Without `element_ids` this removes everything the application drew.
+        With them, only those elements go - which is how a drawing built
+        from several pieces loses one of them without being redrawn whole.
+
         Uses API-like naming for callers that mirror firmware endpoints.
         """
         logger.info(
-            "async display_clear application_name=%s",
+            "async display_clear application_name=%s element_ids=%s",
             request_kwargs.get("application_name"),
+            "all" if element_ids is None else len(element_ids),
         )
         data = await self._request(
             "DELETE",
             DISPLAY_DRAW_PATH,
+            json_payload=_deletion_payload(element_ids),
             **request_kwargs,
         )
         return types.SuccessResponse.model_validate(data)
