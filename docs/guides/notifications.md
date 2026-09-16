@@ -178,6 +178,22 @@ await notify(bar, "Laundry done", icon="check", sound="event")
 Paths in both catalogues carry their sub-folder and extension. The flat
 `shared/<name>` form that the OpenAPI spec suggests is refused.
 
+Those eight are a short-hand, not the limit. Icons are files on the bar -
+the firmware ships a set, the Draw Tool adds its own, and an owner can
+upload or delete them - so `notify()` takes any name the bar has:
+
+```python
+print(await notification.icons(bar))  # {'dt_burger': 'shared/images/dt_burger.image', ...}
+
+await notify(bar, "Lunch", icon="dt_burger")
+```
+
+The width matters and is read from the file rather than assumed. The Draw
+Tool's icons are 16 wide where the built-in ones are 5, 8 or 11, and only
+some file names say so - guessing is how an icon and its text end up on top
+of each other. A 16-wide icon fills the panel's height and leaves 56 pixels
+for text, so a two-line layout with one is tight by design.
+
 ## Withdrawing a notification
 
 There is no clearing helper, because there is nothing to compose - a

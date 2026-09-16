@@ -236,14 +236,34 @@ def test_the_priorities_sit_where_the_device_arbitrates() -> None:
 class StubClient:
     """
     Records what `notify` sends, standing in for a real client.
+
+    It answers the storage calls too, because an icon that is not one of
+    the eight with a friendly name is looked up on the bar - a real client
+    has these, and a stub that did not would only be pretending.
     """
 
-    def __init__(self, device_api_version: str | None) -> None:
+    def __init__(
+        self, device_api_version: str | None, icons: dict[str, bytes] | None = None
+    ) -> None:
         self._version = device_api_version
         self.drawn: types.DisplayElements | None = None
         self.request_kwargs: dict[str, object] = {}
         self.played: str | None = None
         self.play_kwargs: dict[str, object] = {}
+        self.icons = icons or {}
+
+    async def storage_list(self, path: str) -> types.StorageList:
+        prefix = path.removeprefix(f"{notification.ASSETS_ROOT}/")
+        return types.StorageList(
+            list=[
+                types.StorageFileElement(type="file", name=name.split("/")[-1], size=1)
+                for name in self.icons
+                if name.rsplit("/", 1)[0] == prefix
+            ]
+        )
+
+    async def storage_read(self, path: str) -> bytes:
+        return self.icons[path.removeprefix(f"{notification.ASSETS_ROOT}/")]
 
     @property
     def device_api_version(self) -> str | None:
@@ -473,3 +493,91 @@ async def test_notify_refuses_a_sound_the_bar_does_not_have() -> None:
         await notification.notify(client, "Laundry", sound="fanfare")
 
     assert client.drawn is None, "nothing should reach the device"
+
+
+class FakeAssets:
+    """A bar with icon files on it."""
+
+    device_api_version = "27.7.0"
+
+    def __init__(self, files: dict[str, bytes]) -> None:
+        self.files = files
+        self.read: list[str] = []
+
+    async def storage_list(self, path: str) -> types.StorageList:
+        prefix = path.removeprefix(f"{notification.ASSETS_ROOT}/")
+        return types.StorageList(
+            list=[
+                types.StorageFileElement(type="file", name=name.split("/")[-1], size=1)
+                for name in self.files
+                if name.rsplit("/", 1)[0] == prefix
+            ]
+        )
+
+    async def storage_read(self, path: str) -> bytes:
+        self.read.append(path)
+        return self.files[path.removeprefix(f"{notification.ASSETS_ROOT}/")]
+
+
+def _image(width: int, height: int) -> bytes:
+    return (
+        b"\x19\x07\x00\x00"
+        + width.to_bytes(2, "little")
+        + height.to_bytes(2, "little")
+        + b"\x00" * 4
+    )
+
+
+async def test_icons_are_read_from_the_bar() -> None:
+    """
+    Icons are files: the firmware ships one set, the Draw Tool another,
+    and an owner can add or delete them. Only the bar knows.
+    """
+    bar = FakeAssets(
+        {
+            "shared/images/dt_burger.image": _image(16, 16),
+            "shared/images/clock_5x5.image": _image(5, 5),
+            "busy/images/pause_5x5.image": _image(5, 5),
+            "shared/images/not_an_icon.txt": b"",
+        }
+    )
+
+    assert await notification.icons(bar) == {
+        "clock_5x5": "shared/images/clock_5x5.image",
+        "dt_burger": "shared/images/dt_burger.image",
+        "pause_5x5": "busy/images/pause_5x5.image",
+    }
+
+
+async def test_an_icons_width_is_read_from_the_file() -> None:
+    """
+    Guessing the width is how an icon and its text end up on top of each
+    other: the Draw Tool's icons are 16 wide where the built-in ones are
+    5, 8 or 11, and only some file names say so.
+    """
+    bar = FakeAssets({"shared/images/dt_burger.image": _image(16, 16)})
+
+    resolved = await notification.resolve_icon(bar, "dt_burger")
+
+    assert resolved.width == 16
+    assert resolved.path == "shared/images/dt_burger.image"
+
+
+async def test_a_friendly_name_costs_the_bar_nothing() -> None:
+    """
+    The handful with a short-hand are known here, so resolving one does
+    not go near the device.
+    """
+    bar = FakeAssets({})
+
+    resolved = await notification.resolve_icon(bar, "check")
+
+    assert resolved is notification.STOCK_ICONS["check"]
+    assert not bar.read
+
+
+async def test_an_icon_the_bar_does_not_have_says_what_it_has() -> None:
+    bar = FakeAssets({"shared/images/dt_burger.image": _image(16, 16)})
+
+    with pytest.raises(ValueError, match="it has: dt_burger"):
+        await notification.resolve_icon(bar, "dt_pizza")
