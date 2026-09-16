@@ -209,7 +209,9 @@ async def test_start_refuses_lengths_the_bar_would_reject() -> None:
     assert not bar.written
 
     await timer.start(bar, kind="simple", duration_ms=2 * 60 * 1000)
-    assert bar.last.time_left_ms == 2 * 60 * 1000
+    written = bar.last
+    assert isinstance(written, types.BusySnapshotSimple)
+    assert written.time_left_ms == 2 * 60 * 1000
 
 
 async def test_pausing_writes_back_the_time_actually_left() -> None:
