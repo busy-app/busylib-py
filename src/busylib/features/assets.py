@@ -110,7 +110,7 @@ class AssetCatalogueClient(Protocol):
 
 async def _entries(
     client: AssetCatalogueClient, path: str
-) -> list[types.StorageDirElement]:
+) -> list[types.StorageListElement]:
     """
     List one directory, treating a missing one as empty.
 
