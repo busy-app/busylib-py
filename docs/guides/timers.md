@@ -205,10 +205,11 @@ does not have raises `UnknownThemeError`, which carries what it does have. If
 you already have the list - because you offered it to someone - pass it as
 `known=` and save the lookup.
 
-**A session cannot have a length of its own.** The device refuses a
-snapshot whose settings disagree with the card it names, so running a timer
-for twenty-five minutes means the card says twenty-five minutes.
-`timer.configure()` writes that, changing only what you give it:
+**Changing a card is for when the change should last.** A session can carry
+settings of its own (see `start()` above), and that is what an automation
+wants; `timer.configure()` is for the other case - when the bar's own switch
+should start something different from now on, and the BUSY app should show
+it:
 
 ```python
 await timer.configure(bar, "busy", work_ms=25 * 60_000)
@@ -218,9 +219,9 @@ await timer.start(bar, "busy")
 The change outlasts the session, and the bar and the phone app see it - which
 is the same thing they do to each other.
 
-**One call is enough to start something of a given length.** `duration_ms`
+**One call is enough to set something of a given length.** `duration_ms`
 lands where that kind of card keeps it - the total of a countdown, the work
-phase of a pomodoro - so a caller does not have to know which:
+phase of an interval session - so a caller does not have to know which:
 
 ```python
 await timer.configure(bar, "custom", kind="simple", duration_ms=40 * 60_000)
@@ -228,7 +229,7 @@ await timer.start(bar, "custom")
 ```
 
 **A card can change what kind of timer it holds**, which is how a mode
-that runs without a clock becomes a pomodoro:
+that runs without a clock becomes an interval session:
 
 ```python
 await timer.configure(bar, "custom", kind="interval", work_ms=25 * 60_000)
@@ -306,10 +307,12 @@ Stopping is a `NOT_STARTED` snapshot with a fresh timestamp.
 
 Two things to know, both learned the hard way:
 
-**`interval_settings` has to match the profile.** Send durations of your own and
-the device answers `400 Failed to parse snapshot` — which is misleading,
-because the JSON parsed fine and it is the settings that disagree. Take them
-from `busy_profile()`, as above.
+**A length the bar will not run is reported as an unparseable snapshot.**
+`400 Failed to parse snapshot` is misleading: the JSON parsed fine, and the
+firmware is refusing a number. An interval phase runs 5 minutes to 8 hours
+and a session has 2 to 35 work phases (`busy_timer_common.h`); a countdown is
+checked at the top only. The settings themselves may be whatever you like -
+they need not match the card the snapshot names.
 
 **`busy_bar_settings` is required.** It is merged into the snapshot object on
 the wire rather than sitting beside it, and a snapshot without it is refused.
@@ -319,4 +322,4 @@ Reading a snapshot gives it to you, so the active theme and
 And one device quirk worth knowing if you try to make a short session for
 testing: `PUT /api/busy/profiles/{slot}` answers `{"result": "OK"}` and
 silently keeps the old settings when given short interval durations, so a
-six-second pomodoro cannot be configured through the API.
+six-second interval session cannot be configured through the API.
