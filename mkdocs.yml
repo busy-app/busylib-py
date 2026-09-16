@@ -75,6 +75,7 @@ nav:
       - Connecting to a bar: guides/connecting.md
       - Drawing on the displays: guides/displays.md
       - Sending notifications: guides/notifications.md
+      - Stock assets: guides/stock-assets.md
       - Assets and storage: guides/assets-and-storage.md
       - Reading device state: guides/device-state.md
       - Working with timers: guides/timers.md

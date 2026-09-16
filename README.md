@@ -32,6 +32,7 @@ home page, so the links are absolute and work from PyPI and GitHub alike:
 | [Drawing on the displays](https://busy-app.github.io/busylib-py/guides/displays/) | Elements, both panels, reading the screen back |
 | [Sending notifications](https://busy-app.github.io/busylib-py/guides/notifications/) | Built-in templates, and writing your own |
 | [Working with timers](https://busy-app.github.io/busylib-py/guides/timers/) | Snapshots, phases, starting and stopping |
+| [Stock assets](https://busy-app.github.io/busylib-py/guides/stock-assets/) | The pictures, animations, sounds and themes every bar ships with |
 | [Assets and storage](https://busy-app.github.io/busylib-py/guides/assets-and-storage/) | Uploading files the bar can draw and play |
 | [Reading device state](https://busy-app.github.io/busylib-py/guides/device-state/) | One-off snapshots and streamed updates |
 | [Building a tool](https://busy-app.github.io/busylib-py/guides/building-a-tool/) | Putting a small app together |

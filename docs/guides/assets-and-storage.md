@@ -1,5 +1,9 @@
 # Assets and storage
 
+Before uploading anything, check whether the bar already has it: every bar
+ships with icons, animations, sounds, fonts and themes, and referencing one
+costs nothing. See [stock assets](stock-assets.md).
+
 There are two ways to put a file on a BUSY Bar, and the difference matters:
 
 | Method | Path | Converts media? |

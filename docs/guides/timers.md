@@ -137,6 +137,8 @@ await timer.start(bar, "custom", theme="dnd")  # the other card, this session in
 await timer.start(bar, kind="simple", duration_ms=45 * 60_000)   # 45 minutes, card untouched
 await timer.start(bar, kind="interval", duration_ms=25 * 60_000,
                   rest_ms=5 * 60_000, cycles=4)  # an interval of your own
+await timer.start(bar, card_id=other, kind="simple",
+                  duration_ms=30 * 60_000)       # a card outside both positions
 await timer.set_paused(bar, True)            # pause, keeping the time actually left
 await timer.set_paused(bar, False)           # resume
 await timer.next_phase(bar)                  # work -> rest, at the rest length
@@ -154,6 +156,12 @@ runs that instead, travelling in the snapshot: the card keeps its name, its
 lengths and its theme, and the app still shows the session under that card's
 name. This is what an automation wants - "a countdown for forty-five minutes"
 should not rewrite a card somebody arranged by hand.
+
+**A session can name a card the bar does not hold.** The bar keeps two cards,
+one per switch position; the BUSY app keeps more. `card_id` names any of them,
+and then nothing on the bar is read or written - the two cards are not involved
+even by name, and the app shows the session under the card it does know. Such a
+session has no card to inherit from, so its kind and lengths come from the call.
 
 **The bar will not run just any length.** Both ends are checked, and the
 firmware says so nowhere useful: a card written with a two-minute work phase
@@ -197,10 +205,11 @@ does not have raises `UnknownThemeError`, which carries what it does have. If
 you already have the list - because you offered it to someone - pass it as
 `known=` and save the lookup.
 
-**A session cannot have a length of its own.** The device refuses a
-snapshot whose settings disagree with the card it names, so running a timer
-for twenty-five minutes means the card says twenty-five minutes.
-`timer.configure()` writes that, changing only what you give it:
+**Changing a card is for when the change should last.** A session can carry
+settings of its own (see `start()` above), and that is what an automation
+wants; `timer.configure()` is for the other case - when the bar's own switch
+should start something different from now on, and the BUSY app should show
+it:
 
 ```python
 await timer.configure(bar, "busy", work_ms=25 * 60_000)
@@ -210,7 +219,7 @@ await timer.start(bar, "busy")
 The change outlasts the session, and the bar and the phone app see it - which
 is the same thing they do to each other.
 
-**One call is enough to start something of a given length.** `duration_ms`
+**One call is enough to set something of a given length.** `duration_ms`
 lands where that kind of card keeps it - the total of a countdown, the work
 phase of an interval session - so a caller does not have to know which:
 
@@ -298,10 +307,12 @@ Stopping is a `NOT_STARTED` snapshot with a fresh timestamp.
 
 Two things to know, both learned the hard way:
 
-**`interval_settings` has to match the profile.** Send durations of your own and
-the device answers `400 Failed to parse snapshot` — which is misleading,
-because the JSON parsed fine and it is the settings that disagree. Take them
-from `busy_profile()`, as above.
+**A length the bar will not run is reported as an unparseable snapshot.**
+`400 Failed to parse snapshot` is misleading: the JSON parsed fine, and the
+firmware is refusing a number. An interval phase runs 5 minutes to 8 hours
+and a session has 2 to 35 work phases (`busy_timer_common.h`); a countdown is
+checked at the top only. The settings themselves may be whatever you like -
+they need not match the card the snapshot names.
 
 **`busy_bar_settings` is required.** It is merged into the snapshot object on
 the wire rather than sitting beside it, and a snapshot without it is refused.

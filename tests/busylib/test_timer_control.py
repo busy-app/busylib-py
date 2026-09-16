@@ -214,6 +214,38 @@ async def test_start_refuses_lengths_the_bar_would_reject() -> None:
     assert written.time_left_ms == 2 * 60 * 1000
 
 
+async def test_start_can_name_a_card_the_bar_does_not_hold() -> None:
+    """
+    The bar keeps two cards, the app keeps more, and a session naming one
+    of the others touches neither of the bar's own - not even by name.
+    """
+    bar = FakeBar(_not_started())
+    other = "00000000-0000-0000-0000-000000000009"
+
+    await timer.start(
+        bar, card_id=other, kind="simple", duration_ms=30 * 60 * 1000, theme="dnd"
+    )
+
+    written = bar.last
+    assert isinstance(written, types.BusySnapshotSimple)
+    assert written.card_id == other
+    assert written.time_left_ms == 30 * 60 * 1000
+    assert written.busy_bar_settings.theme == "dnd"
+    assert not bar.profiles_written
+
+
+async def test_a_named_card_is_never_read_from_the_bar() -> None:
+    """
+    There is nothing to read: the bar answers only for the two it holds.
+    """
+    bar = FakeBar(_not_started())
+    bar.busy_profile = None  # type: ignore[method-assign]
+
+    await timer.start(bar, card_id="00000000-0000-0000-0000-000000000009")
+
+    assert isinstance(bar.last, types.BusySnapshotInfinite)
+
+
 async def test_pausing_writes_back_the_time_actually_left() -> None:
     """
     The stored snapshot's figure was true when it was written. Pausing
