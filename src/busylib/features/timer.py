@@ -213,8 +213,9 @@ THEMES_PATH = "/ext/apps_assets/busy/themes"
 MINIMUM_PHASE_MS = 5 * 60 * 1000
 
 # What a card is given when it changes to a kind of timer it was not
-# running before. There is nothing to carry over in that case - an endless
-# card has no lengths at all - so these are the values a fresh interval or
+# running before. There is nothing to carry over in that case - an
+# infinite card has no lengths at all - so these are the values a fresh
+# interval or
 # countdown starts from, and a caller can pass its own alongside.
 DEFAULT_WORK_MS = 25 * 60 * 1000
 DEFAULT_REST_MS = 5 * 60 * 1000

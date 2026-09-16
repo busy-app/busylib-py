@@ -487,8 +487,8 @@ async def test_configuring_nothing_writes_nothing() -> None:
 async def test_a_card_can_change_what_kind_of_timer_it_holds() -> None:
     """
     A different kind of timer is a different object, not an edit: an
-    endless card has no lengths to keep. Verified on firmware r971, where
-    a card went endless -> pomodoro -> countdown -> endless.
+    card without a clock has no lengths to keep. Verified on firmware
+    r971, where a card went infinite -> interval -> simple -> infinite.
     """
     bar = FakeBar(
         _not_started(),
