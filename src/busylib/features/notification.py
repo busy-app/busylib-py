@@ -27,6 +27,7 @@ from typing import Protocol
 
 from .. import types, versioning
 from ..display import FRONT_DISPLAY, DisplaySpec
+from . import assets
 from ..exceptions import BusyBarFeatureUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -101,11 +102,17 @@ SCROLL_THRESHOLD_CHARS = 12
 @dataclass(frozen=True)
 class StockIcon:
     """
-    A built-in icon, with the width the layout has to reserve for it.
+    An icon, with the width the layout has to reserve for it.
+
+    `application` is set for one an application uploaded: the device
+    resolves those inside that application's own folder, so the drawing
+    names it by `path` rather than `stock_path` and the same file name in
+    another application is another file.
     """
 
     path: str
     width: int
+    application: str | None = None
 
 
 # Icons shipped on the device. The path needs its sub-folder and extension -
@@ -123,6 +130,30 @@ STOCK_ICONS: dict[str, StockIcon] = {
     "start": StockIcon("shared/images/start_11x11.image", 11),
     "setup": StockIcon("shared/images/setup_11x11.image", 11),
 }
+
+# Where the bar keeps its assets, and the two directories icons live in.
+# A draw request names an icon by the part of the path after the root -
+# "shared/images/clock_5x5.image" - so the two forms are related but not
+# the same, which is what these exist to keep straight.
+ASSETS_ROOT = "/ext/apps_assets"
+# Kept for callers that had it: the directories the firmware ships icons
+# in. What `icons()` reads is wider than this now - every folder a bar
+# holds images in, uploads included - and lives in `features.assets`.
+ICON_DIRECTORIES = ("busy/images", "shared/images")
+
+# The first bytes of a .image file: a four-byte marker, then width and
+# height as little-endian 16-bit numbers. Verified against files whose size
+# is also in their name - hourglass_11x11 reads 11 by 11 - which is what
+# makes it safe to trust for the ones whose name says nothing, like the
+# Draw Tool set.
+_IMAGE_HEADER = 8
+_IMAGE_WIDTH_AT = 4
+_IMAGE_HEIGHT_AT = 6
+
+# A PNG says its size in the IHDR chunk, sixteen bytes in.
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_PNG_HEADER = 24
+
 
 # Built-in sounds, verified present under /ext/apps_assets/shared/sounds.
 STOCK_SOUNDS: dict[str, str] = {
@@ -254,9 +285,11 @@ class NotificationSpec:
         """
         if self.icon is None:
             return None
+        uploaded = self.icon.application is not None
         return types.ImageElement(
             id=element_id,
-            stock_path=self.icon.path,
+            path=self.icon.path if uploaded else None,
+            stock_path=None if uploaded else self.icon.path,
             x=0,
             y=self.display.height // 2,
             align="mid_left",
@@ -429,7 +462,7 @@ def build_notification(
     line_1: str,
     *,
     line_2: str | None = None,
-    icon: str | None = None,
+    icon: str | StockIcon | None = None,
     font: types.DisplayFontName = DEFAULT_FONT,
     line_1_color: types.ColorInput | None = None,
     line_2_color: types.ColorInput | None = None,
@@ -467,11 +500,16 @@ def build_notification(
     'text'
     """
     resolved_icon: StockIcon | None = None
-    if icon:
+    if isinstance(icon, StockIcon):
+        # Already looked up - by `notify`, which can ask the bar about the
+        # icons this layout knows nothing about.
+        resolved_icon = icon
+    elif icon:
         resolved_icon = STOCK_ICONS.get(icon)
         if resolved_icon is None:
             raise ValueError(
                 f"unknown icon {icon!r}; use one of {', '.join(sorted(STOCK_ICONS))}"
+                " - or call notify(), which can use any icon on the bar"
             )
 
     spec = NotificationSpec(
@@ -514,7 +552,186 @@ def build_notification(
     )
 
 
-class NotifyClient(Protocol):
+class IconCatalogueClient(Protocol):
+    """
+    What reading the bar's icons needs, which is less than the whole client.
+    """
+
+    async def storage_list(self, path: str) -> types.StorageList: ...
+
+    async def storage_read(self, path: str) -> bytes: ...
+
+
+async def icons(client: IconCatalogueClient) -> dict[str, str]:
+    """
+    Every icon this bar has, as a name and the path a drawing names it by.
+
+    Icons are files, so this is not a fixed list: the firmware ships one
+    set, the Draw Tool adds another, and an owner can upload their own or
+    delete what they do not want. Reading it from the bar is the only way
+    to be right about a particular bar - uploads included, which is what
+    makes an icon somebody put there usable by name.
+
+    The names are the file names without their extension, because that is
+    what the bar calls them and what the Draw Tool shows. The friendly
+    names in `STOCK_ICONS` stay as a short-hand for the handful worth
+    having one.
+    """
+    return await assets.of_kind(client, "image")
+
+
+def _dimensions(path: str, header: bytes) -> tuple[int, int]:
+    """
+    Read a file's own idea of its size, whichever format it is in.
+
+    The firmware's `.image` carries width and height as little-endian
+    shorts after a four-byte preamble; an upload is usually a PNG, whose
+    IHDR puts them big-endian at sixteen bytes in. Both are read rather
+    than assumed, because an icon's width is what the text is placed
+    after - guess it and the two overlap.
+    """
+    if header.startswith(_PNG_SIGNATURE):
+        if len(header) < _PNG_HEADER:
+            raise ValueError(f"{path!r} is too short to be a PNG")
+        return (
+            int.from_bytes(header[16:20], "big"),
+            int.from_bytes(header[20:24], "big"),
+        )
+    if len(header) < _IMAGE_HEADER:
+        raise ValueError(f"{path!r} is too short to be an image")
+    return (
+        int.from_bytes(header[_IMAGE_WIDTH_AT : _IMAGE_WIDTH_AT + 2], "little"),
+        int.from_bytes(header[_IMAGE_HEIGHT_AT : _IMAGE_HEIGHT_AT + 2], "little"),
+    )
+
+
+async def icon_at(
+    client: IconCatalogueClient,
+    reference: str,
+    *,
+    application_name: str | None = None,
+    display: DisplaySpec = FRONT_DISPLAY,
+) -> StockIcon:
+    """
+    Describe any image on the bar, including one somebody uploaded.
+
+    An uploaded icon is a file like any other, so nothing is known about
+    it in advance - not its size, and not whether it is an image at all.
+    Both are settled here, from the file's own header, because the two
+    ways this goes wrong are silent: an icon wider than the panel pushes
+    the text off the display, and a file that is not an image draws
+    nothing while every call reports success.
+
+    Without `application_name`, `reference` is a shipped asset and carries
+    its folder: `shared/images/clock_5x5.image`. With one, it is that
+    application's own upload and is just the file name, the way the
+    device resolves it.
+    """
+    if application_name is None:
+        absolute = f"{ASSETS_ROOT}/{reference}"
+    else:
+        absolute = f"{assets.UPLOADS_ROOT}/{application_name}/{reference}"
+
+    header = await client.storage_read(absolute)
+    width, height = _dimensions(reference, bytes(header))
+    if not 0 < width <= display.width or not 0 < height <= display.height:
+        raise ValueError(
+            f"{reference!r} is {width}x{height}, which does not fit the "
+            f"{display.width}x{display.height} display"
+        )
+    return StockIcon(reference, width, application_name)
+
+
+async def resolve_icon(
+    client: IconCatalogueClient,
+    name: str,
+    *,
+    application_name: str | None = None,
+    display: DisplaySpec = FRONT_DISPLAY,
+) -> StockIcon:
+    """
+    Resolve an icon name - or a path - to something a layout can use.
+
+    The width is what a layout needs, and guessing it is how an icon and
+    its text end up on top of each other: the Draw Tool's icons are 16
+    wide where the built-in ones are 5, 8 or 11. Some file names carry
+    their size and some do not, so it is read from the file itself.
+
+    A friendly name from `STOCK_ICONS` is answered without asking the bar
+    anything. Anything that looks like a path - it has a slash, or the
+    `.image` extension - is read with `icon_at`, which is how an icon an
+    owner uploaded can be used by name of file rather than by catalogue.
+    """
+    known = STOCK_ICONS.get(name)
+    if known is not None:
+        return known
+
+    catalogue = await assets.discover_assets(client)
+    for asset in catalogue:
+        if asset.kind != "image":
+            continue
+        # An upload wins a name collision, and one belonging to the
+        # application doing the drawing wins over another application's:
+        # `path` is resolved inside the caller's own folder, so that is
+        # the only upload this caller can actually draw.
+        if asset.name != name and asset.reference != name:
+            continue
+        if asset.is_upload and asset.application != application_name:
+            continue
+        return await icon_at(
+            client,
+            asset.reference,
+            application_name=asset.application,
+            display=display,
+        )
+
+    available = sorted(
+        asset.name
+        for asset in catalogue
+        if asset.kind == "image"
+        and (not asset.is_upload or asset.application == application_name)
+    )
+    raise ValueError(f"this bar has no icon {name!r}; it has: {', '.join(available)}")
+
+
+async def resolve_sound(
+    client: IconCatalogueClient,
+    name: str,
+    *,
+    application_name: str | None = None,
+) -> assets.Asset:
+    """
+    Resolve a sound name to the asset a playback call can name.
+
+    Same reasoning as `resolve_icon`: the three sounds with friendly
+    names are a convenience, not the list - a bar holds the timer's own
+    sounds too, and whatever an application uploaded. The short names in
+    `STOCK_SOUNDS` are answered first and without asking the bar.
+    """
+    known = STOCK_SOUNDS.get(name)
+    if known is not None:
+        return assets.Asset(name=name, reference=known, kind="sound")
+
+    catalogue = await assets.discover_assets(client)
+    for asset in catalogue:
+        if asset.kind != "sound":
+            continue
+        if asset.name != name and asset.reference != name:
+            continue
+        if asset.is_upload and asset.application != application_name:
+            continue
+        return asset
+
+    available = sorted(
+        asset.name
+        for asset in catalogue
+        if asset.kind == "sound"
+        and (not asset.is_upload or asset.application == application_name)
+    )
+    raise ValueError(f"this bar has no sound {name!r}; it has: {', '.join(available)}")
+
+
+class NotifyClient(IconCatalogueClient, Protocol):
     """
     The client surface a notification needs.
 
@@ -543,11 +760,12 @@ class NotifyClient(Protocol):
     async def audio_play(
         self,
         *,
+        path: str | None = None,
         stock_path: str | None = None,
         **request_kwargs: object,
     ) -> types.SuccessResponse:
         """
-        Play a built-in sound.
+        Play a sound the bar holds, shipped or uploaded.
         """
         ...
 
@@ -557,7 +775,7 @@ async def notify(
     line_1: str,
     *,
     line_2: str | None = None,
-    icon: str | None = None,
+    icon: str | StockIcon | None = None,
     font: types.DisplayFontName = DEFAULT_FONT,
     line_1_color: types.ColorInput | None = None,
     line_2_color: types.ColorInput | None = None,
@@ -594,18 +812,33 @@ async def notify(
         font,
         sound,
     )
-    stock_sound: str | None = None
+    # Any sound the bar has, for the same reason as the icons: the three
+    # with friendly names are a convenience, and the timer's own sounds
+    # and anything uploaded are equally playable.
+    playable: assets.Asset | None = None
     if sound:
-        stock_sound = STOCK_SOUNDS.get(sound)
-        if stock_sound is None:
-            raise ValueError(
-                f"unknown sound {sound!r}; use one of {', '.join(sorted(STOCK_SOUNDS))}"
-            )
+        playable = await resolve_sound(client, sound, application_name=application_name)
+
+    # Any icon the bar has, not only the handful with a friendly name: the
+    # Draw Tool's set is on the device too, and so is anything this
+    # application uploaded - which is why the name is resolved against
+    # this `application_name`, the folder the device will look in.
+    # Resolving here rather than in the layout is what lets the width come
+    # from the file instead of a guess. One already resolved is taken as
+    # it is, so a caller that looked it up itself is not made to pay for
+    # the lookup twice.
+    resolved_icon: StockIcon | None = None
+    if isinstance(icon, StockIcon):
+        resolved_icon = icon
+    elif icon:
+        resolved_icon = await resolve_icon(
+            client, icon, application_name=application_name
+        )
 
     elements = build_notification(
         line_1,
         line_2=line_2,
-        icon=icon,
+        icon=resolved_icon,
         font=font,
         line_1_color=line_1_color,
         line_2_color=line_2_color,
@@ -617,8 +850,10 @@ async def notify(
         template=template,
     )
     drawn = await client.display_draw(elements, application_name=application_name)
-    if stock_sound is not None:
+    if playable is not None:
         await client.audio_play(
-            stock_path=stock_sound, application_name=application_name
+            stock_path=None if playable.is_upload else playable.reference,
+            path=playable.reference if playable.is_upload else None,
+            application_name=application_name,
         )
     return drawn

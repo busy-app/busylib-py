@@ -3,6 +3,7 @@
 PROTO_REPO ?= https://github.com/flipperdevices/bsb-protobuf
 PROTO_DIR ?= .cache/bsb-protobuf
 PROTO_OUT_DIR ?= src/busylib/state_stream_proto
+REF ?= origin/dev
 PROTO_FILES = \
 	state.proto \
 	frame.proto \
@@ -42,7 +43,7 @@ help:
 	@echo "  docs        - Build the documentation site into ./site"
 	@echo "  docs-serve  - Serve the documentation locally with live reload"
 	@echo "  proto-sync  - Pull proto schema from flipperdevices/bsb-protobuf and regenerate state stream Python files"
-	@echo "  stock-assets - Refresh the asset counts in the stock assets guide from a bar (BAR=, PIN=, CHECK=1)"
+	@echo "  stock-assets - Refresh the asset counts in the stock assets guide from the firmware sources (FIRMWARE=, REF=, CHECK=1)"
 	@echo "  run-example - Run example main module via uv (usage: make run-example <name> [args...])"
 
 # Install package
@@ -105,13 +106,13 @@ docs:
 docs-serve:
 	uv run --extra docs mkdocs serve
 
-# Refresh the counts in docs/guides/stock-assets.md from a real bar.
-# Usage: make stock-assets BAR=192.168.1.50 PIN=123456 [CHECK=1]
+# Refresh the counts in docs/guides/stock-assets.md from the firmware
+# sources - not from a bar, which carries whatever its owner uploaded.
+# Usage: make stock-assets FIRMWARE=../bsb-firmware [REF=origin/dev] [CHECK=1]
 stock-assets:
-	@test -n "$(BAR)" || (echo "BAR is empty - pass the bar's address" && exit 1)
-	@test -n "$(PIN)" || (echo "PIN is empty - pass the bar's PIN or a token" && exit 1)
-	uv run python scripts/stock_assets_map.py --host "$(BAR)" --token "$(PIN)" \
-		$(if $(CHECK),--check,)
+	@test -n "$(FIRMWARE)" || (echo "FIRMWARE is empty - pass a bsb-firmware checkout" && exit 1)
+	uv run python scripts/stock_assets_map.py --firmware "$(FIRMWARE)" \
+		--ref "$(REF)" $(if $(CHECK),--check,)
 
 # Regenerate protobuf models for status websocket stream support.
 # By default this target keeps a local checkout in .cache/bsb-protobuf.

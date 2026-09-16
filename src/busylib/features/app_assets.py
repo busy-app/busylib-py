@@ -6,6 +6,8 @@ from typing import Protocol
 
 from busylib import types
 
+from .assets import UPLOADS_ROOT
+
 
 class AssetsClient(Protocol):
     """
@@ -41,7 +43,7 @@ async def sync_app_assets(
     if not assets_path.is_dir():
         return []
 
-    remote_dir = f"/ext/assets/{application_name}"
+    remote_dir = f"{UPLOADS_ROOT}/{application_name}"
     try:
         listing = await client.storage_list(remote_dir)
     except Exception as exc:  # noqa: BLE001

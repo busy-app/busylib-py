@@ -50,23 +50,29 @@ square. Nothing stops you drawing either one anywhere; it will just look wrong.
 
 ## What is there
 
-The set follows the firmware, so the tables below are a map rather than a
-contract - [ask the bar](#reading-the-map-from-a-bar) when it matters. The
-counts come from a bar, and `make stock-assets` puts them back in sync:
+The counts below come from the firmware sources, not from a bar: a bar
+carries whatever its owner has uploaded or deleted, and a bar on an older
+build has whatever that build shipped - as this one does, with 19 of the 20
+status animations, because the twentieth landed a week after it was built. So
+this is what a bar ships with, and [asking a bar](#reading-the-map-from-a-bar)
+is how you find out what one actually has.
+
+`make stock-assets FIRMWARE=<checkout>` regenerates the table, and `CHECK=1`
+reports drift without writing:
 
 <!-- begin stock assets map -->
-Counted on firmware `r971`:
+Counted from the firmware sources at `736af4c78, 2026-09-11`:
 
-| | Folder | How many |
-| --- | --- | --- |
-| Icons and pictures | `shared/images/` | 84, 66 of them the `dt_*` sticker set |
-| Status animations | `shared/animations/` | 19 |
-| Fonts | `shared/fonts/` | 10 |
-| Notification sounds | `shared/sounds/` | 3 |
-| Timer animations | `busy/animations/` | 22 |
-| Timer pictures | `busy/images/` | 13 |
-| Timer sounds | `busy/sounds/` | 3 |
-| Themes | `busy/themes/` | 12 |
+| | On the device | How many | Since | Last changed |
+| --- | --- | --- | --- | --- |
+| Icons and pictures | `shared/images/` | 84, 66 of them the `dt_*` sticker set | 0.8.1 | 2026-08-07 |
+| Status animations | `shared/animations/` | 20 | 0.8.1 | 2026-09-11 |
+| Fonts | `shared/fonts/` | 10 | 0.8.1 | 2026-05-15 |
+| Notification sounds | `shared/sounds/` | 3 | 0.8.1 | 2026-05-12 |
+| Timer animations | `busy/animations/` | 22 | 0.1.0 | 2026-07-16 |
+| Timer pictures | `busy/images/` | 13 | 0.1.0 | 2026-07-16 |
+| Timer sounds | `busy/sounds/` | 3 | 0.1.0 | 2026-03-20 |
+| Themes | `busy/themes/` | 12 | 0.7.2 | 2026-05-13 |
 <!-- end stock assets map -->
 
 ### Icons
