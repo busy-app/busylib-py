@@ -230,7 +230,7 @@ MAXIMUM_CYCLES = 35
 
 # What a card is given when it changes to a kind of timer it was not
 # running before. There is nothing to carry over in that case - an endless
-# card has no lengths at all - so these are the values a fresh pomodoro or
+# card has no lengths at all - so these are the values a fresh interval or
 # countdown starts from, and a caller can pass its own alongside.
 DEFAULT_WORK_MS = 25 * 60 * 1000
 DEFAULT_REST_MS = 5 * 60 * 1000
@@ -782,12 +782,11 @@ async def configure(
     """
     Change one of the bar's two cards, leaving the rest of it alone.
 
-    This is how a session gets its own length. The device refuses a
-    snapshot whose settings disagree with the card it names, so there is no
-    way to run a timer for twenty-five minutes without the card saying
-    twenty-five minutes - which is why this exists and why the change
-    outlasts the session. The bar and the phone app see it too; that is the
-    same thing they do to each other.
+    For a change that should last. A session can carry settings of its own
+    - `start()` takes them - and that is what a one-off wants; this is for
+    when the bar's own switch should start something different from now
+    on. The bar and the phone app see it too; that is the same thing they
+    do to each other.
 
     Only what is given is changed. `work_ms`, `rest_ms` and `cycles` apply
     to an interval card, `total_ms` to a countdown; giving one the card
@@ -802,7 +801,7 @@ async def configure(
 
     # "How long should it run" is one question with two answers depending
     # on the card, and a caller starting a session should not have to know
-    # which: a countdown has a total, a pomodoro has a work phase, and a
+    # which: a countdown has a total, an interval has a work phase, and a
     # card that runs endlessly has neither.
     if duration_ms is not None:
         wanted = kind or kind_of(settings)
@@ -823,7 +822,7 @@ async def configure(
         # A different kind of timer is a different object, not an edit: an
         # endless card has no lengths to keep, and the device stores
         # whichever one it is given. Verified on firmware r971, where a
-        # card went endless -> pomodoro -> countdown -> endless and kept
+        # card went infinite -> interval -> simple -> infinite and kept
         # each one.
         changed["timer_settings"] = _settings_for(
             kind,
