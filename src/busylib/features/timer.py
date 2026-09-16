@@ -214,25 +214,30 @@ MINIMUM_PHASE_MS = 5 * 60 * 1000
 
 # What a card is given when it changes to a kind of timer it was not
 # running before. There is nothing to carry over in that case - an endless
-# card has no lengths at all - so these are the values a fresh pomodoro or
+# card has no lengths at all - so these are the values a fresh interval or
 # countdown starts from, and a caller can pass its own alongside.
 DEFAULT_WORK_MS = 25 * 60 * 1000
 DEFAULT_REST_MS = 5 * 60 * 1000
 DEFAULT_CYCLES = 4
 DEFAULT_TOTAL_MS = 25 * 60 * 1000
 
-TimerKind = Literal["endless", "countdown", "pomodoro"]
+# The firmware's own words, lowercased. Naming them anything else - the
+# app's words, or nicer ones - would mean three vocabularies for one
+# thing: what the device reports, what a consumer writes, and what a
+# person reads. These are also exactly the values `timer_state` reports
+# as a session's mode.
+TimerKind = Literal["infinite", "simple", "interval"]
 
 # The firmware's names for them, which the wire uses.
 _KIND_TO_TYPE: dict[TimerKind, str] = {
-    "endless": "INFINITE",
-    "countdown": "SIMPLE",
-    "pomodoro": "INTERVAL",
+    "infinite": "INFINITE",
+    "simple": "SIMPLE",
+    "interval": "INTERVAL",
 }
 _TYPE_TO_KIND: dict[str, TimerKind] = {
-    "INFINITE": "endless",
-    "SIMPLE": "countdown",
-    "INTERVAL": "pomodoro",
+    "INFINITE": "infinite",
+    "SIMPLE": "simple",
+    "INTERVAL": "interval",
 }
 
 
@@ -604,9 +609,9 @@ def _settings_for(
     """
     Build a fresh timer of one kind, for a card changing to it.
     """
-    if kind == "endless":
+    if kind == "infinite":
         return types.BusyTimerInfiniteSettings(type="INFINITE")
-    if kind == "countdown":
+    if kind == "simple":
         return types.BusyTimerSimpleSettings(
             type="SIMPLE",
             total_time_ms=_phase("total_ms", total_ms) or DEFAULT_TOTAL_MS,
@@ -660,9 +665,9 @@ async def configure(
     changed: dict[str, object] = {}
     if kind is not None and kind != kind_of(settings):
         # A different kind of timer is a different object, not an edit: an
-        # endless card has no lengths to keep, and the device stores
+        # infinite card has no lengths to keep, and the device stores
         # whichever one it is given. Verified on firmware r971, where a
-        # card went endless -> pomodoro -> countdown -> endless and kept
+        # card went infinite -> interval -> simple -> infinite and kept
         # each one.
         changed["timer_settings"] = _settings_for(
             kind,
