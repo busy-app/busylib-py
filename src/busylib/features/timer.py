@@ -631,6 +631,7 @@ async def configure(
     slot: types.BusyProfileSlot = "busy",
     *,
     kind: TimerKind | None = None,
+    duration_ms: int | None = None,
     work_ms: int | None = None,
     rest_ms: int | None = None,
     cycles: int | None = None,
@@ -659,6 +660,21 @@ async def configure(
     """
     profile = await client.busy_profile(slot)
     settings = profile.timer_settings
+
+    # "How long should it run" is one question with two answers depending
+    # on the card, and a caller starting a session should not have to know
+    # which: a countdown has a total, an interval has a work phase, and a
+    # card that runs without a clock has neither.
+    if duration_ms is not None:
+        wanted = kind or kind_of(settings)
+        if wanted == "infinite":
+            raise ValueError(
+                f"the {slot} card runs without a clock; it has no length to set"
+            )
+        if wanted == "simple":
+            total_ms = duration_ms if total_ms is None else total_ms
+        else:
+            work_ms = duration_ms if work_ms is None else work_ms
 
     if theme is not None:
         await _checked(client, theme, known_themes)
