@@ -159,14 +159,20 @@ def _last_change(firmware: pathlib.Path, ref: str, path: str) -> str:
 
 def _preview(firmware: pathlib.Path, ref: str, path: str, *, write: bool) -> str:
     """
-    One picture, built beside the guide and asked for at its own size.
+    One picture, built beside the guide and shown at its own size.
+
+    Markdown rather than an `<img>` tag, and no width. The site serves
+    each page from a directory of its own, and only the Markdown form has
+    its relative path rewritten to match - a raw tag resolves against the
+    page's URL and gives a broken picture. The size is baked into the
+    file, so a width attribute would have nothing to add.
     """
     name = pathlib.Path(path).stem
-    picture, width = _thumbnail(firmware, ref, path)
+    picture, _ = _thumbnail(firmware, ref, path)
     if write:
         IMAGE_DIR.mkdir(parents=True, exist_ok=True)
         (IMAGE_DIR / f"{name}.png").write_bytes(picture)
-    return f'<img src="assets/images/{name}.png" width="{width}" alt="{name}">'
+    return f"![{name}](assets/images/{name}.png)"
 
 
 def _grid(
@@ -387,15 +393,14 @@ def animations(firmware: pathlib.Path, ref: str, *, write: bool) -> str:
         cells = []
         for path in _files(firmware, ref, directory, ".zip"):
             name = pathlib.Path(path).stem
-            gif, kept, total, width = _gif(firmware, ref, path)
+            gif, kept, total, _ = _gif(firmware, ref, path)
             if write:
                 ANIMATION_DIR.mkdir(parents=True, exist_ok=True)
                 (ANIMATION_DIR / f"{name}.gif").write_bytes(gif)
             elif not (ANIMATION_DIR / f"{name}.gif").exists():
                 missing.append(name)
             cells.append(
-                f'<img src="assets/animations/{name}.gif" width="{width}" '
-                f'alt="{name}"><br>`{name}`<br>'
+                f"![{name}](assets/animations/{name}.gif)<br>`{name}`<br>"
                 f"<small>{kept} of {total} frames</small>"
             )
         rows = [
