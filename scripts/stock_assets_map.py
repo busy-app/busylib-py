@@ -55,20 +55,24 @@ ANIMATION_FRAMES = 16
 ANIMATION_WIDTH = 160
 ANIMATION_SCALE = (2, 6)
 
-# The firmware is public, so a preview is a link into it rather than a
-# copy kept here: the pictures cannot drift from the release they are
-# claimed to come from, and this repository does not carry a hundred
-# files it would have to keep in step.
+# One palette for the whole animation. Quantising each frame on its own
+# put a different palette under every frame, and the colours jumped
+# between them - the acid look this exists to avoid.
+ANIMATION_COLOURS = 128
+
+# The firmware is public, so the sounds can be played straight from it.
 RAW = "https://raw.githubusercontent.com/busy-app/busybar-firmware"
 
-# The panels are unlit black and the pictures are a handful of pixels
-# across, so they are shown enlarged, unsmoothed and on a dark tile -
-# which is what they look like on a bar, and the only way a 5x5 icon is
-# visible in a document at all.
-THUMBNAIL = (
-    'style="image-rendering:pixelated;background:#111;'
-    'padding:4px;border-radius:4px;vertical-align:middle"'
-)
+# The pictures are built rather than linked, because the two places this
+# guide is read disagree about what they allow. The site takes styling
+# and would enlarge a linked original with CSS; GitHub strips style
+# attributes, which would leave a 5x5 white icon blurred onto a white
+# page. So the enlargement and the unlit-black background are baked into
+# the file, and the tag asks for the size the file already is - which
+# needs no styling anywhere and cannot be smoothed by anyone.
+IMAGE_DIR = GUIDE.parent / "assets/images"
+IMAGE_WIDTH = 48
+IMAGE_SCALE = (2, 8)
 
 # Where each folder on the device comes from in the firmware tree, and
 # which files in it end up there. The extensions differ because the build
@@ -153,19 +157,31 @@ def _last_change(firmware: pathlib.Path, ref: str, path: str) -> str:
     )
 
 
-def _preview(sha: str, path: str, *, width: int) -> str:
+def _preview(firmware: pathlib.Path, ref: str, path: str, *, write: bool) -> str:
     """
-    One picture, linked out of the firmware at the commit it came from.
+    One picture, built beside the guide and asked for at its own size.
     """
-    return f'<img src="{RAW}/{sha}/{path}" width="{width}" {THUMBNAIL}>'
+    name = pathlib.Path(path).stem
+    picture, width = _thumbnail(firmware, ref, path)
+    if write:
+        IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+        (IMAGE_DIR / f"{name}.png").write_bytes(picture)
+    return f'<img src="assets/images/{name}.png" width="{width}" alt="{name}">'
 
 
-def _grid(sha: str, paths: list[str], *, width: int, columns: int = 6) -> list[str]:
+def _grid(
+    firmware: pathlib.Path,
+    ref: str,
+    paths: list[str],
+    *,
+    write: bool,
+    columns: int = 6,
+) -> list[str]:
     """
     A table of pictures with their names, which is how a person picks one.
     """
     cells = [
-        f"{_preview(sha, path, width=width)}<br>`{pathlib.Path(path).stem}`"
+        f"{_preview(firmware, ref, path, write=write)}<br>`{pathlib.Path(path).stem}`"
         for path in paths
     ]
     rows = [
@@ -177,7 +193,7 @@ def _grid(sha: str, paths: list[str], *, width: int, columns: int = 6) -> list[s
     return [header, divider, *rows]
 
 
-def gallery(firmware: pathlib.Path, ref: str) -> str:
+def gallery(firmware: pathlib.Path, ref: str, *, write: bool) -> str:
     """
     Show the pictures, since a name alone does not say what an icon is.
 
@@ -185,8 +201,6 @@ def gallery(firmware: pathlib.Path, ref: str) -> str:
     sound, and neither previews in a document. Those keep their names and
     their counts.
     """
-    sha = _git(firmware, "rev-parse", ref).strip()
-
     named = [
         ("check", "checkmark_front_8x8"),
         ("error", "error_front_8x8"),
@@ -205,7 +219,7 @@ def gallery(firmware: pathlib.Path, ref: str) -> str:
         "| --- | --- | --- |",
     ]
     for short, file_name in named:
-        picture = _preview(sha, f"{shared}/{file_name}.png", width=44)
+        picture = _preview(firmware, ref, f"{shared}/{file_name}.png", write=write)
         lines.append(f"| {picture} | `{short}` | `{file_name}.image` |")
 
     stickers = [
@@ -219,7 +233,7 @@ def gallery(firmware: pathlib.Path, ref: str) -> str:
         " 16x16, twice the width of most built-in icons, and the layout moves"
         " the text along accordingly:",
         "",
-        *_grid(sha, stickers, width=40),
+        *_grid(firmware, ref, stickers, write=write),
     ]
 
     rest = [
@@ -232,7 +246,7 @@ def gallery(firmware: pathlib.Path, ref: str) -> str:
         "",
         "The rest of what the firmware ships, mostly its own furniture:",
         "",
-        *_grid(sha, rest, width=44),
+        *_grid(firmware, ref, rest, write=write),
     ]
 
     timer = _files(firmware, ref, "assets/images/external/busy", ".png")
@@ -240,12 +254,50 @@ def gallery(firmware: pathlib.Path, ref: str) -> str:
         "",
         "And the timer's own:",
         "",
-        *_grid(sha, timer, width=44),
+        *_grid(firmware, ref, timer, write=write),
     ]
     return "\n".join(lines)
 
 
-def _gif(firmware: pathlib.Path, ref: str, path: str) -> tuple[bytes, int, int]:
+def _lit(data: bytes):
+    """
+    One picture on the black the panels show behind whatever is drawn.
+
+    Composited rather than left transparent, because these are read on a
+    white page as often as a dark one, and a white icon on white is not a
+    preview of anything.
+    """
+    from PIL import Image
+
+    frame = Image.open(io.BytesIO(data)).convert("RGBA")
+    lit = Image.new("RGBA", frame.size, (0, 0, 0, 255))
+    lit.alpha_composite(frame)
+    return lit.convert("RGB")
+
+
+def _thumbnail(firmware: pathlib.Path, ref: str, path: str) -> tuple[bytes, int]:
+    """
+    Build one enlarged picture, and say how wide it came out.
+    """
+    from PIL import Image
+
+    raw = subprocess.run(
+        ["git", "-C", str(firmware), "show", f"{ref}:{path}"],
+        capture_output=True,
+        check=True,
+    ).stdout
+    picture = _lit(raw)
+    low, high = IMAGE_SCALE
+    scale = min(high, max(low, round(IMAGE_WIDTH / picture.width)))
+    enlarged = picture.resize(
+        (picture.width * scale, picture.height * scale), Image.NEAREST
+    )
+    buffer = io.BytesIO()
+    enlarged.save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue(), enlarged.width
+
+
+def _gif(firmware: pathlib.Path, ref: str, path: str) -> tuple[bytes, int, int, int]:
     """
     Build one animation into a GIF, and say how much of it was kept.
 
@@ -287,19 +339,22 @@ def _gif(firmware: pathlib.Path, ref: str, path: str) -> tuple[bytes, int, int]:
     low, high = ANIMATION_SCALE
     scale = min(high, max(low, round(ANIMATION_WIDTH / first.width)))
 
-    frames = []
-    for name in kept:
-        frame = Image.open(io.BytesIO(archive.read(name))).convert("RGBA")
-        # The panels are unlit black behind whatever is drawn, so a
-        # transparent frame composited onto white would be a different
-        # picture from the one the bar shows.
-        lit = Image.new("RGBA", frame.size, (0, 0, 0, 255))
-        lit.alpha_composite(frame)
-        frames.append(
-            lit.convert("P", palette=Image.ADAPTIVE, colors=64).resize(
-                (frame.width * scale, frame.height * scale), Image.NEAREST
-            )
+    lit = [_lit(archive.read(name)) for name in kept]
+
+    # Every frame indexes the same palette, built from all of them at
+    # once. Per-frame palettes made the colours jump between frames.
+    width, height = lit[0].size
+    montage = Image.new("RGB", (width, height * len(lit)))
+    for index, frame in enumerate(lit):
+        montage.paste(frame, (0, index * height))
+    palette = montage.quantize(colors=ANIMATION_COLOURS, method=Image.MEDIANCUT)
+
+    frames = [
+        frame.quantize(palette=palette, dither=Image.Dither.NONE).resize(
+            (width * scale, height * scale), Image.NEAREST
         )
+        for frame in lit
+    ]
 
     buffer = io.BytesIO()
     frames[0].save(
@@ -311,7 +366,7 @@ def _gif(firmware: pathlib.Path, ref: str, path: str) -> tuple[bytes, int, int]:
         loop=0,
         optimize=True,
     )
-    return buffer.getvalue(), len(kept), len(names)
+    return buffer.getvalue(), len(kept), len(names), frames[0].width
 
 
 def animations(firmware: pathlib.Path, ref: str, *, write: bool) -> str:
@@ -332,15 +387,16 @@ def animations(firmware: pathlib.Path, ref: str, *, write: bool) -> str:
         cells = []
         for path in _files(firmware, ref, directory, ".zip"):
             name = pathlib.Path(path).stem
-            gif, kept, total = _gif(firmware, ref, path)
+            gif, kept, total, width = _gif(firmware, ref, path)
             if write:
                 ANIMATION_DIR.mkdir(parents=True, exist_ok=True)
                 (ANIMATION_DIR / f"{name}.gif").write_bytes(gif)
             elif not (ANIMATION_DIR / f"{name}.gif").exists():
                 missing.append(name)
             cells.append(
-                f'<img src="assets/animations/{name}.gif" width="160" '
-                f"{THUMBNAIL}><br>`{name}`<br><small>{kept} of {total} frames</small>"
+                f'<img src="assets/animations/{name}.gif" width="{width}" '
+                f'alt="{name}"><br>`{name}`<br>'
+                f"<small>{kept} of {total} frames</small>"
             )
         rows = [
             "| " + " | ".join(cells[i : i + 3]) + " |" for i in range(0, len(cells), 3)
@@ -469,7 +525,9 @@ def main() -> int:
     try:
         sections = {
             (BEGIN, END): collect(args.firmware, args.ref),
-            (GALLERY_BEGIN, GALLERY_END): gallery(args.firmware, args.ref),
+            (GALLERY_BEGIN, GALLERY_END): gallery(
+                args.firmware, args.ref, write=not args.check
+            ),
             (ANIMATIONS_BEGIN, ANIMATIONS_END): animations(
                 args.firmware, args.ref, write=not args.check
             ),
