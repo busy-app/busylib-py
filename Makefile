@@ -111,7 +111,7 @@ docs-serve:
 # Usage: make stock-assets FIRMWARE=../bsb-firmware [REF=origin/dev] [CHECK=1]
 stock-assets:
 	@test -n "$(FIRMWARE)" || (echo "FIRMWARE is empty - pass a bsb-firmware checkout" && exit 1)
-	uv run python scripts/stock_assets_map.py --firmware "$(FIRMWARE)" \
+	uv run --extra media python scripts/stock_assets_map.py --firmware "$(FIRMWARE)" \
 		--ref "$(REF)" $(if $(CHECK),--check,)
 
 # Regenerate protobuf models for status websocket stream support.

@@ -1,0 +1,4 @@
+# Built by `make stock-assets` from the firmware sources, not written by
+# hand: collapsed in reviews, and left out of the repository's language
+# statistics.
+docs/guides/assets/** linguist-generated=true
