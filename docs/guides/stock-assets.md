@@ -5,6 +5,12 @@ already on it. Referencing one costs nothing and needs no upload - which makes
 it the first thing to reach for, before [converting and uploading your
 own](assets-and-storage.md).
 
+Everything here is shown as well as named: the pictures and animations are
+enlarged onto the black an unlit panel shows, and the sounds have players. One
+thing does not survive being read on GitHub - it drops audio players - so the
+[published guide](https://busy-app.github.io/busylib-py/guides/stock-assets/) is
+the complete version.
+
 They live under `/ext/apps_assets/`, in two trees:
 
 | Tree | What it is |
@@ -217,8 +223,10 @@ types.AnimationElement(
 
 The first three have short names in `notification.STOCK_SOUNDS` (`event`,
 `reminder`, `volume`) and are what `notify(sound=...)` takes. The players below
-point at the firmware's own WAV sources, so this is what a bar actually
-plays:
+point at the firmware's own WAV sources, so this is what a bar actually plays -
+**on GitHub they are not shown**, since it drops audio players from a rendered
+file; the [published guide](https://busy-app.github.io/busylib-py/guides/stock-assets/)
+has them.
 
 <!-- begin stock sounds gallery -->
 | | Sound | Used for |
