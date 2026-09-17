@@ -5,6 +5,18 @@ include pyproject.toml
 prune tests
 prune examples
 prune .github
+# Development material, and the heaviest thing in the repository: the
+# guides carry generated previews of every asset a bar ships with, which
+# nobody installing this package has any use for. They are published as a
+# site instead.
+prune docs
+prune scripts
+exclude mkdocs.yml
+exclude Makefile
+# The hero images the README shows. PyPI renders that README from
+# absolute GitHub URLs - it does not rewrite relative paths - so shipping
+# a second copy of them would be 156 KB nobody ever looks at.
+prune assets
 prune *.egg-info
 prune **/*.egg-info
 
