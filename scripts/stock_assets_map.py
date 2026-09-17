@@ -21,10 +21,13 @@ prose around it. So only the counts are generated.
 from __future__ import annotations
 
 import argparse
+import io
+import json
 import pathlib
 import re
 import subprocess
 import sys
+import zipfile
 
 GUIDE = pathlib.Path(__file__).resolve().parent.parent / "docs/guides/stock-assets.md"
 
@@ -33,6 +36,24 @@ END = "<!-- end stock assets map -->"
 
 GALLERY_BEGIN = "<!-- begin stock assets gallery -->"
 GALLERY_END = "<!-- end stock assets gallery -->"
+
+ANIMATIONS_BEGIN = "<!-- begin stock animations gallery -->"
+ANIMATIONS_END = "<!-- end stock animations gallery -->"
+
+SOUNDS_BEGIN = "<!-- begin stock sounds gallery -->"
+SOUNDS_END = "<!-- end stock sounds gallery -->"
+
+# Animations are the one thing that cannot be linked: the source is a zip
+# of frames, and no browser unpacks one. So they are the exception to the
+# rule above - built into a GIF and committed here - and these are the
+# numbers that keep that exception small.
+# Beside the guide, not under a site-wide assets folder: a relative
+# link from here resolves both in the built site and in GitHub's own
+# view of the file.
+ANIMATION_DIR = GUIDE.parent / "assets/animations"
+ANIMATION_FRAMES = 16
+ANIMATION_WIDTH = 160
+ANIMATION_SCALE = (2, 6)
 
 # The firmware is public, so a preview is a link into it rather than a
 # copy kept here: the pictures cannot drift from the release they are
@@ -224,6 +245,143 @@ def gallery(firmware: pathlib.Path, ref: str) -> str:
     return "\n".join(lines)
 
 
+def _gif(firmware: pathlib.Path, ref: str, path: str) -> tuple[bytes, int, int]:
+    """
+    Build one animation into a GIF, and say how much of it was kept.
+
+    The sources run at up to sixty frames a second and up to a hundred
+    and eighty frames long, which is a quarter of a megabyte per picture -
+    too much to carry for something a reader glances at. So the frames
+    are thinned to about two dozen and the delay stretched to match, which
+    keeps the movement honest at a fraction of the weight.
+    """
+    from PIL import Image
+
+    raw = subprocess.run(
+        ["git", "-C", str(firmware), "show", f"{ref}:{path}"],
+        capture_output=True,
+        check=True,
+    ).stdout
+    archive = zipfile.ZipFile(io.BytesIO(raw))
+
+    # Zips made on a Mac carry a shadow copy of every file; they are not
+    # frames, and neither are the dotfiles beside them.
+    names = sorted(
+        name
+        for name in archive.namelist()
+        if name.endswith(".png") and "__MACOSX" not in name and "/." not in name
+    )
+    if not names:
+        raise ValueError(f"{path} holds no frames")
+
+    fps = 30
+    for entry in archive.namelist():
+        if entry.endswith("meta.json"):
+            fps = int(json.loads(archive.read(entry)).get("fps", fps)) or fps
+            break
+
+    step = max(1, round(len(names) / ANIMATION_FRAMES))
+    kept = names[::step]
+
+    first = Image.open(io.BytesIO(archive.read(kept[0])))
+    low, high = ANIMATION_SCALE
+    scale = min(high, max(low, round(ANIMATION_WIDTH / first.width)))
+
+    frames = []
+    for name in kept:
+        frame = Image.open(io.BytesIO(archive.read(name))).convert("RGBA")
+        # The panels are unlit black behind whatever is drawn, so a
+        # transparent frame composited onto white would be a different
+        # picture from the one the bar shows.
+        lit = Image.new("RGBA", frame.size, (0, 0, 0, 255))
+        lit.alpha_composite(frame)
+        frames.append(
+            lit.convert("P", palette=Image.ADAPTIVE, colors=64).resize(
+                (frame.width * scale, frame.height * scale), Image.NEAREST
+            )
+        )
+
+    buffer = io.BytesIO()
+    frames[0].save(
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=round(1000 / fps * step),
+        loop=0,
+        optimize=True,
+    )
+    return buffer.getvalue(), len(kept), len(names)
+
+
+def animations(firmware: pathlib.Path, ref: str, *, write: bool) -> str:
+    """
+    Build every animation and list them, with the timer's own last.
+
+    In check mode nothing is written, but a picture that should be here
+    and is not is still reported - a gallery of broken images is exactly
+    what this is meant to prevent.
+    """
+    missing: list[str] = []
+    groups = (
+        ("What the firmware ships", "assets/shared/animations"),
+        ("The timer's own", "assets/animations/busy"),
+    )
+    lines: list[str] = []
+    for title, directory in groups:
+        cells = []
+        for path in _files(firmware, ref, directory, ".zip"):
+            name = pathlib.Path(path).stem
+            gif, kept, total = _gif(firmware, ref, path)
+            if write:
+                ANIMATION_DIR.mkdir(parents=True, exist_ok=True)
+                (ANIMATION_DIR / f"{name}.gif").write_bytes(gif)
+            elif not (ANIMATION_DIR / f"{name}.gif").exists():
+                missing.append(name)
+            cells.append(
+                f'<img src="assets/animations/{name}.gif" width="160" '
+                f"{THUMBNAIL}><br>`{name}`<br><small>{kept} of {total} frames</small>"
+            )
+        rows = [
+            "| " + " | ".join(cells[i : i + 3]) + " |" for i in range(0, len(cells), 3)
+        ]
+        lines += [f"{title}:", "", "| | | |", "| --- | --- | --- |", *rows, ""]
+    if missing:
+        raise FileNotFoundError(
+            "these animations are listed but not built: " + ", ".join(missing)
+        )
+    return "\n".join(lines).rstrip()
+
+
+def sounds(firmware: pathlib.Path, ref: str) -> str:
+    """
+    The sounds, playable where the document is read.
+
+    The firmware keeps them as WAV and GitHub serves that with a type a
+    browser understands, so these need no copy and no conversion - the
+    player points straight at the source.
+    """
+    sha = _git(firmware, "rev-parse", ref).strip()
+    lines = ["| | Sound | Used for |", "| --- | --- | --- |"]
+    used = {
+        "calendar_event_starts": "an event is starting",
+        "calendar_reminder_ends": "a reminder is over",
+        "volume_change": "the volume moved",
+        "countdown_tick": "a session's last seconds",
+        "countdown_finish": "a phase ended",
+        "session_completed": "the whole session ended",
+    }
+    for directory in ("assets/shared/sounds", "assets/sounds/busy"):
+        for path in _files(firmware, ref, directory, ".wav"):
+            name = pathlib.Path(path).stem
+            player = (
+                f'<audio controls preload="none" style="height:32px" '
+                f'src="{RAW}/{sha}/{path}"></audio>'
+            )
+            lines.append(f"| {player} | `{name}` | {used.get(name, '-')} |")
+    return "\n".join(lines)
+
+
 def collect(firmware: pathlib.Path, ref: str) -> str:
     """
     Render the table the guide carries.
@@ -312,6 +470,10 @@ def main() -> int:
         sections = {
             (BEGIN, END): collect(args.firmware, args.ref),
             (GALLERY_BEGIN, GALLERY_END): gallery(args.firmware, args.ref),
+            (ANIMATIONS_BEGIN, ANIMATIONS_END): animations(
+                args.firmware, args.ref, write=not args.check
+            ),
+            (SOUNDS_BEGIN, SOUNDS_END): sounds(args.firmware, args.ref),
         }
     except subprocess.CalledProcessError as error:
         print(error.stderr.strip() or "git failed", file=sys.stderr)
