@@ -31,6 +31,24 @@ GUIDE = pathlib.Path(__file__).resolve().parent.parent / "docs/guides/stock-asse
 BEGIN = "<!-- begin stock assets map -->"
 END = "<!-- end stock assets map -->"
 
+GALLERY_BEGIN = "<!-- begin stock assets gallery -->"
+GALLERY_END = "<!-- end stock assets gallery -->"
+
+# The firmware is public, so a preview is a link into it rather than a
+# copy kept here: the pictures cannot drift from the release they are
+# claimed to come from, and this repository does not carry a hundred
+# files it would have to keep in step.
+RAW = "https://raw.githubusercontent.com/busy-app/busybar-firmware"
+
+# The panels are unlit black and the pictures are a handful of pixels
+# across, so they are shown enlarged, unsmoothed and on a dark tile -
+# which is what they look like on a bar, and the only way a 5x5 icon is
+# visible in a document at all.
+THUMBNAIL = (
+    'style="image-rendering:pixelated;background:#111;'
+    'padding:4px;border-radius:4px;vertical-align:middle"'
+)
+
 # Where each folder on the device comes from in the firmware tree, and
 # which files in it end up there. The extensions differ because the build
 # converts them: a .png becomes an .image, a .zip an .anim, a .wav a .snd.
@@ -114,6 +132,98 @@ def _last_change(firmware: pathlib.Path, ref: str, path: str) -> str:
     )
 
 
+def _preview(sha: str, path: str, *, width: int) -> str:
+    """
+    One picture, linked out of the firmware at the commit it came from.
+    """
+    return f'<img src="{RAW}/{sha}/{path}" width="{width}" {THUMBNAIL}>'
+
+
+def _grid(sha: str, paths: list[str], *, width: int, columns: int = 6) -> list[str]:
+    """
+    A table of pictures with their names, which is how a person picks one.
+    """
+    cells = [
+        f"{_preview(sha, path, width=width)}<br>`{pathlib.Path(path).stem}`"
+        for path in paths
+    ]
+    rows = [
+        "| " + " | ".join(cells[i : i + columns]) + " |"
+        for i in range(0, len(cells), columns)
+    ]
+    header = "|" + " |" * columns
+    divider = "|" + " --- |" * columns
+    return [header, divider, *rows]
+
+
+def gallery(firmware: pathlib.Path, ref: str) -> str:
+    """
+    Show the pictures, since a name alone does not say what an icon is.
+
+    Only the pictures: an animation is a zip of frames and a sound is a
+    sound, and neither previews in a document. Those keep their names and
+    their counts.
+    """
+    sha = _git(firmware, "rev-parse", ref).strip()
+
+    named = [
+        ("check", "checkmark_front_8x8"),
+        ("error", "error_front_8x8"),
+        ("info", "info_front_8x8"),
+        ("low_battery", "low_battery_front_8x8"),
+        ("clock", "clock_5x5"),
+        ("hourglass", "hourglass_5x5"),
+        ("start", "start_11x11"),
+        ("setup", "setup_11x11"),
+    ]
+    shared = "assets/shared/images/external"
+    lines = [
+        "The eight with short names:",
+        "",
+        "| | Name | File |",
+        "| --- | --- | --- |",
+    ]
+    for short, file_name in named:
+        picture = _preview(sha, f"{shared}/{file_name}.png", width=44)
+        lines.append(f"| {picture} | `{short}` | `{file_name}.image` |")
+
+    stickers = [
+        path
+        for path in _files(firmware, ref, shared, ".png")
+        if pathlib.Path(path).name.startswith("dt_")
+    ]
+    lines += [
+        "",
+        "The Draw Tool's set, under the names the Draw Tool shows - these are"
+        " 16x16, twice the width of most built-in icons, and the layout moves"
+        " the text along accordingly:",
+        "",
+        *_grid(sha, stickers, width=40),
+    ]
+
+    rest = [
+        path
+        for path in _files(firmware, ref, shared, ".png")
+        if not pathlib.Path(path).name.startswith("dt_")
+        and pathlib.Path(path).stem not in {name for _, name in named}
+    ]
+    lines += [
+        "",
+        "The rest of what the firmware ships, mostly its own furniture:",
+        "",
+        *_grid(sha, rest, width=44),
+    ]
+
+    timer = _files(firmware, ref, "assets/images/external/busy", ".png")
+    lines += [
+        "",
+        "And the timer's own:",
+        "",
+        *_grid(sha, timer, width=44),
+    ]
+    return "\n".join(lines)
+
+
 def collect(firmware: pathlib.Path, ref: str) -> str:
     """
     Render the table the guide carries.
@@ -143,19 +253,24 @@ def collect(firmware: pathlib.Path, ref: str) -> str:
     )
 
 
-def rewrite(table: str, *, check: bool) -> int:
+def rewrite(sections: dict[tuple[str, str], str], *, check: bool) -> int:
     """
-    Put the table between the markers, or say what would change.
+    Put each generated section between its markers, or say what would
+    change.
     """
     text = GUIDE.read_text()
-    # Non-greedy across everything, including the empty case: the markers
-    # sit on adjacent lines until this has run once.
-    pattern = re.compile(f"{re.escape(BEGIN)}.*?{re.escape(END)}", re.DOTALL)
-    if not pattern.search(text):
-        print(f"{GUIDE}: markers not found", file=sys.stderr)
-        return 2
-
-    updated = pattern.sub(f"{BEGIN}\n{table}\n{END}", text)
+    updated = text
+    for (begin, end), body in sections.items():
+        # Non-greedy across everything, including the empty case: the
+        # markers sit on adjacent lines until this has run once.
+        pattern = re.compile(f"{re.escape(begin)}.*?{re.escape(end)}", re.DOTALL)
+        if not pattern.search(updated):
+            print(f"{GUIDE}: markers {begin} not found", file=sys.stderr)
+            return 2
+        updated = pattern.sub(
+            lambda _, body=body, begin=begin, end=end: f"{begin}\n{body}\n{end}",
+            updated,
+        )
     if updated == text:
         print("stock assets map is current")
         return 0
@@ -194,11 +309,14 @@ def main() -> int:
         return 2
 
     try:
-        table = collect(args.firmware, args.ref)
+        sections = {
+            (BEGIN, END): collect(args.firmware, args.ref),
+            (GALLERY_BEGIN, GALLERY_END): gallery(args.firmware, args.ref),
+        }
     except subprocess.CalledProcessError as error:
         print(error.stderr.strip() or "git failed", file=sys.stderr)
         return 2
-    return rewrite(table, check=args.check)
+    return rewrite(sections, check=args.check)
 
 
 if __name__ == "__main__":
