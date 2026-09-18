@@ -209,7 +209,11 @@ class NotificationSpec:
     line_1: str
     line_2: str | None = None
     icon: StockIcon | None = None
-    font: types.DisplayFontName = DEFAULT_FONT
+    line_1_font: types.DisplayFontName = DEFAULT_FONT
+    # The second line may be set in a size of its own. A short label over
+    # a long one, or the other way round, says which of the two matters
+    # in a way one size for both cannot.
+    line_2_font: types.DisplayFontName | None = None
     line_1_color: types.ColorInput | None = None
     line_2_color: types.ColorInput | None = None
     background_color: types.ColorInput | None = None
@@ -246,6 +250,7 @@ class NotificationSpec:
         color: types.ColorInput | None = None,
         x: int | None = None,
         width: int | None = None,
+        font: types.DisplayFontName | None = None,
     ) -> types.TextElement:
         """
         Build a text element at `y`, scrolled if it cannot fit.
@@ -268,7 +273,7 @@ class NotificationSpec:
         return types.TextElement(
             id=element_id,
             text=text,
-            font=self.font,
+            font=self.line_1_font if font is None else font,
             color=color,
             x=origin,
             y=y,
@@ -357,7 +362,7 @@ class OneLineTemplate:
             spec.text(
                 _LINE_1_ID,
                 spec.line_1,
-                y=ONE_LINE_Y[spec.font],
+                y=ONE_LINE_Y[spec.line_1_font],
                 align="mid_left",
                 color=spec.line_1_color,
             )
@@ -379,7 +384,12 @@ class TwoLineTemplate:
 
     def render(self, spec: NotificationSpec) -> list[types.DisplayElement]:
         assert spec.line_2 is not None  # guaranteed by matches()
-        top_y, bottom_y = TWO_LINE_Y[spec.font]
+        # Each line is anchored to its own edge, so each takes the offset
+        # its own font needs: the top from the top font's pair, the
+        # bottom from the bottom font's.
+        second = spec.line_2_font or spec.line_1_font
+        top_y = TWO_LINE_Y[spec.line_1_font][0]
+        bottom_y = TWO_LINE_Y[second][1]
         elements: list[types.DisplayElement] = []
         icon = spec.icon_element()
         if icon is not None:
@@ -400,6 +410,7 @@ class TwoLineTemplate:
                 y=bottom_y,
                 align="bottom_left",
                 color=spec.line_2_color,
+                font=second,
             )
         )
         return elements
@@ -463,7 +474,8 @@ def build_notification(
     *,
     line_2: str | None = None,
     icon: str | StockIcon | None = None,
-    font: types.DisplayFontName = DEFAULT_FONT,
+    line_1_font: types.DisplayFontName = DEFAULT_FONT,
+    line_2_font: types.DisplayFontName | None = None,
     line_1_color: types.ColorInput | None = None,
     line_2_color: types.ColorInput | None = None,
     background_color: types.ColorInput | None = None,
@@ -516,7 +528,8 @@ def build_notification(
         line_1=line_1,
         line_2=line_2,
         icon=resolved_icon,
-        font=font,
+        line_1_font=line_1_font,
+        line_2_font=line_2_font,
         line_1_color=line_1_color,
         line_2_color=line_2_color,
         background_color=background_color,
@@ -527,17 +540,21 @@ def build_notification(
     # An unrecognised font and a font the template cannot place are
     # different mistakes, and the second message would send someone hunting
     # for a template problem when they simply mistyped.
-    if font not in ONE_LINE_FONTS:
-        raise ValueError(
-            f"unknown font {font!r}; use one of {', '.join(ONE_LINE_FONTS)}"
-        )
+    for named in (line_1_font, line_2_font):
+        if named is not None and named not in ONE_LINE_FONTS:
+            raise ValueError(
+                f"unknown font {named!r}; use one of {', '.join(ONE_LINE_FONTS)}"
+            )
 
     chosen = template if template is not None else select_template(spec)
-    if font not in chosen.fonts:
-        raise ValueError(
-            f"font {font!r} does not fit the {chosen.name!r} template; use one of "
-            f"{', '.join(chosen.fonts)}"
-        )
+    # Both lines are checked, since each carries its own font and either
+    # can be one the layout has no room for.
+    for named in (line_1_font, line_2_font):
+        if named is not None and named not in chosen.fonts:
+            raise ValueError(
+                f"font {named!r} does not fit the {chosen.name!r} template; use one of "
+                f"{', '.join(chosen.fonts)}"
+            )
 
     elements: list[types.DisplayElement] = []
     background = background_element(spec, device_api_version=device_api_version)
@@ -776,7 +793,8 @@ async def notify(
     *,
     line_2: str | None = None,
     icon: str | StockIcon | None = None,
-    font: types.DisplayFontName = DEFAULT_FONT,
+    line_1_font: types.DisplayFontName = DEFAULT_FONT,
+    line_2_font: types.DisplayFontName | None = None,
     line_1_color: types.ColorInput | None = None,
     line_2_color: types.ColorInput | None = None,
     background_color: types.ColorInput | None = None,
@@ -809,7 +827,7 @@ async def notify(
         "notify line_2=%s icon=%s font=%s sound=%s",
         line_2 is not None,
         icon,
-        font,
+        line_1_font,
         sound,
     )
     # Any sound the bar has, for the same reason as the icons: the three
@@ -839,7 +857,8 @@ async def notify(
         line_1,
         line_2=line_2,
         icon=resolved_icon,
-        font=font,
+        line_1_font=line_1_font,
+        line_2_font=line_2_font,
         line_1_color=line_1_color,
         line_2_color=line_2_color,
         background_color=background_color,
