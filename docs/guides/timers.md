@@ -32,8 +32,8 @@ from busylib.features import timer_state
 bar = BusyBar("10.0.4.20")
 state = timer_state(bar.busy_snapshot())
 
-print(state.mode)          # not_started / infinite / simple / interval
-print(state.phase)         # work / rest / None
+print(state.mode)  # not_started / infinite / simple / interval
+print(state.phase)  # work / rest / None
 print(state.time_left_ms)
 print(state.is_running)
 ```
@@ -90,7 +90,7 @@ One read, then the state at whatever moment you ask about — the same
 20/5/3 session as the table above:
 
 ```python
-snapshot = bar.busy_snapshot()          # read once
+snapshot = bar.busy_snapshot()  # read once
 started = snapshot.snapshot_timestamp_ms
 
 for minutes in (0, 21, 26, 46, 71):
@@ -132,19 +132,23 @@ The helpers in `busylib.features.timer` write the right snapshot for you:
 ```python
 from busylib.features import timer
 
-await timer.start(bar)                       # the session the "busy" card describes
+await timer.start(bar)  # the session the "busy" card describes
 await timer.start(bar, "custom", theme="dnd")  # the other card, this session in dnd
-await timer.start(bar, kind="simple", duration_ms=45 * 60_000)   # 45 minutes, card untouched
-await timer.start(bar, kind="interval", duration_ms=25 * 60_000,
-                  rest_ms=5 * 60_000, cycles=4)  # an interval of your own
-await timer.start(bar, card_id=other, kind="simple",
-                  duration_ms=30 * 60_000)       # a card outside both positions
-await timer.set_paused(bar, True)            # pause, keeping the time actually left
-await timer.set_paused(bar, False)           # resume
-await timer.next_phase(bar)                  # work -> rest, at the rest length
+await timer.start(
+    bar, kind="simple", duration_ms=45 * 60_000
+)  # 45 minutes, card untouched
+await timer.start(
+    bar, kind="interval", duration_ms=25 * 60_000, rest_ms=5 * 60_000, cycles=4
+)  # an interval of your own
+await timer.start(
+    bar, card_id=other, kind="simple", duration_ms=30 * 60_000
+)  # a card outside both positions
+await timer.set_paused(bar, True)  # pause, keeping the time actually left
+await timer.set_paused(bar, False)  # resume
+await timer.next_phase(bar)  # work -> rest, at the rest length
 await timer.set_session_theme(bar, "meeting")  # until this session ends
 await timer.set_card_theme(bar, "busy", "meeting")  # from now on
-await timer.stop(bar)                        # back to not started
+await timer.stop(bar)  # back to not started
 ```
 
 Three things they take care of:
@@ -291,7 +295,7 @@ bar.busy_snapshot_set(
         snapshot=types.BusySnapshotInterval(
             type="INTERVAL",
             card_id=profile.id,
-            current_interval=0,                       # start at the first work period
+            current_interval=0,  # start at the first work period
             current_interval_time_total_ms=settings.interval_work_ms,
             current_interval_time_left_ms=settings.interval_work_ms,
             is_paused=False,

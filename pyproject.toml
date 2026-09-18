@@ -64,8 +64,8 @@ dev = [
   "grpcio-tools>=1.74",
   "pillow>=12",
   "pre-commit>=3.8",
-  "pyproject-fmt==2.29.3",
-  "pyright==1.1.411",
+  "pyproject-fmt==2.29.4",
+  "pyright==1.1.414",
   "pytest>=8.4.1",
   "pytest-asyncio>=0.24",
   "pytest-cov>=7",
@@ -105,6 +105,9 @@ lint.select = [
   # https://docs.astral.sh/ruff/rules/#pyupgrade-up
   "UP",
 ]
+
+[tool.pyproject-fmt]
+max_supported_python = "3.14"
 
 [tool.pytest]
 ini_options.pythonpath = [ "." ]
