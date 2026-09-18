@@ -21,6 +21,7 @@ and baselines, so the same anchor sits a pixel off for some of them.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import logging
 from dataclasses import dataclass
 from typing import Protocol
@@ -659,6 +660,55 @@ async def icon_at(
     return StockIcon(reference, width, application_name)
 
 
+def _own_upload(
+    catalogue: Sequence[assets.Asset],
+    kind: str,
+    name: str,
+    application_name: str | None,
+) -> assets.Asset | None:
+    """
+    The caller's own upload under this name, if it put one there.
+
+    Uploads are looked at before the built-in short names so that a file
+    somebody added under a name the firmware also uses is the one they
+    get. The built-in keeps its own file name, which no upload can take.
+
+    `application/name` says which folder is meant and leaves nothing to
+    the order above - the form `upload_for` writes, and the one a
+    catalogue shows an upload under.
+    """
+    if application_name is None:
+        return None
+    return next(
+        (
+            asset
+            for asset in catalogue
+            if asset.kind == kind
+            and asset.is_upload
+            and asset.application == application_name
+            and name
+            in (
+                asset.name,
+                asset.reference,
+                f"{asset.application}/{asset.name}",
+                f"{asset.application}/{asset.reference}",
+            )
+        ),
+        None,
+    )
+
+
+def upload_for(asset: assets.Asset) -> str:
+    """
+    The unambiguous name of an upload: the folder it is in and its own.
+
+    Every other form a bar accepts can mean two files - a short name the
+    firmware also uses, a name two applications both uploaded - and this
+    one cannot.
+    """
+    return f"{asset.application}/{asset.name}"
+
+
 async def resolve_icon(
     client: IconCatalogueClient,
     name: str,
@@ -674,21 +724,39 @@ async def resolve_icon(
     wide where the built-in ones are 5, 8 or 11. Some file names carry
     their size and some do not, so it is read from the file itself.
 
-    A friendly name from `STOCK_ICONS` is answered without asking the bar
-    anything. Anything that looks like a path - it has a slash, or the
-    `.image` extension - is read with `icon_at`, which is how an icon an
-    owner uploaded can be used by name of file rather than by catalogue.
+    A file the caller uploaded wins the name: somebody who puts their own
+    `info` on a bar means that one, and the built-in `info` is still
+    reachable under the name of its file. Otherwise a friendly name from
+    `STOCK_ICONS` is answered without asking the bar anything. Anything
+    that looks like a path - it has a slash, or the `.image` extension -
+    is read with `icon_at`, which is how an icon an owner uploaded can be
+    used by name of file rather than by catalogue.
     """
+    # An application with no folder of its own has no upload to prefer,
+    # and then a friendly name still costs the bar nothing.
+    catalogue = (
+        await assets.discover_assets(client) if application_name is not None else []
+    )
+    mine = _own_upload(catalogue, "image", name, application_name)
+    if mine is not None:
+        return await icon_at(
+            client,
+            mine.reference,
+            application_name=mine.application,
+            display=display,
+        )
+
     known = STOCK_ICONS.get(name)
     if known is not None:
         return known
 
-    catalogue = await assets.discover_assets(client)
+    if application_name is None:
+        catalogue = await assets.discover_assets(client)
+
     for asset in catalogue:
         if asset.kind != "image":
             continue
-        # An upload wins a name collision, and one belonging to the
-        # application doing the drawing wins over another application's:
+        # Another application's upload is skipped rather than returned:
         # `path` is resolved inside the caller's own folder, so that is
         # the only upload this caller can actually draw.
         if asset.name != name and asset.reference != name:
@@ -703,10 +771,14 @@ async def resolve_icon(
         )
 
     available = sorted(
-        asset.name
+        # An upload of somebody else's is named with its folder, which is
+        # the only way to ask for it - and a hint that it can be asked
+        # for at all, rather than looking absent.
+        upload_for(asset)
+        if asset.is_upload and asset.application != application_name
+        else asset.name
         for asset in catalogue
         if asset.kind == "image"
-        and (not asset.is_upload or asset.application == application_name)
     )
     raise ValueError(f"this bar has no icon {name!r}; it has: {', '.join(available)}")
 
@@ -720,16 +792,25 @@ async def resolve_sound(
     """
     Resolve a sound name to the asset a playback call can name.
 
-    Same reasoning as `resolve_icon`: the three sounds with friendly
-    names are a convenience, not the list - a bar holds the timer's own
-    sounds too, and whatever an application uploaded. The short names in
-    `STOCK_SOUNDS` are answered first and without asking the bar.
+    Same reasoning as `resolve_icon`: the caller's own upload wins the
+    name, and the three sounds with friendly names are a convenience, not
+    the list - a bar holds the timer's own sounds too, and whatever an
+    application uploaded.
     """
+    catalogue = (
+        await assets.discover_assets(client) if application_name is not None else []
+    )
+    mine = _own_upload(catalogue, "sound", name, application_name)
+    if mine is not None:
+        return mine
+
     known = STOCK_SOUNDS.get(name)
     if known is not None:
         return assets.Asset(name=name, reference=known, kind="sound")
 
-    catalogue = await assets.discover_assets(client)
+    if application_name is None:
+        catalogue = await assets.discover_assets(client)
+
     for asset in catalogue:
         if asset.kind != "sound":
             continue
@@ -740,10 +821,14 @@ async def resolve_sound(
         return asset
 
     available = sorted(
-        asset.name
+        # An upload of somebody else's is named with its folder, which is
+        # the only way to ask for it - and a hint that it can be asked
+        # for at all, rather than looking absent.
+        upload_for(asset)
+        if asset.is_upload and asset.application != application_name
+        else asset.name
         for asset in catalogue
         if asset.kind == "sound"
-        and (not asset.is_upload or asset.application == application_name)
     )
     raise ValueError(f"this bar has no sound {name!r}; it has: {', '.join(available)}")
 

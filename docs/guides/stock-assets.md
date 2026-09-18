@@ -292,6 +292,16 @@ header - because an icon's width is what the text is placed after, and an icon
 wider than the panel pushes the text off the display. One that does not fit is
 refused rather than drawn.
 
+Which also means an upload somebody else made - through the BUSY app, the Draw
+Tool, another script - is not yours to draw. `copy_to_application` makes it
+yours, byte for byte:
+
+```python
+theirs = next(a for a in await assets.discover_assets(bar) if a.name == "logo")
+mine = await assets.copy_to_application(bar, theirs, "my-app")
+await notification.notify(bar, "Deployed", icon=mine.name, application_name="my-app")
+```
+
 ## Reading the map from a bar
 
 Firmware adds and removes assets, and an owner can upload their own, so the

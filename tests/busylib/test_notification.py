@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import struct
+import zlib
+
 import pytest
 
 from busylib import types
-from busylib.features import notification
+from busylib.features import assets, notification
 from busylib.display import FRONT_DISPLAY
 from busylib.exceptions import BusyBarFeatureUnavailableError
 
@@ -506,9 +509,27 @@ class FakeAssets:
 
     def __init__(self, files: dict[str, bytes]) -> None:
         self.files = files
+        # Per application, as the device keeps them: a name is resolved
+        # inside the folder of whichever application is drawing.
+        self.uploads: dict[str, dict[str, bytes]] = {}
         self.read: list[str] = []
 
     async def storage_list(self, path: str) -> types.StorageList:
+        if path == assets.UPLOADS_ROOT:
+            return types.StorageList(
+                list=[
+                    types.StorageDirElement(type="dir", name=application)
+                    for application in self.uploads
+                ]
+            )
+        if path.startswith(f"{assets.UPLOADS_ROOT}/"):
+            application = path.removeprefix(f"{assets.UPLOADS_ROOT}/")
+            return types.StorageList(
+                list=[
+                    types.StorageFileElement(type="file", name=name, size=1)
+                    for name in self.uploads.get(application, {})
+                ]
+            )
         prefix = path.removeprefix(f"{notification.ASSETS_ROOT}/")
         return types.StorageList(
             list=[
@@ -520,7 +541,24 @@ class FakeAssets:
 
     async def storage_read(self, path: str) -> bytes:
         self.read.append(path)
+        if path.startswith(f"{assets.UPLOADS_ROOT}/"):
+            application, name = path.removeprefix(f"{assets.UPLOADS_ROOT}/").split(
+                "/", 1
+            )
+            return self.uploads[application][name]
         return self.files[path.removeprefix(f"{notification.ASSETS_ROOT}/")]
+
+
+def _png(width: int, height: int) -> bytes:
+    """Enough of a PNG for the header reader: signature and IHDR."""
+    header = struct.pack(">II", width, height) + b"\x08\x06\x00\x00\x00"
+    chunk = b"IHDR" + header
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", len(header))
+        + chunk
+        + struct.pack(">I", zlib.crc32(chunk))
+    )
 
 
 def _image(width: int, height: int) -> bytes:
@@ -625,3 +663,50 @@ def test_one_font_still_means_both_lines() -> None:
 
     line_1, line_2 = (e for e in elements.elements if e.type == "text")
     assert (line_1.font, line_2.font) == ("normal", "normal")
+
+
+async def test_a_file_of_your_own_wins_a_name_the_firmware_also_uses() -> None:
+    """
+    Somebody who puts their own `info` on a bar means that one, not the
+    built-in eight-by-eight. The built-in keeps the name of its file, so
+    nothing on the bar becomes unreachable by the collision.
+    """
+    bar = FakeAssets({"shared/images/info_front_8x8.image": _image(8, 8)})
+    bar.uploads = {"home_assistant": {"info.png": _png(16, 16)}}
+
+    mine = await notification.resolve_icon(
+        bar, "info", application_name="home_assistant"
+    )
+    theirs = await notification.resolve_icon(
+        bar, "info", application_name="somebody_else"
+    )
+
+    assert mine.path == "info.png"
+    assert theirs is notification.STOCK_ICONS["info"]
+
+
+async def test_a_folder_says_which_of_two_files_of_one_name_is_meant() -> None:
+    """
+    Two applications may each have uploaded an `info`, and one of them
+    may also be the firmware's own short name. The folder settles it,
+    and is the form a catalogue shows an upload under.
+    """
+    bar = FakeAssets({"shared/images/info_front_8x8.image": _image(8, 8)})
+    bar.uploads = {
+        "home_assistant": {"info.png": _png(16, 16)},
+        "draw_tool": {"info.png": _png(32, 32)},
+    }
+
+    mine = await notification.resolve_icon(
+        bar, "home_assistant/info", application_name="home_assistant"
+    )
+
+    assert mine.path == "info.png"
+    assert mine.width == 16
+
+    # Another application's is on the bar but not ours to draw: the
+    # device resolves a path inside the folder of whoever is drawing.
+    with pytest.raises(ValueError, match="draw_tool/info"):
+        await notification.resolve_icon(
+            bar, "draw_tool/info", application_name="home_assistant"
+        )

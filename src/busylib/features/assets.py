@@ -108,6 +108,18 @@ class AssetCatalogueClient(Protocol):
     async def storage_list(self, path: str) -> types.StorageList: ...
 
 
+class AssetCopyClient(AssetCatalogueClient, Protocol):
+    """
+    What copying an upload needs on top of that: read it, put it back.
+    """
+
+    async def storage_read(self, path: str) -> bytes: ...
+
+    async def assets_upload(
+        self, application_name: str, filename: str, data: bytes
+    ) -> types.SuccessResponse: ...
+
+
 async def _entries(
     client: AssetCatalogueClient, path: str
 ) -> list[types.StorageListElement]:
@@ -234,3 +246,36 @@ async def of_kind(client: AssetCatalogueClient, kind: AssetKind) -> dict[str, st
         {asset.name: asset.reference for asset in wanted if asset.is_upload}
     )
     return dict(sorted(catalogue.items()))
+
+
+async def copy_to_application(
+    client: AssetCopyClient, asset: Asset, application_name: str
+) -> Asset:
+    """
+    Put an upload where another application can name it.
+
+    The device resolves an asset by name inside the folder of whichever
+    application is drawing, so a picture uploaded by the BUSY app or the
+    Draw Tool is one nobody else can draw. Copying it across is the way
+    to use it - byte for byte, since it was converted for the device when
+    it was first uploaded and converting it again would be a second
+    guess at the same picture.
+
+    Answers with the asset as the copy: same name, same kind, the new
+    application.
+    """
+    if asset.application == application_name:
+        return asset
+
+    raw = await client.storage_read(asset.device_path)
+    await client.assets_upload(
+        application_name=application_name,
+        filename=asset.reference,
+        data=bytes(raw),
+    )
+    return Asset(
+        name=asset.name,
+        reference=asset.reference,
+        kind=asset.kind,
+        application=application_name,
+    )
