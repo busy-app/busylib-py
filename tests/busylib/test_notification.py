@@ -77,7 +77,7 @@ def test_two_lines_anchor_to_opposite_edges() -> None:
     for fonts of different heights.
     """
     top, bottom = _texts(
-        notification.build_notification("one", line_2="two", font="small")
+        notification.build_notification("one", line_2="two", line_1_font="small")
     )
 
     assert (top.align, bottom.align) == ("top_left", "bottom_left")
@@ -89,7 +89,7 @@ def test_a_single_line_is_centred_for_its_font() -> None:
     The vertical offsets are per-font and calibrated, not derived.
     """
     for font in notification.ONE_LINE_FONTS:
-        text = _texts(notification.build_notification("hi", font=font))[0]
+        text = _texts(notification.build_notification("hi", line_1_font=font))[0]
         assert text.align == "mid_left"
         assert text.y == notification.ONE_LINE_Y[font]
 
@@ -105,7 +105,7 @@ def test_tall_fonts_are_refused_for_two_lines() -> None:
         assert font in notification.ONE_LINE_FONTS
         assert font not in notification.TWO_LINE_FONTS
         with pytest.raises(ValueError, match="does not fit the 'two_lines' template"):
-            notification.build_notification("one", line_2="two", font=font)
+            notification.build_notification("one", line_2="two", line_1_font=font)
 
 
 def test_unknown_fonts_and_icons_are_refused_before_the_request() -> None:
@@ -116,7 +116,7 @@ def test_unknown_fonts_and_icons_are_refused_before_the_request() -> None:
     says nothing about which names exist.
     """
     with pytest.raises(ValueError, match="unknown font"):
-        notification.build_notification("hi", font="comic-sans")  # type: ignore[arg-type]
+        notification.build_notification("hi", line_1_font="comic-sans")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="unknown icon"):
         notification.build_notification("hi", icon="nope")
 
@@ -389,10 +389,14 @@ def test_a_custom_template_declares_which_fonts_it_can_place() -> None:
     """
     The font check applies to a custom template on its own terms.
     """
-    notification.build_notification("hi", font="bold", template=CentredTemplate())
+    notification.build_notification(
+        "hi", line_1_font="bold", template=CentredTemplate()
+    )
 
     with pytest.raises(ValueError, match="does not fit the 'centred' template"):
-        notification.build_notification("hi", font="tiny", template=CentredTemplate())
+        notification.build_notification(
+            "hi", line_1_font="tiny", template=CentredTemplate()
+        )
 
 
 def test_the_background_is_added_for_a_custom_template_too() -> None:
@@ -581,3 +585,43 @@ async def test_an_icon_the_bar_does_not_have_says_what_it_has() -> None:
 
     with pytest.raises(ValueError, match="it has: dt_burger"):
         await notification.resolve_icon(bar, "dt_pizza")
+
+
+def test_each_line_can_have_a_size_of_its_own() -> None:
+    """
+    A short label over a long one says which of the two matters, and one
+    size for both cannot say it. Each line is anchored to its own edge,
+    so each takes the offset its own font needs.
+    """
+    elements = notification.build_notification(
+        "MEETING", line_2="until 15:30", line_1_font="bold", line_2_font="tiny"
+    )
+
+    line_1, line_2 = (e for e in elements.elements if e.type == "text")
+    assert line_1.font == "bold"
+    assert line_2.font == "tiny"
+    assert line_1.align == "top_left"
+    assert line_2.align == "bottom_left"
+    # The bottom line sits where its own font wants it, not where the
+    # top line's font would have put it.
+    assert line_2.y == notification.TWO_LINE_Y["tiny"][1]
+
+
+def test_a_second_font_the_layout_cannot_place_is_refused() -> None:
+    """
+    Two lines fit only the shorter fonts, and that limit applies to each
+    line separately.
+    """
+    with pytest.raises(ValueError, match="does not fit"):
+        notification.build_notification(
+            "Top", line_2="Bottom", line_1_font="small", line_2_font="extra_large"
+        )
+
+
+def test_one_font_still_means_both_lines() -> None:
+    elements = notification.build_notification(
+        "Top", line_2="Bottom", line_1_font="normal"
+    )
+
+    line_1, line_2 = (e for e in elements.elements if e.type == "text")
+    assert (line_1.font, line_2.font) == ("normal", "normal")

@@ -33,7 +33,9 @@ with BusyBar("192.168.1.50", token=PIN) as bar:
             application_name="my-app",
             elements=[
                 types.ImageElement(
-                    id="10", x=0, y=4,
+                    id="10",
+                    x=0,
+                    y=4,
                     stock_path="shared/images/clock_5x5.image",
                 ),
             ],
@@ -205,9 +207,12 @@ The timer's own:
 
 ```python
 types.AnimationElement(
-    id="10", x=0, y=0, loop=True,
+    id="10",
+    x=0,
+    y=0,
+    loop=True,
     stock_path="shared/animations/dnd_72x16.anim",
-)   # one element of a DisplayElements payload, as above
+)  # one element of a DisplayElements payload, as above
 ```
 
 ### Sounds
@@ -255,8 +260,8 @@ looks like on the bar. They are chosen by name, not by path:
 ```python
 from busylib.features import timer
 
-await timer.themes(bar)                      # what this bar has
-await timer.start(bar, theme="meeting")      # for this session only
+await timer.themes(bar)  # what this bar has
+await timer.start(bar, theme="meeting")  # for this session only
 await timer.set_card_theme(bar, "busy", "dnd")  # from now on
 ```
 
