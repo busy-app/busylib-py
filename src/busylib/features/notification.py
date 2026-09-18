@@ -672,6 +672,10 @@ def _own_upload(
     Uploads are looked at before the built-in short names so that a file
     somebody added under a name the firmware also uses is the one they
     get. The built-in keeps its own file name, which no upload can take.
+
+    `application/name` says which folder is meant and leaves nothing to
+    the order above - the form `upload_for` writes, and the one a
+    catalogue shows an upload under.
     """
     if application_name is None:
         return None
@@ -682,10 +686,27 @@ def _own_upload(
             if asset.kind == kind
             and asset.is_upload
             and asset.application == application_name
-            and name in (asset.name, asset.reference)
+            and name
+            in (
+                asset.name,
+                asset.reference,
+                f"{asset.application}/{asset.name}",
+                f"{asset.application}/{asset.reference}",
+            )
         ),
         None,
     )
+
+
+def upload_for(asset: assets.Asset) -> str:
+    """
+    The unambiguous name of an upload: the folder it is in and its own.
+
+    Every other form a bar accepts can mean two files - a short name the
+    firmware also uses, a name two applications both uploaded - and this
+    one cannot.
+    """
+    return f"{asset.application}/{asset.name}"
 
 
 async def resolve_icon(
@@ -750,10 +771,14 @@ async def resolve_icon(
         )
 
     available = sorted(
-        asset.name
+        # An upload of somebody else's is named with its folder, which is
+        # the only way to ask for it - and a hint that it can be asked
+        # for at all, rather than looking absent.
+        upload_for(asset)
+        if asset.is_upload and asset.application != application_name
+        else asset.name
         for asset in catalogue
         if asset.kind == "image"
-        and (not asset.is_upload or asset.application == application_name)
     )
     raise ValueError(f"this bar has no icon {name!r}; it has: {', '.join(available)}")
 
@@ -796,10 +821,14 @@ async def resolve_sound(
         return asset
 
     available = sorted(
-        asset.name
+        # An upload of somebody else's is named with its folder, which is
+        # the only way to ask for it - and a hint that it can be asked
+        # for at all, rather than looking absent.
+        upload_for(asset)
+        if asset.is_upload and asset.application != application_name
+        else asset.name
         for asset in catalogue
         if asset.kind == "sound"
-        and (not asset.is_upload or asset.application == application_name)
     )
     raise ValueError(f"this bar has no sound {name!r}; it has: {', '.join(available)}")
 

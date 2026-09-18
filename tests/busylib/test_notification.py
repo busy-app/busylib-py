@@ -683,3 +683,30 @@ async def test_a_file_of_your_own_wins_a_name_the_firmware_also_uses() -> None:
 
     assert mine.path == "info.png"
     assert theirs is notification.STOCK_ICONS["info"]
+
+
+async def test_a_folder_says_which_of_two_files_of_one_name_is_meant() -> None:
+    """
+    Two applications may each have uploaded an `info`, and one of them
+    may also be the firmware's own short name. The folder settles it,
+    and is the form a catalogue shows an upload under.
+    """
+    bar = FakeAssets({"shared/images/info_front_8x8.image": _image(8, 8)})
+    bar.uploads = {
+        "home_assistant": {"info.png": _png(16, 16)},
+        "draw_tool": {"info.png": _png(32, 32)},
+    }
+
+    mine = await notification.resolve_icon(
+        bar, "home_assistant/info", application_name="home_assistant"
+    )
+
+    assert mine.path == "info.png"
+    assert mine.width == 16
+
+    # Another application's is on the bar but not ours to draw: the
+    # device resolves a path inside the folder of whoever is drawing.
+    with pytest.raises(ValueError, match="draw_tool/info"):
+        await notification.resolve_icon(
+            bar, "draw_tool/info", application_name="home_assistant"
+        )
