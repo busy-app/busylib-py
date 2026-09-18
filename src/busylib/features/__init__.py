@@ -36,6 +36,7 @@ from . import notification
 from .assets import (
     Asset,
     AssetKind,
+    copy_to_application,
     discover_assets,
 )
 from .notification import (
@@ -55,6 +56,7 @@ __all__ = [
     "assets",
     "Asset",
     "AssetKind",
+    "copy_to_application",
     "discover_assets",
     "sync_app_assets",
     "build_notification",
