@@ -30,11 +30,32 @@ which returns a `DisplayElements` model.
 | `icon` | A name from `STOCK_ICONS`, drawn at the left edge |
 | `line_1_color`, `line_2_color` | Per-line colour |
 | `background_color` | Fills the panel behind everything |
-| `font` | One name for both lines |
+| `line_1_font` | The first line's size, and the second's unless it has its own |
+| `line_2_font` | A size for the second line alone |
 | `duration` | Seconds before the elements expire |
 | `priority` | `PRIORITY_DEFAULT`, or `PRIORITY_INTERRUPT` to sit above a Busy session |
 | `sound` | A name from `STOCK_SOUNDS`, played with the drawing |
 | `application_name` | Owns the drawing, and is how `display_clear` finds it |
+
+Two sizes say which line matters. A label over a detail -
+`line_1_font="bold"`, `line_2_font="tiny"` - reads at a glance from across a room, where one size for
+both reads as two equal things:
+
+```python
+await notification.notify(
+    bar,
+    "MEETING",
+    line_2="until 15:30",
+    line_1_font="bold",
+    line_2_font="tiny",
+    application_name="my-app",
+)
+```
+
+Each line is anchored to its own edge of the panel, so each takes the offset
+its own font needs. Two lines only fit the five shorter fonts, and that limit
+applies to each line separately - `large` on either of them is refused rather
+than drawn off the panel.
 
 A drawing loses to anything above it, and the device answers
 `409 Not drawn due to low priority` rather than drawing it late.
@@ -136,7 +157,13 @@ from busylib.exceptions import BusyBarFeatureUnavailableError
 try:
     await notify(bar, "hi", background_color=[0, 0, 90])
 except BusyBarFeatureUnavailableError as err:
-    print(err.feature, "needs", err.required_version, "but the bar reports", err.device_version)
+    print(
+        err.feature,
+        "needs",
+        err.required_version,
+        "but the bar reports",
+        err.device_version,
+    )
 ```
 
 The check is why `notify()` takes the client rather than a version: it reads
@@ -183,7 +210,9 @@ the firmware ships a set, the Draw Tool adds its own, and an owner can
 upload or delete them - so `notify()` takes any name the bar has:
 
 ```python
-print(await notification.icons(bar))  # {'dt_burger': 'shared/images/dt_burger.image', ...}
+print(
+    await notification.icons(bar)
+)  # {'dt_burger': 'shared/images/dt_burger.image', ...}
 
 await notify(bar, "Lunch", icon="dt_burger")
 ```
