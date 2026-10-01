@@ -402,11 +402,18 @@ class Manager:
         pid = await asyncio.to_thread(self.launcher.start, entry.external)
         return f"Started {entry.name} (process {pid})"
 
-    async def stop(self, entry: Entry | None) -> str:
+    async def stop(self, entry: Entry | None, *, by_switch: bool = False) -> str:
         """
         Stop what is running: the selected external app, or whatever the
         bar is running (the bar has one app at a time, so there is no
         choosing).
+
+        The bar is asked to quit first. If it cannot be - old firmware, or it
+        tried and failed - this raises `CannotQuitDirectly` and does nothing
+        else, because the other way changes what the bar is showing and is
+        for the person to agree to. Called again with `by_switch=True` it
+        takes that way: Back, and then the switch moved away and to the Apps
+        menu.
         """
         if entry is not None and entry.kind == "external" and entry.external:
             if self.launcher.stop(entry.external):
@@ -416,6 +423,9 @@ class Manager:
             raise ManagerError(
                 "there is no bar to quit an app on (running with --offline)"
             )
+        if by_switch:
+            await self.bar.leave_by_switch()
+            return "Left the app by moving the switch; the bar is on the Apps menu"
         await self.bar.quit()
         return "Quit the app on the bar"
 

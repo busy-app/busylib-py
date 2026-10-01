@@ -16,6 +16,7 @@ from apps_support import (
 
 from busylib import types
 from examples.apps import package
+from examples.apps.bar import CannotQuitDirectly
 from examples.apps.github import Reply
 from examples.apps.model import Asset, ExternalApp, ManagerError, Source, Version
 from examples.apps.store import Store
@@ -614,3 +615,55 @@ def test_editing_a_program_does_not_lose_the_interpreter_a_catalog_install_chose
     edited = manager.edit_external(stored, "X2", str(tmp_path), "run2", "")
 
     assert edited.python == "/venv/bin/python"
+
+
+# Stopping the app on the bar ------------------------------------------------------
+
+
+async def test_the_bar_is_asked_to_quit_before_anything_else(tmp_path: Path) -> None:
+    bar = FakeBar([types.AppInfo(id="a.app", name="A", version="1")])
+    manager = manager_for(tmp_path, bar)
+    (entry,), _ = await manager.entries()
+
+    assert await manager.stop(entry) == "Quit the app on the bar"
+    assert bar.done == ["quit"]
+
+
+async def test_a_bar_that_cannot_quit_is_left_alone_until_the_person_agrees(
+    tmp_path: Path,
+) -> None:
+    bar = FakeBar([types.AppInfo(id="a.app", name="A", version="1")])
+    bar.quit_answer = "unavailable"
+    manager = manager_for(tmp_path, bar)
+    (entry,), _ = await manager.entries()
+
+    with pytest.raises(CannotQuitDirectly):
+        await manager.stop(entry)
+
+    assert bar.done == [], "the switch is not touched without being asked"
+
+
+async def test_once_agreed_the_app_is_left_by_the_switch(tmp_path: Path) -> None:
+    bar = FakeBar([types.AppInfo(id="a.app", name="A", version="1")])
+    bar.quit_answer = "unavailable"
+    manager = manager_for(tmp_path, bar)
+    (entry,), _ = await manager.entries()
+
+    message = await manager.stop(entry, by_switch=True)
+
+    assert bar.done == ["switch"]
+    assert "Apps menu" in message
+
+
+async def test_nothing_running_is_said_and_the_switch_is_not_used(
+    tmp_path: Path,
+) -> None:
+    bar = FakeBar([types.AppInfo(id="a.app", name="A", version="1")])
+    bar.quit_answer = "none running"
+    manager = manager_for(tmp_path, bar)
+    (entry,), _ = await manager.entries()
+
+    with pytest.raises(ManagerError, match="no app is running"):
+        await manager.stop(entry)
+
+    assert bar.done == []

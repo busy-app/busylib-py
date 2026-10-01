@@ -34,6 +34,7 @@ from .dialogs import (
 )
 from . import link
 from .launcher import format_env
+from .bar import CannotQuitDirectly
 from .manager import Entry, Manager
 from .model import ManagerError
 
@@ -249,8 +250,9 @@ class Home(Screen[None]):
         self.run_worker(self.reload(), exclusive=True, group="reload")
         self.app.notify("Refreshing")
 
+    @work
     async def action_stop(self) -> None:
-        await self.app.attempt(self.manager.stop(self.current()))  # type: ignore[attr-defined]
+        await self.app.stop(self.current())  # type: ignore[attr-defined]
         self.tick()
 
     @work
@@ -582,10 +584,11 @@ class Dashboard(Screen[None]):
     def action_refresh(self) -> None:
         self.run_worker(self.load(), exclusive=True)
 
+    @work
     async def action_stop(self) -> None:
         focused = self.focused
         entry = focused.entry if isinstance(focused, AppCard) else None
-        await self.app.attempt(self.manager.stop(entry))  # type: ignore[attr-defined]
+        await self.app.stop(entry)  # type: ignore[attr-defined]
         self.tick()
 
     async def on_key(self, event: events.Key) -> None:
@@ -682,6 +685,38 @@ class AppsManager(App[None]):
     async def on_unmount(self) -> None:
         if self._close is not None:
             await self._close()
+
+    async def stop(self, entry: Entry | None) -> bool:
+        """
+        Stop what the entry stands for. If the bar cannot be asked to quit its
+        app, say what the other way does and ask before taking it.
+
+        Must run in a worker, since it waits on a window.
+        """
+        try:
+            message = await self.manager.stop(entry)
+        except CannotQuitDirectly as err:
+            agreed = await self.push_screen_wait(
+                Confirm(
+                    "Stop the app by moving the switch?",
+                    f"{err}. The other way is to press Back and then move the "
+                    "bar's switch to Settings and to Apps, which ends the app "
+                    "and leaves the bar on the Apps menu. Whatever it was "
+                    "showing is replaced.",
+                    ok="Stop the app",
+                    variant="warning",
+                )
+            )
+            if not agreed:
+                return False
+            return await self.attempt(self.manager.stop(entry, by_switch=True))
+        except ManagerError as err:
+            self.notify(
+                str(err), title="Could not do that", severity="error", timeout=10
+            )
+            return False
+        self.notify(message)
+        return True
 
     async def attempt(self, work: Awaitable[str]) -> bool:
         """

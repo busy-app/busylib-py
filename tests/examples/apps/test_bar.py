@@ -6,7 +6,7 @@ import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, exceptions, types
-from examples.apps.bar import Bar, replacing
+from examples.apps.bar import Bar, CannotQuitDirectly, replacing
 from examples.apps.model import ManagerError
 
 
@@ -247,3 +247,65 @@ async def test_a_socket_that_could_not_be_opened_is_the_same_kind_of_answer() ->
 
     with pytest.raises(ManagerError, match="the connection broke"):
         await _bar_of(client).hold()
+
+
+# Getting out of the running app ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "status, complaint",
+    [
+        (404, "firmware has no way to quit an app"),
+        (503, "tried to quit the app and could not"),
+    ],
+)
+async def test_a_bar_that_cannot_be_asked_to_quit_says_there_is_another_way(
+    status: int, complaint: str
+) -> None:
+    firmware = _Firmware({("POST", "/api/apps/quit"): (status, {"error": "x"})})
+
+    with pytest.raises(CannotQuitDirectly, match=complaint):
+        await firmware.bar().quit()
+
+
+async def test_no_app_running_is_not_a_reason_to_move_the_switch() -> None:
+    """
+    409 is the one honest answer the bar gives, and moving the switch would be
+    a heavy-handed reply to "there is nothing to stop".
+    """
+    firmware = _Firmware({("POST", "/api/apps/quit"): (409, {"error": "x"})})
+
+    with pytest.raises(ManagerError, match="no app is running") as raised:
+        await firmware.bar().quit()
+
+    assert not isinstance(raised.value, CannotQuitDirectly)
+
+
+async def test_leaving_by_the_switch_goes_back_then_settings_then_apps() -> None:
+    """
+    The bar ignores a move to the position it believes it is at, and which that
+    is cannot be known - so the move is to Settings and then to Apps, and one
+    of the two is always a real change.
+    """
+    firmware = _Firmware({("POST", "/api/input"): (200, {"result": "OK"})})
+    pauses: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        pauses.append(seconds)
+
+    await firmware.bar().leave_by_switch(pause=1.5, sleep=sleep)
+
+    assert [r.url.params["key"] for r in firmware.seen] == ["back", "settings", "apps"]
+    assert pauses == [1.5, 1.5], "each change gets time to take effect before the next"
+
+
+async def test_leaving_by_the_switch_stops_if_the_bar_goes_away_midway() -> None:
+    firmware = _Firmware({})  # every request is a 404
+
+    async def sleep(seconds: float) -> None:
+        pass
+
+    with pytest.raises(ManagerError):
+        await firmware.bar().leave_by_switch(sleep=sleep)
+
+    assert len(firmware.seen) == 1, "no further presses after one has failed"

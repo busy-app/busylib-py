@@ -9,12 +9,22 @@ can replace this one class with a table.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol
 
 from busylib import exceptions, types
 
 from .model import ManagerError
+
+
+class CannotQuitDirectly(ManagerError):
+    """
+    The bar could not be asked to quit the app: its firmware has no way to,
+    or it tried and did not manage.
+
+    Not an error to show and forget. There is another way, and it changes what
+    the bar is showing, so the person is asked before it is used.
+    """
 
 
 class AppsClient(Protocol):
@@ -28,6 +38,7 @@ class AppsClient(Protocol):
     async def apps_launch(self, app_id: str) -> types.SuccessResponse: ...
     async def apps_quit(self) -> types.SuccessResponse: ...
     async def apps_delete(self, app_id: str) -> types.SuccessResponse: ...
+    async def input(self, key: types.InputKey) -> types.SuccessResponse: ...
     async def version(self) -> types.VersionInfo: ...
     def stream_status_ws(self) -> AsyncIterator[Any]: ...
 
@@ -106,16 +117,56 @@ class Bar:
             raise self._unreachable(err) from err
 
     async def quit(self) -> None:
+        """
+        Ask the bar to stop the running app, which it does gracefully: the
+        script is told to end and given the chance, then stopped.
+
+        The bar cannot say which app is running, and this is the one honest
+        answer there is - a 409 means none is.
+        """
         try:
             await self.client.apps_quit()
         except exceptions.BusyBarAPIError as err:
             if err.status_code == 409:
                 raise ManagerError("no app is running on the bar") from err
-            if err.status_code == 404:
-                raise ManagerError(
-                    "this firmware cannot quit an app from outside (FW-1189)"
+            if err.status_code in (404, 503):
+                raise CannotQuitDirectly(
+                    "this bar's firmware has no way to quit an app"
+                    if err.status_code == 404
+                    else "the bar tried to quit the app and could not"
                 ) from err
             raise self._explain(err, "quitting the app") from err
+        except exceptions.BusyBarError as err:
+            raise self._unreachable(err) from err
+
+    async def leave_by_switch(
+        self,
+        pause: float = 1.5,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        """
+        Get out of the running app the way a hand would, when the bar cannot
+        be asked to quit it.
+
+        Back first. The launcher swallows Back while a script runs, so this
+        helps only a script that handles it itself, but it costs nothing.
+        Then the switch: moving it replaces whatever is running with the app
+        for that position, which stops the script. The bar ignores a move to
+        the position it already thinks it is at, and which that is cannot be
+        known, so the move goes to Settings and then to Apps: whichever the
+        bar was at, one of the two is a real change, and it ends in the Apps
+        menu, which is where quitting an app leads anyway.
+
+        The pause lets each change take effect before the next one: the app
+        has to be stopped, and joined, before it is replaced again.
+        """
+        try:
+            for step, key in enumerate(
+                (types.InputKey.BACK, types.InputKey.SETTINGS, types.InputKey.APPS)
+            ):
+                if step:
+                    await sleep(pause)
+                await self.client.input(key)
         except exceptions.BusyBarError as err:
             raise self._unreachable(err) from err
 

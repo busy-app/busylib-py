@@ -898,3 +898,114 @@ async def test_without_a_bar_there_is_nothing_to_watch(tmp_path: Path) -> None:
 
         assert app.sub_title == "no bar"
         assert not app.workers or all(w.group != "link" for w in app.workers)
+
+
+# Getting out of the running app ---------------------------------------------------
+
+
+def _confirm_text(app: AppsManager) -> str:
+    return " ".join(str(w.render()) for w in app.screen.query(Static))
+
+
+async def test_x_asks_the_bar_to_quit_and_that_is_all_when_it_can(
+    home_manager: Manager,
+) -> None:
+    bar = home_manager.bar
+    assert isinstance(bar, FakeBar)
+    app = AppsManager(home_manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("x")
+        await _settle(pilot)
+
+        assert bar.done == ["quit"]
+        assert not app.screen.query("#yes"), "no question when nothing needs asking"
+        assert any("Quit the app on the bar" in t for t in _toasts(app))
+
+
+async def test_a_bar_that_cannot_quit_is_asked_about_before_its_switch_is_touched(
+    home_manager: Manager,
+) -> None:
+    bar = home_manager.bar
+    assert isinstance(bar, FakeBar)
+    bar.quit_answer = "unavailable"
+    app = AppsManager(home_manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("x")
+        await _settle(pilot)
+
+        text = _confirm_text(app)
+        assert "Stop the app by moving the switch?" in text
+        assert "Settings and to Apps" in text and "replaced" in text
+        assert bar.done == [], "nothing is pressed while the question is open"
+
+
+async def test_saying_no_leaves_the_bar_exactly_as_it_was(
+    home_manager: Manager,
+) -> None:
+    bar = home_manager.bar
+    assert isinstance(bar, FakeBar)
+    bar.quit_answer = "unavailable"
+    app = AppsManager(home_manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("x", "n")
+        await _settle(pilot)
+
+        assert bar.done == []
+        assert not app.screen.query("#yes")
+
+
+async def test_saying_yes_leaves_the_app_by_the_switch_and_says_so(
+    home_manager: Manager,
+) -> None:
+    bar = home_manager.bar
+    assert isinstance(bar, FakeBar)
+    bar.quit_answer = "unavailable"
+    app = AppsManager(home_manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("x", "y")
+        await _settle_longer(pilot)
+
+        assert bar.done == ["switch"]
+        assert any("Left the app by moving the switch" in t for t in _toasts(app))
+
+
+async def test_when_nothing_is_running_there_is_no_question_and_no_switch(
+    home_manager: Manager,
+) -> None:
+    bar = home_manager.bar
+    assert isinstance(bar, FakeBar)
+    bar.quit_answer = "none running"
+    app = AppsManager(home_manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("x")
+        await _settle(pilot)
+
+        assert bar.done == []
+        assert not app.screen.query("#yes")
+        assert any("no app is running" in t for t in _toasts(app))
+
+
+async def test_the_dashboard_asks_the_same_question(home_manager: Manager) -> None:
+    bar = home_manager.bar
+    assert isinstance(bar, FakeBar)
+    bar.quit_answer = "unavailable"
+    app = AppsManager(home_manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        await pilot.press("b")
+        await _settle(pilot)
+
+        await pilot.press("x", "y")
+        await _settle_longer(pilot)
+
+        assert bar.done == ["switch"]

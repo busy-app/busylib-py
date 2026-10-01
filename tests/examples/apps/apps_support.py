@@ -13,7 +13,7 @@ from pathlib import Path
 
 from busylib import types
 from examples.apps import catalog as catalog_module
-from examples.apps.bar import Bar
+from examples.apps.bar import Bar, CannotQuitDirectly
 from examples.apps.github import GitHub, Reply
 from examples.apps.launcher import Launcher
 from examples.apps.manager import Manager
@@ -68,6 +68,9 @@ class FakeBar(Bar):
         self.done: list[str] = []
         self.staged_package: bytes = b""
         self.broken: str = ""
+        # What asking the bar to quit its app comes to: "works" (the
+        # default), "unavailable" (old firmware), or "none running".
+        self.quit_answer = "works"
         # The connection: the API it reports, whether it answers, and the
         # socket the manager holds open to it.
         self.api = "27.9.0"
@@ -133,7 +136,14 @@ class FakeBar(Bar):
         self.done.append(f"launch {app_id}")
 
     async def quit(self) -> None:
+        if self.quit_answer == "unavailable":
+            raise CannotQuitDirectly("this bar's firmware has no way to quit an app")
+        if self.quit_answer == "none running":
+            raise ManagerError("no app is running on the bar")
         self.done.append("quit")
+
+    async def leave_by_switch(self, pause: float = 1.5, sleep=None) -> None:
+        self.done.append("switch")
 
     async def delete(self, app_id: str) -> None:
         self.done.append(f"delete {app_id}")
