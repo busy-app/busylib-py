@@ -26,6 +26,7 @@ import tarfile
 from collections.abc import Callable, Iterator
 from pathlib import Path, PurePosixPath
 
+from . import node
 from .model import MAX_PACKAGE_BYTES, AppManifest, ManagerError, Package
 
 MANIFEST = "appmeta/manifest.json"
@@ -44,6 +45,12 @@ _JUNK_DIRS = {"__MACOSX", ".git", "node_modules"}
 _MAX_UNPACKED = 4 * MAX_PACKAGE_BYTES
 
 Runner = Callable[[list[str], Path], "tuple[int, str]"]
+
+NO_NODE = (
+    "building from source needs Node.js (before version 26) and pnpm, and one "
+    "of them was not found. Install them (https://nodejs.org, then "
+    "`npm install -g pnpm`), or pick a released version, which needs nothing."
+)
 
 
 def _is_junk(path: PurePosixPath) -> bool:
@@ -287,11 +294,7 @@ def build_tool(source_dir: Path) -> str:
         found = shutil.which(name)
         if found:
             return found
-    raise ManagerError(
-        "building from source needs Node.js and pnpm, and neither was found. "
-        "Install them (https://nodejs.org, then `npm install -g pnpm`), or "
-        "pick a released version, which needs nothing."
-    )
+    raise ManagerError(NO_NODE)
 
 
 def build_from_source(
@@ -310,6 +313,15 @@ def build_from_source(
     """
     _, source_manifest = find_manifest(source_dir, manifest_hint)
     tool = build_tool(source_dir)
+    # Before installing anything: the packages are downloaded for a Node that
+    # may not be able to use them, and the failure that follows says nothing
+    # about Node.
+    node_path = node.installed()
+    if node_path is None:
+        raise ManagerError(NO_NODE)
+    code, printed = run([node_path, "--version"], source_dir)
+    if code == 0:
+        node.check(source_dir, printed)
     name = Path(tool).stem.lower()
     if name == "pnpm":
         install = [tool, "install", "--frozen-lockfile"]

@@ -18,8 +18,11 @@ checkout, next to the other examples, and shows how the pieces fit together.
   development firmware only; on anything older the manager says so rather
   than failing.
 - To install **from a release**: nothing else.
-- To **build from source**: Node.js and pnpm, at the versions the app itself
-  asks for in its `package.json`.
+- To **build from source**: pnpm and Node.js **before version 26** - the
+  engine that runs the apps' tooling does not work on anything newer - and
+  whatever else the app's own `package.json` asks for (the BUSY apps ask for
+  `>=24 <26`). The manager checks `node --version` first and says so, rather
+  than letting a build fail somewhere in its dependencies.
 
 ## Running it
 

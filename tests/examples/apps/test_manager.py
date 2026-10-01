@@ -148,6 +148,8 @@ async def test_a_build_source_is_downloaded_built_and_packed(
     commands: list[list[str]] = []
 
     def build(argv: list[str], cwd: Path) -> tuple[int, str]:
+        if argv[1:] == ["--version"]:
+            return 0, "v25.2.1\n"
         commands.append(argv[1:])
         if argv[1:] == ["run", "build"]:
             out = cwd / "dist/demo.app/appmeta"

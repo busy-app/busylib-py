@@ -232,6 +232,8 @@ class _Builds:
         self.code = code
 
     def __call__(self, argv: list[str], cwd: Path) -> tuple[int, str]:
+        if argv[1:] == ["--version"]:
+            return 0, "v25.2.1\n"
         self.commands.append([Path(argv[0]).stem, *argv[1:]])
         if argv[1:] == ["run", "build"] and self.produce:
             out = cwd / "dist/demo.app"
