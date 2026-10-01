@@ -82,6 +82,9 @@ class Home(Screen[None]):
     def __init__(self) -> None:
         super().__init__()
         self.entries: dict[str, Entry] = {}
+        # What the card was last asked to show. The widget keeps it too, but
+        # under a name that has changed between releases of Textual.
+        self.card = ""
 
     @property
     def manager(self) -> Manager:
@@ -162,15 +165,15 @@ class Home(Screen[None]):
         return self.entries.get(key) if key else None
 
     def show(self, entry: Entry | None) -> None:
-        details = self.query_one("#details", Markdown)
         if entry is None:
-            details.update(
+            self.card = (
                 "## Nothing here yet\n\n"
                 "**i** installs an app on the bar from a source.\n\n"
                 "**e** adds a program on this computer."
             )
-            return
-        details.update(describe(entry, self.manager))
+        else:
+            self.card = describe(entry, self.manager)
+        self.query_one("#details", Markdown).update(self.card)
 
     @on(DataTable.RowHighlighted)
     def highlighted(self) -> None:

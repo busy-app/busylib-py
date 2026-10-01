@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from apps_support import MANIFEST, RELEASE, RELEASES, FakeBar, manager_for, tgz
-from textual.widgets import Button, DataTable, Input, Markdown, RichLog, Static
+from textual.widgets import Button, DataTable, Input, RichLog, Static
 
 from busylib import types
 from examples.apps.github import Reply
@@ -47,7 +47,7 @@ def _rows(app: AppsManager) -> list[list[str]]:
 
 
 def _details(app: AppsManager) -> str:
-    return app.screen.query_one("#details", Markdown).source
+    return app.screen.card  # type: ignore[attr-defined]
 
 
 @pytest.fixture
