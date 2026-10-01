@@ -9,6 +9,7 @@ them and hand back what the person chose.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -28,8 +29,10 @@ from textual.widgets import (
     Static,
 )
 
+from . import catalog as catalogs
 from .manager import Manager
 from .model import REPO, ManagerError, Source, Version
+from .programs import needs_update
 
 
 class Confirm(ModalScreen[bool]):
@@ -93,9 +96,10 @@ class Progress(ModalScreen[None]):
 
     BINDINGS = [Binding("escape", "leave", "Close")]
 
-    def __init__(self, heading: str) -> None:
+    def __init__(self, heading: str, go: str = "Install") -> None:
         super().__init__(classes="dialog wide")
         self.heading = heading
+        self.go = go
         self._answer: asyncio.Future[bool] | None = None
         self._finished = False
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -105,7 +109,7 @@ class Progress(ModalScreen[None]):
             yield Label(self.heading, classes="title")
             yield RichLog(id="log", wrap=True, markup=False, highlight=False)
             with Horizontal(classes="buttons", id="ask"):
-                yield Button("Install", id="go", variant="primary")
+                yield Button(self.go, id="go", variant="primary")
                 yield Button("Cancel", id="stop")
             with Horizontal(classes="buttons", id="end"):
                 yield Button("Close", id="close", variant="primary")
@@ -187,6 +191,8 @@ class Field:
     placeholder: str = ""
     hint: str = ""
     options: list[tuple[str, str]] = field(default_factory=list)
+    # A value to hide while it is typed: keys, tokens, passwords.
+    secret: bool = False
 
 
 # What a form's submit hook answers with: nothing, if it worked; a sentence
@@ -237,6 +243,7 @@ class FormModal(ModalScreen[dict[str, str] | None]):
                         yield Input(
                             value=item.value,
                             placeholder=item.placeholder,
+                            password=item.secret,
                             id=f"f-{item.name}",
                         )
                     if item.hint:
@@ -385,13 +392,176 @@ class Pick:
     version: Version
 
 
-class Sources(ModalScreen[Pick | None]):
+@dataclass
+class ProgramPick:
+    """
+    A program chosen from a catalog.
+    """
+
+    source: Source
+    catalog: catalogs.Catalog
+    app: catalogs.CatalogApp
+
+
+SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASS", re.IGNORECASE)
+
+
+class CatalogBrowser(ModalScreen[ProgramPick | None]):
+    """
+    The programs a catalog holds, filterable, with a card for the one under
+    the cursor.
+
+    A catalog can hold dozens, so typing narrows the list at once instead of
+    leaving a person to scroll. The arrows move through the list without
+    leaving the box, and Enter takes the highlighted program, as in any
+    launcher: type, arrow, Enter.
+    """
+
+    BINDINGS = [
+        Binding("escape", "back", "Back"),
+        Binding("down", "move(1)", "Next", show=False),
+        Binding("up", "move(-1)", "Previous", show=False),
+    ]
+
+    def __init__(self, source: Source) -> None:
+        super().__init__(classes="dialog wide")
+        self.source = source
+        self.catalog: catalogs.Catalog | None = None
+        self.shown: dict[str, catalogs.CatalogApp] = {}
+
+    @property
+    def manager(self) -> Manager:
+        return self.app.manager  # type: ignore[attr-defined]
+
+    def compose(self) -> ComposeResult:
+        with Container():
+            yield Label(f"Programs in {self.source.label}", classes="title")
+            yield Label("Asking GitHub...", id="status")
+            yield Input(placeholder="Filter by name, tag or author", id="filter")
+            yield DataTable(id="programs", cursor_type="row", zebra_stripes=True)
+            yield Static("", id="about", classes="hint")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one(DataTable)
+        table.add_columns("Name", "By", "Tags", "State")
+        for hidden in ("#filter", "#programs", "#about"):
+            self.query_one(hidden).display = False
+        self.run_worker(self.fill(), exclusive=True)
+
+    async def fill(self) -> None:
+        status = self.query_one("#status", Label)
+        try:
+            self.catalog = await self.manager.catalog(self.source)
+        except ManagerError as err:
+            status.update(f"Could not read the catalog: {err}")
+            status.add_class("error")
+            return
+        note = f"{len(self.catalog.apps)} programs"
+        if self.catalog.problems:
+            note += f" ({len(self.catalog.problems)} could not be read)"
+        status.update(note + f" at {self.catalog.commit[:7]}")
+        for shown in ("#filter", "#programs", "#about"):
+            self.query_one(shown).display = True
+        self.rebuild()
+        self.query_one("#filter", Input).focus()
+
+    def state_of(self, app: catalogs.CatalogApp) -> str:
+        stamp = self.manager.programs.installed().get(app.slug)
+        if stamp is None:
+            return ""
+        if stamp.repo != self.source.repo:
+            return f"from {stamp.repo}"
+        return "update" if needs_update(stamp, app) else "installed"
+
+    def rebuild(self) -> None:
+        if self.catalog is None:
+            return
+        words = self.query_one("#filter", Input).value.lower().split()
+        table = self.query_one(DataTable)
+        table.clear()
+        self.shown = {}
+        for app in self.catalog.apps:
+            haystack = " ".join(
+                (
+                    app.slug,
+                    app.name,
+                    app.manifest.author,
+                    app.manifest.description,
+                    " ".join(app.manifest.tags),
+                )
+            ).lower()
+            if all(word in haystack for word in words):
+                self.shown[app.slug] = app
+                table.add_row(
+                    app.name,
+                    app.manifest.author,
+                    ", ".join(app.manifest.tags),
+                    self.state_of(app),
+                    key=app.slug,
+                )
+        self.describe()
+
+    def current(self) -> catalogs.CatalogApp | None:
+        table = self.query_one(DataTable)
+        if not table.row_count:
+            return None
+        key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
+        return self.shown.get(key or "")
+
+    def describe(self) -> None:
+        about = self.query_one("#about", Static)
+        app = self.current()
+        if app is None:
+            about.update("Nothing matches." if self.catalog else "")
+            return
+        lines = [app.manifest.description or "(no description)"]
+        facts = [f"{max(app.size // 1024, 1)} KiB"]
+        facts.append("installs packages" if app.needs_packages else "needs no packages")
+        if app.env_template:
+            facts.append("has settings")
+        if app.manifest.upstream:
+            facts.append(app.manifest.upstream)
+        lines.append(" · ".join(facts))
+        about.update("\n".join(lines))
+
+    @on(Input.Changed, "#filter")
+    def filtered(self) -> None:
+        self.rebuild()
+
+    @on(Input.Submitted, "#filter")
+    def take_on_enter(self) -> None:
+        self.chosen()
+
+    def action_move(self, step: int) -> None:
+        table = self.query_one(DataTable)
+        if step > 0:
+            table.action_cursor_down()
+        else:
+            table.action_cursor_up()
+
+    @on(DataTable.RowHighlighted)
+    def highlighted(self) -> None:
+        self.describe()
+
+    @on(DataTable.RowSelected)
+    def chosen(self) -> None:
+        app = self.current()
+        if app is not None and self.catalog is not None:
+            self.dismiss(ProgramPick(self.source, self.catalog, app))
+
+    def action_back(self) -> None:
+        self.dismiss(None)
+
+
+class Sources(ModalScreen[Pick | ProgramPick | None]):
     """
     The places applications come from, and the way to install from them.
     """
 
     BINDINGS = [
-        Binding("a", "add", "Add source"),
+        Binding("a", "add", "Add app source"),
+        Binding("p", "add_catalog", "Add program catalog"),
         Binding("x", "remove", "Remove"),
         Binding("escape", "back", "Back"),
     ]
@@ -429,12 +599,17 @@ class Sources(ModalScreen[Pick | None]):
             table.add_row(
                 source.label,
                 source.repo,
-                "releases" if source.mode == "release" else "source (build)",
+                source.where_from,
                 source.subdir or "",
                 key=f"{source.repo}|{source.subdir}",
             )
         empty = self.query_one("#empty", Static)
-        empty.update("" if sources else "No sources yet. Press a to add one.")
+        empty.update(
+            ""
+            if sources
+            else "No sources yet. Press a to add an app source, or p to add a "
+            "catalog of programs."
+        )
         table.focus()
 
     def current(self) -> Source | None:
@@ -456,6 +631,11 @@ class Sources(ModalScreen[Pick | None]):
     async def pick(self) -> None:
         source = self.current()
         if source is None:
+            return
+        if source.kind == "catalog":
+            program = await self.app.push_screen_wait(CatalogBrowser(source))
+            if program is not None:
+                self.dismiss(program)
             return
         version = await self.app.push_screen_wait(
             Versions(source, lambda: self.manager.versions(source))
@@ -511,6 +691,37 @@ class Sources(ModalScreen[Pick | None]):
                         "Manifest path",
                         hint="Only if it is not src/appmeta/manifest.json or appmeta/manifest.json.",
                     ),
+                ],
+                ok="Add",
+                check=check,
+            )
+        )
+        if added is not None:
+            self.reload()
+
+    @work
+    async def action_add_catalog(self) -> None:
+        async def check(values: dict[str, str]) -> Verdict:
+            repo = values["repo"]
+            if not REPO.match(repo):
+                return {"repo": "use the form owner/name, as in github.com/owner/name"}
+            await self.manager.add_source(
+                Source(repo=repo, kind="catalog", branch=values["branch"])
+            )
+            return None
+
+        added = await self.app.push_screen_wait(
+            FormModal(
+                "Add a catalog of programs",
+                [
+                    Field(
+                        "repo",
+                        "GitHub repository",
+                        placeholder="owner/name",
+                        hint="A repository with an apps/ folder of programs. The "
+                        "community catalog is maxswinkels/busybar-apps.",
+                    ),
+                    Field("branch", "Branch", placeholder="main"),
                 ],
                 ok="Add",
                 check=check,

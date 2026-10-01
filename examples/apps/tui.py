@@ -9,8 +9,8 @@ for starting rather than managing.
 
 from __future__ import annotations
 
+import webbrowser
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
 from pathlib import Path
 
 from textual import events, on, work
@@ -20,7 +20,18 @@ from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Markdown, Static
 
-from .dialogs import Confirm, Field, FormModal, Pick, Progress, Sources, Verdict
+from .dialogs import (
+    SECRET_NAME,
+    Confirm,
+    Field,
+    FormModal,
+    Pick,
+    Progress,
+    ProgramPick,
+    Sources,
+    Verdict,
+)
+from .launcher import format_env
 from .manager import Entry, Manager
 from .model import ManagerError
 
@@ -47,19 +58,29 @@ def describe(entry: Entry, manager: Manager) -> str:
     lines = [f"## {entry.name}", ""]
     if entry.description:
         lines += [entry.description, ""]
+    if entry.origin:
+        note = " - **update available**, press `u`" if entry.update else ""
+        lines += [f"**From** {entry.origin}{note}", ""]
     lines += [
         f"**Folder** `{app.path}`",
         "",
-        "**Command**",
+        "**Runs as**",
         "",
         "```",
-        app.command,
+        manager.launcher.command_for(app),
         "```",
         "",
-        f"On this computer · {entry.status}",
-        "",
-        "**Enter** run · **x** stop · **m** modify · **d** forget",
     ]
+    if app.env:
+        # The names, never the values: a key typed into a form is a secret.
+        lines += [f"**Environment** {', '.join(sorted(app.env))} (set)", ""]
+    lines += [f"On this computer · {entry.status}", ""]
+    keys = ["**Enter** run", "**x** stop", "**m** modify"]
+    if entry.origin:
+        keys += ["**c** settings", "**o** page", "**d** remove"]
+    else:
+        keys += ["**d** forget"]
+    lines += [" · ".join(keys)]
     tail = manager.launcher.tail(app)
     if tail:
         lines += ["", "**Last output**", "", "```", tail, "```"]
@@ -74,6 +95,9 @@ class Home(Screen[None]):
         Binding("d", "remove", "Remove"),
         Binding("e", "add_external", "Add external"),
         Binding("m", "modify", "Modify"),
+        Binding("u", "update", "Update"),
+        Binding("c", "settings", "Settings"),
+        Binding("o", "open_page", "Open page", show=False),
         Binding("b", "dashboard", "Dashboard"),
         Binding("r", "refresh", "Refresh"),
         Binding("q", "app.quit", "Quit"),
@@ -85,6 +109,9 @@ class Home(Screen[None]):
         # What the card was last asked to show. The widget keeps it too, but
         # under a name that has changed between releases of Textual.
         self.card = ""
+        # Sentences about things that went wrong in the background, shown in
+        # the banner until the next check says otherwise.
+        self.notices: list[str] = []
 
     @property
     def manager(self) -> Manager:
@@ -108,6 +135,7 @@ class Home(Screen[None]):
         table.add_column("Status", key="status")
         self.set_interval(2.0, self.tick)
         self.run_worker(self.reload(), exclusive=True, group="reload")
+        self.run_worker(self.check_updates(), exclusive=True, group="updates")
 
     # Showing -----------------------------------------------------------
 
@@ -115,8 +143,9 @@ class Home(Screen[None]):
         entries, problem = await self.manager.entries()
         warning = self.manager.store.warning
         banner = self.query_one("#banner", Static)
-        banner.update(" · ".join(item for item in (problem, warning) if item))
-        banner.display = bool(problem or warning)
+        sentences = [item for item in (problem, warning, *self.notices) if item]
+        banner.update(" · ".join(sentences))
+        banner.display = bool(sentences)
 
         table = self.query_one(DataTable)
         remembered = keep or self.current_key()
@@ -134,6 +163,16 @@ class Home(Screen[None]):
             table.move_cursor(row=table.get_row_index(remembered))
         self.show(self.current())
 
+    async def check_updates(self) -> None:
+        """
+        Ask the catalogs what they have now, so installed programs can say
+        they are out of date. Quiet when there is nothing to ask.
+        """
+        if not any(s.kind == "catalog" for s in self.manager.store.config.sources):
+            return
+        self.notices = await self.manager.refresh_catalogs()
+        await self.reload()
+
     def tick(self) -> None:
         """
         Keep the status of external apps true while they start and stop on
@@ -143,16 +182,12 @@ class Home(Screen[None]):
         for key, entry in self.entries.items():
             if entry.external is None:
                 continue
-            status = (
-                "running"
-                if self.manager.launcher.is_running(entry.external)
-                else "ready"
-            )
-            if status != entry.status:
-                self.entries[key] = replace(entry, status=status)
-                table.update_cell(key, "status", status)
+            now = entry.with_running(self.manager.launcher.is_running(entry.external))
+            if now.status != entry.status:
+                self.entries[key] = now
+                table.update_cell(key, "status", now.status)
                 if key == self.current_key():
-                    self.show(self.entries[key])
+                    self.show(now)
 
     def current_key(self) -> str | None:
         table = self.query_one(DataTable)
@@ -223,7 +258,11 @@ class Home(Screen[None]):
     async def action_add_external(self) -> None:
         async def check(values: dict[str, str]) -> Verdict:
             self.manager.add_external(
-                values["name"], values["path"], values["command"], values["description"]
+                values["name"],
+                values["path"],
+                values["command"],
+                values["description"],
+                values["env"],
             )
             return None
 
@@ -241,9 +280,17 @@ class Home(Screen[None]):
                     Field(
                         "command",
                         "Command",
-                        placeholder="python main.py --addr 192.168.1.20",
+                        placeholder="python main.py --host {host}",
+                        hint="{host} is the bar this manager is connected to; "
+                        "{python} is the Python running it.",
                     ),
                     Field("description", "About it", placeholder="One line"),
+                    Field(
+                        "env",
+                        "Environment",
+                        placeholder="CITY=Utrecht",
+                        hint="Optional KEY=value pairs, set when it runs.",
+                    ),
                 ],
                 ok="Add",
                 check=check,
@@ -271,6 +318,7 @@ class Home(Screen[None]):
                 values["path"],
                 values["command"],
                 values["description"],
+                values["env"],
             )
             return None
 
@@ -282,6 +330,7 @@ class Home(Screen[None]):
                     Field("path", "Folder", value=app.path),
                     Field("command", "Command", value=app.command),
                     Field("description", "About it", value=app.description),
+                    Field("env", "Environment", value=format_env(app.env)),
                 ],
                 check=check,
             )
@@ -292,7 +341,9 @@ class Home(Screen[None]):
     @work
     async def action_sources(self) -> None:
         pick = await self.app.push_screen_wait(Sources())
-        if pick is not None:
+        if isinstance(pick, ProgramPick):
+            await self.install_program(pick)
+        elif pick is not None:
             await self.install(pick)
 
     async def install(self, pick: Pick) -> None:
@@ -327,6 +378,109 @@ class Home(Screen[None]):
         manifest = prepared.package.manifest
         progress.done(f"Installed {manifest.name} {manifest.version}.")
         await self.reload(keep=f"bar:{manifest.id}")
+
+    async def install_program(self, pick: ProgramPick, go: str = "Install") -> None:
+        """
+        Put a program from a catalog on this computer: say what that will do,
+        and on a yes, do it. It is code that will run here, so the question is
+        not skipped.
+        """
+        progress = Progress(f"{pick.app.name} - {pick.source.label}", go=go)
+        await self.app.push_screen(progress)
+        try:
+            prepared = await self.manager.prepare_program(
+                pick.source, pick.catalog, pick.app
+            )
+        except ManagerError as err:
+            progress.done(str(err), ok=False)
+            return
+        if not await progress.ask(f"{prepared.summary} Go ahead?"):
+            progress.done("Cancelled. Nothing was installed.")
+            return
+        try:
+            program = await self.manager.install_program(prepared, progress.say)
+        except ManagerError as err:
+            progress.done(str(err), ok=False)
+            return
+        progress.done(f"{pick.app.name} is on the list. Press Enter on it to run.")
+        await self.reload(keep=f"external:{program.slug}")
+
+    @work
+    async def action_update(self) -> None:
+        entry = self.current()
+        if entry is None or entry.external is None or not entry.update:
+            self.app.notify("Nothing to update here", severity="warning")
+            return
+        stamp = self.manager.stamp_of(entry.external)
+        catalog = self.manager.catalogs.get(stamp.repo) if stamp else None
+        slug = Path(entry.external.path).name
+        app = catalog.find(slug) if catalog else None
+        source = next(
+            (
+                s
+                for s in self.manager.store.config.sources
+                if stamp and s.kind == "catalog" and s.repo == stamp.repo
+            ),
+            None,
+        )
+        if catalog is None or app is None or source is None:
+            self.app.notify(
+                "The catalog is not available; add it again under Sources",
+                severity="warning",
+            )
+            return
+        await self.install_program(ProgramPick(source, catalog, app), go="Update")
+
+    @work
+    async def action_settings(self) -> None:
+        """
+        Fill in the variables a program says it reads.
+        """
+        entry = self.current()
+        if entry is None or entry.external is None:
+            return
+        app = entry.external
+        spec = self.manager.env_spec(app)
+        if not spec:
+            self.app.notify(
+                "This program does not declare settings. Use m to set environment by hand.",
+                severity="warning",
+            )
+            return
+
+        async def check(values: dict[str, str]) -> Verdict:
+            self.manager.set_env(app, values)
+            return None
+
+        saved = await self.app.push_screen_wait(
+            FormModal(
+                f"Settings for {app.name}",
+                [
+                    Field(
+                        var.key,
+                        var.key,
+                        value=app.env.get(var.key, ""),
+                        placeholder=var.example,
+                        hint=var.help,
+                        secret=bool(SECRET_NAME.search(var.key)),
+                    )
+                    for var in spec
+                ],
+                check=check,
+            )
+        )
+        if saved is not None:
+            self.app.notify("Saved. It takes effect the next time it runs.")
+            await self.reload(keep=entry.key)
+
+    def action_open_page(self) -> None:
+        entry = self.current()
+        url = self.manager.page_url(entry) if entry else None
+        if url is None:
+            self.app.notify("No page for this one", severity="warning")
+            return
+        webbrowser.open(url)
+        self.app.notify(url)
 
     def action_dashboard(self) -> None:
         self.app.push_screen(Dashboard())
@@ -397,10 +551,10 @@ class Dashboard(Screen[None]):
             app = card.entry.external
             if app is None:
                 continue
-            status = "running" if self.manager.launcher.is_running(app) else "ready"
-            if status != card.entry.status:
-                card.entry = replace(card.entry, status=status)
-                card.set_classes(f"card {card.entry.kind} {status}")
+            now = card.entry.with_running(self.manager.launcher.is_running(app))
+            if now.status != card.entry.status:
+                card.entry = now
+                card.set_classes(f"card {now.kind} {now.status}")
                 card.refresh()
 
     def action_refresh(self) -> None:

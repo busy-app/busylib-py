@@ -51,6 +51,9 @@ panel on the right is the card of whatever is highlighted.
 | `x` | Quit the app running on the bar, or stop the highlighted program |
 | `d` | Remove the app from the bar, or forget the program |
 | `e` / `m` | Add / modify a program from this computer |
+| `u` | Update a program installed from a catalog |
+| `c` | Fill in the settings a catalog program declares |
+| `o` | Open a program's page |
 | `b` | Dashboard: the same things as cards |
 | `r` | Refresh |
 | `q` | Quit the manager |
@@ -117,7 +120,68 @@ beside the bar's own apps, and on the dashboard.
 
 `Enter` runs it, detached, with its output in a log file; `x` stops it. The
 command is run by your shell, as you would type it, and is shown on its card
-before you run it. Forgetting a program removes the entry and nothing else.
+before you run it. Two words in it are filled in when it runs: `{host}` is the
+bar the manager is connected to (or `10.0.4.20`, the address of a bar over USB,
+when there is none), and `{python}` is the Python that is running the manager.
+A program added once therefore follows whichever bar you use it with. An
+*Environment* field takes `KEY=value` pairs to set when it runs.
+
+Forgetting a program removes the entry and nothing else.
+
+## Catalogs of programs
+
+Most programs for the bar are not yet anywhere you can browse from the bar. The
+[community catalog](https://maxswinkels.github.io/busybar-apps/) (an unofficial
+project, `maxswinkels/busybar-apps`) is a repository of folders, one program
+each, with a card for every one - name, author, tags, a line about it - and a
+command to run it. The manager reads that layout, so a catalog is one more kind
+of source:
+
+1. `i`, then `p`, and give the repository (`owner/name`, and a branch if it is
+   not `main`). It is read straight away, so a typo is a message in the form.
+2. `Enter` on it opens the programs. Type to narrow them by name, tag or
+   author; the arrows move through the list while you type; `Enter` takes the
+   highlighted one.
+3. The manager says what it is about to do before it does it:
+
+```
+Install Magic 8-Ball (3 file(s), 27 KiB) in ~/.config/busy-apps/programs/magic-8-ball.
+It needs the packages websockets>=15.0. It runs on this computer with your
+permissions, so install only what you trust. Go ahead?
+```
+
+That last sentence is the point: a program from a catalog is code that runs on
+your computer, and the question is not skipped.
+
+What an install does:
+
+- fetches the program's files at one commit and checks every file against the
+  sha the listing gave it, so what lands is what was listed;
+- builds the new folder beside the old and swaps them, so an install that fails
+  halfway leaves the old program working;
+- if there is a `requirements.txt`, gives the program an environment of its own
+  and installs into it, so its packages touch nothing else on the computer;
+- adds it to the list, with `{python} app.py --host {host}` as its command.
+
+A program that has an `.env.example` declares the variables it reads. `c` shows
+one field per variable - with the example as a hint, never as a value, and
+anything that looks like a key or a token hidden as you type - and saves what
+you fill in. The card lists which are set, and never what they are.
+
+The catalog is asked again on every start, cheaply: GitHub answers "unchanged"
+to a request that carries the previous answer's tag, and that does not count
+against its hourly limit. A program whose own files differ from the catalog's
+shows `update` in the list; `u` updates it, asking first, and keeps the command
+and settings you changed. A program is not out of date because a neighbour in
+the same catalog was edited. `d` on a program installed from a catalog deletes
+what it installed and its environment, and nothing it did not install.
+
+This follows the layout of the community catalog and borrows ideas from its own
+manager, [busybar-manager](https://github.com/maxswinkels/busybar-manager)
+(MIT): update detection by the sha of each file, conditional requests, install
+records, per-program environments and the `.env.example` convention. The
+manager here is a terminal example and does none of the rest of what that one
+does - schedules, autostart, a web dashboard, a proxy for the bar.
 
 ## Where things are kept
 
@@ -130,7 +194,9 @@ things (`--config` points elsewhere):
 | macOS | `~/Library/Application Support/busy-apps` |
 | Linux | `$XDG_CONFIG_HOME/busy-apps` or `~/.config/busy-apps` |
 
-Next to it are `manager.log` and a `logs` folder with one file per program.
+Next to it are `manager.log`, `http-cache.json` (what GitHub answered, kept so
+the next start is cheap), `programs/` with the installed programs and their
+environments, and a `logs` folder with one file per program.
 A file that cannot be read is moved aside as `apps.json.bad` rather than
 overwritten.
 
@@ -163,6 +229,10 @@ These endpoints answer on the local network only.
 - Public repositories only. Anonymous GitHub requests are limited to sixty an
   hour; set `GITHUB_TOKEN` to raise it. The token goes to GitHub's API and
   nowhere else.
+- Programs from a catalog take only `--host`, so they cannot present a bar's
+  access key. The firmware enforces the key on connections over Wi-Fi, so such a
+  program works over USB or against a bar with no key set, and gets a 403 from
+  one that has.
 - One bar at a time.
 - The bar has no call that says which app is running, so `x` quits whichever
   one is.

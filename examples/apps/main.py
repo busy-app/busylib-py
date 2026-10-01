@@ -21,7 +21,7 @@ from busylib.client import AsyncBusyBar
 from examples.shared.discovery import resolve_connection
 
 from .bar import Bar
-from .github import GitHub
+from .github import Cache, GitHub
 from .launcher import Launcher
 from .manager import Manager
 from .store import Store
@@ -101,7 +101,12 @@ def main(argv: list[str] | None = None) -> None:
         )
         bar, close, address = Bar(client, addr), client.aclose, addr
 
-    manager = Manager(store, GitHub(), Launcher(store.dir / "logs"), bar)
+    # What GitHub already told us is kept between runs, so opening a catalog
+    # on every start costs two answers of "unchanged" and not forty downloads.
+    github = GitHub(cache=Cache(store.dir / "http-cache.json"))
+    # `{host}` in a program's command is the bar this manager is connected to.
+    launcher = Launcher(store.dir / "logs", host=address)
+    manager = Manager(store, github, launcher, bar)
     try:
         AppsManager(manager, address, close).run()
     except KeyboardInterrupt:

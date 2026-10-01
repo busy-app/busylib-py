@@ -3,12 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from apps_support import MANIFEST, RELEASE, RELEASES, FakeBar, manager_for, tgz
+from apps_support import (
+    MANIFEST,
+    RELEASE,
+    RELEASES,
+    CatalogNet,
+    FakeBar,
+    manager_for,
+    program,
+    tgz,
+)
 
 from busylib import types
 from examples.apps import package
 from examples.apps.github import Reply
-from examples.apps.model import Asset, ManagerError, Source, Version
+from examples.apps.model import Asset, ExternalApp, ManagerError, Source, Version
 from examples.apps.store import Store
 
 
@@ -335,3 +344,273 @@ def test_editing_an_external_app_keeps_its_identity(tmp_path: Path) -> None:
     assert [(a.name, a.command) for a in manager.store.config.externals] == [
         ("Big Clock", "run2")
     ]
+
+
+# Programs from a catalog --------------------------------------------------------
+
+
+PROGRAMS = Source(repo="busy-app/programs", kind="catalog")
+
+
+def _with_catalog(tmp_path: Path, programs: dict, bar=None):
+    net = CatalogNet(programs)
+    manager = manager_for(tmp_path, bar)
+    manager.github.fetch = net
+    manager.programs.github = manager.github
+    return net, manager
+
+
+async def test_a_catalog_is_checked_before_it_is_kept(tmp_path: Path) -> None:
+    _, manager = _with_catalog(tmp_path, {"clock": program("Clock")})
+
+    added = await manager.add_source(Source(repo="busy-app/programs", kind="catalog"))
+
+    assert added.title == "programs"
+    assert manager.store.config.sources[0].kind == "catalog"
+    assert manager.catalogs["busy-app/programs"].apps[0].slug == "clock"
+
+
+async def test_an_empty_catalog_is_not_kept(tmp_path: Path) -> None:
+    _, manager = _with_catalog(tmp_path, {})
+
+    with pytest.raises(ManagerError, match="no programs in its apps/ folder"):
+        await manager.add_source(Source(repo="busy-app/programs", kind="catalog"))
+
+    assert manager.store.config.sources == []
+
+
+async def test_installing_a_program_adds_it_to_the_list_with_a_command_that_follows_the_bar(
+    tmp_path: Path,
+) -> None:
+    _, manager = _with_catalog(tmp_path, {"clock": program("Clock")})
+    catalog = await manager.catalog(PROGRAMS)
+    prepared = await manager.prepare_program(PROGRAMS, catalog, catalog.apps[0])
+
+    installed = await manager.install_program(prepared, lambda line: None)
+
+    assert installed.command == "{python} app.py --host {host}"
+    assert installed.path == str(tmp_path / "programs" / "clock")
+    entries, _ = await manager.entries()
+    (entry,) = entries
+    assert (entry.name, entry.origin, entry.status) == (
+        "Clock",
+        "busy-app/programs",
+        "ready",
+    )
+    assert entry.description == "About Clock"
+
+
+async def test_the_summary_tells_a_person_what_they_are_agreeing_to(
+    tmp_path: Path,
+) -> None:
+    _, manager = _with_catalog(
+        tmp_path,
+        {"clock": {**program("Clock"), "requirements.txt": b"requests\n"}},
+    )
+    catalog = await manager.catalog(PROGRAMS)
+
+    prepared = await manager.prepare_program(PROGRAMS, catalog, catalog.apps[0])
+
+    summary = prepared.summary
+    assert summary.startswith("Install Clock (3 file(s)")
+    assert "needs the packages requests" in summary
+    assert "runs on this computer with your permissions" in summary
+
+
+async def test_an_update_keeps_the_command_and_the_settings_a_person_made(
+    tmp_path: Path,
+) -> None:
+    net, manager = _with_catalog(tmp_path, {"clock": program("Clock")})
+    catalog = await manager.catalog(PROGRAMS)
+    first = await manager.install_program(
+        await manager.prepare_program(PROGRAMS, catalog, catalog.apps[0]),
+        lambda line: None,
+    )
+    manager.store.save_external(
+        ExternalApp(
+            first.slug,
+            first.name,
+            first.path,
+            "{python} app.py --fast",
+            env={"CITY": "Utrecht"},
+        )
+    )
+    net.programs["clock"]["app.py"] = b"print('v2')\n"
+    newer = await manager.catalog(PROGRAMS)
+
+    prepared = await manager.prepare_program(PROGRAMS, newer, newer.apps[0])
+    assert prepared.summary.startswith("Update Clock")
+    updated = await manager.install_program(prepared, lambda line: None)
+
+    assert updated.slug == first.slug, "the same entry, not a second one"
+    assert updated.command == "{python} app.py --fast"
+    assert updated.env == {"CITY": "Utrecht"}
+    assert len(manager.store.config.externals) == 1
+
+
+async def test_a_program_the_catalog_has_changed_is_marked_as_out_of_date(
+    tmp_path: Path,
+) -> None:
+    net, manager = _with_catalog(
+        tmp_path, {"clock": program("Clock"), "weather": program("W")}
+    )
+    await manager.add_source(Source(repo="busy-app/programs", kind="catalog"))
+    catalog = manager.catalogs["busy-app/programs"]
+    clock = catalog.find("clock")
+    assert clock is not None
+    await manager.install_program(
+        await manager.prepare_program(PROGRAMS, catalog, clock), lambda line: None
+    )
+
+    (before,), _ = await manager.entries()
+    assert before.update is False
+
+    net.programs["clock"]["app.py"] = b"print('v2')\n"
+    assert await manager.refresh_catalogs() == []
+    (after,), _ = await manager.entries()
+
+    assert (after.update, after.status) == (True, "update")
+
+
+async def test_a_neighbour_changing_does_not_mark_a_program(tmp_path: Path) -> None:
+    net, manager = _with_catalog(
+        tmp_path, {"clock": program("Clock"), "weather": program("W")}
+    )
+    await manager.add_source(Source(repo="busy-app/programs", kind="catalog"))
+    catalog = manager.catalogs["busy-app/programs"]
+    clock = catalog.find("clock")
+    assert clock is not None
+    await manager.install_program(
+        await manager.prepare_program(PROGRAMS, catalog, clock), lambda line: None
+    )
+
+    net.programs["weather"]["app.py"] = b"print('new')\n"
+    await manager.refresh_catalogs()
+    (entry,), _ = await manager.entries()
+
+    assert entry.update is False
+
+
+async def test_being_offline_when_checking_for_updates_is_a_sentence_not_a_crash(
+    tmp_path: Path,
+) -> None:
+    _, manager = _with_catalog(tmp_path, {"clock": program("Clock")})
+    manager.store.add_source(Source(repo="busy-app/programs", kind="catalog"))
+    manager.github.fetch = lambda url, headers, limit: (_ for _ in ()).throw(
+        ManagerError("cannot reach GitHub: offline")
+    )
+
+    problems = await manager.refresh_catalogs()
+
+    assert problems == [
+        "could not check busy-app/programs for updates: cannot reach GitHub: offline"
+    ]
+
+
+async def test_removing_an_installed_program_deletes_what_it_installed(
+    tmp_path: Path,
+) -> None:
+    _, manager = _with_catalog(tmp_path, {"clock": program("Clock")})
+    catalog = await manager.catalog(PROGRAMS)
+    await manager.install_program(
+        await manager.prepare_program(PROGRAMS, catalog, catalog.apps[0]),
+        lambda line: None,
+    )
+    (entry,), _ = await manager.entries()
+
+    message = await manager.remove(entry)
+
+    assert "files it installed" in message
+    assert not (tmp_path / "programs" / "clock").exists()
+    assert manager.store.config.externals == []
+
+
+async def test_forgetting_a_program_added_by_hand_still_leaves_its_files(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "mine"
+    folder.mkdir()
+    (folder / "work.txt").write_text("x")
+    manager = manager_for(tmp_path, None)
+    manager.add_external("Mine", str(folder), "run", "")
+    (entry,), _ = await manager.entries()
+
+    await manager.remove(entry)
+
+    assert (folder / "work.txt").exists()
+    assert manager.store.config.externals == []
+
+
+async def test_the_page_of_a_program_is_its_own_repository_if_it_has_one(
+    tmp_path: Path,
+) -> None:
+    net, manager = _with_catalog(
+        tmp_path,
+        {
+            "clock": program("Clock"),
+            "ported": {
+                "app.py": b"x",
+                "manifest.yaml": b"name: Ported\nrepo: https://github.com/someone/ported\n",
+            },
+        },
+    )
+    catalog = await manager.catalog(PROGRAMS)
+    for slug in ("clock", "ported"):
+        found = catalog.find(slug)
+        assert found is not None
+        await manager.install_program(
+            await manager.prepare_program(PROGRAMS, catalog, found), lambda line: None
+        )
+    entries, _ = await manager.entries()
+    pages = {e.name: manager.page_url(e) for e in entries}
+
+    assert pages["Clock"] == "https://github.com/busy-app/programs/tree/main/apps/clock"
+    assert pages["Ported"] == "https://github.com/someone/ported"
+
+
+def test_a_program_added_by_hand_has_no_page(tmp_path: Path) -> None:
+    manager = manager_for(tmp_path, None)
+    manager.add_external("Mine", str(tmp_path), "run", "")
+
+    entry = manager._external_entry(manager.store.config.externals[0])
+
+    assert manager.page_url(entry) is None
+
+
+def test_the_values_a_person_fills_in_are_kept_and_an_empty_one_unsets(
+    tmp_path: Path,
+) -> None:
+    manager = manager_for(tmp_path, None)
+    app = manager.add_external("X", str(tmp_path), "run", "", env="KEEP=1 DROP=2")
+
+    updated = manager.set_env(app, {"CITY": "Utrecht", "DROP": ""})
+
+    assert updated.env == {"KEEP": "1", "CITY": "Utrecht"}
+    assert manager.store.config.externals[0].env == updated.env
+
+
+def test_environment_is_typed_into_the_form_for_a_program_added_by_hand(
+    tmp_path: Path,
+) -> None:
+    manager = manager_for(tmp_path, None)
+
+    app = manager.add_external("X", str(tmp_path), "run", "", env='CITY="New York"')
+
+    assert app.env == {"CITY": "New York"}
+    with pytest.raises(ManagerError, match="is not KEY=value"):
+        manager.add_external("Y", str(tmp_path), "run", "", env="oops")
+
+
+def test_editing_a_program_does_not_lose_the_interpreter_a_catalog_install_chose(
+    tmp_path: Path,
+) -> None:
+    manager = manager_for(tmp_path, None)
+    original = manager.add_external("X", str(tmp_path), "run", "")
+    manager.store.save_external(
+        ExternalApp(**{**original.__dict__, "python": "/venv/bin/python"})
+    )
+    stored = manager.store.config.externals[0]
+
+    edited = manager.edit_external(stored, "X2", str(tmp_path), "run2", "")
+
+    assert edited.python == "/venv/bin/python"

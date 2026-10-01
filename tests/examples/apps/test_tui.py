@@ -3,12 +3,23 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from apps_support import MANIFEST, RELEASE, RELEASES, FakeBar, manager_for, tgz
+from apps_support import (
+    MANIFEST,
+    RELEASE,
+    RELEASES,
+    FakeBar,
+    manager_for,
+    manager_with_catalog,
+    program,
+    tgz,
+)
 from textual.widgets import Button, DataTable, Input, RichLog, Static
 
 from busylib import types
 from examples.apps.github import Reply
+from examples.apps.launcher import Launcher
 from examples.apps.manager import Manager
+from examples.apps.model import ManagerError
 from examples.apps.model import Source
 from examples.apps.tui import AppCard, AppsManager
 
@@ -390,3 +401,375 @@ async def test_a_form_in_a_short_terminal_still_shows_its_buttons(
         for button in app.screen.query(Button):
             region = button.region
             assert region.height > 0 and region.bottom <= app.size.height, button.id
+
+
+# Programs from a catalog ---------------------------------------------------------
+
+
+async def _settle_longer(pilot) -> None:
+    """
+    For flows that go through threads - a catalog is read in one.
+    """
+    for _ in range(12):
+        await pilot.pause(0.05)
+
+
+def _catalog(**extra: dict) -> dict:
+    return {
+        "clock": {
+            **program("Clock"),
+            ".env.example": b"# Where you live\nCITY=Utrecht\nAPI_KEY=\n",
+        },
+        "weather": program("Weather"),
+        **extra,
+    }
+
+
+async def _open_catalog(pilot, app) -> None:
+    await pilot.press("i")
+    await _settle(pilot)
+    await pilot.press("enter")
+    await _settle_longer(pilot)
+
+
+async def test_a_catalog_is_added_browsed_and_a_program_installed_after_asking(
+    tmp_path: Path,
+) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    app = AppsManager(manager, "192.168.1.20")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("i")
+        await _settle(pilot)
+        await pilot.press("p")
+        await _settle(pilot)
+        app.screen.query_one("#f-repo", Input).value = "busy-app/programs"
+        await pilot.click("#ok")
+        await _settle_longer(pilot)
+        assert [s.kind for s in manager.store.config.sources] == ["catalog"]
+
+        await pilot.press("enter")  # the catalog
+        await _settle_longer(pilot)
+        names = [str(row[0]) for row in _rows(app)]
+        assert names == ["Clock", "Weather"]
+
+        await pilot.press("enter")  # Clock, highlighted already
+        await _settle_longer(pilot)
+
+        # Nothing is on the computer until the answer, and the question says
+        # what is being agreed to.
+        assert not (tmp_path / "programs" / "clock").exists()
+        question = " ".join(_log(app))
+        assert "Install Clock" in question and "your permissions" in question
+        assert app.screen.query_one("#ask").display is True
+
+        await pilot.click("#go")
+        await _settle_longer(pilot)
+        assert (tmp_path / "programs" / "clock" / "app.py").exists()
+        await pilot.click("#close")
+        await _settle(pilot)
+
+        assert [row[0] for row in _rows(app)] == ["Clock"]
+        assert "busy-app/programs" in _details(app)
+
+
+async def test_the_card_of_a_program_shows_how_it_will_run_against_this_bar(
+    tmp_path: Path,
+) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    manager.launcher = Launcher(tmp_path / "logs", host="192.168.1.20")
+    manager.store.add_source(Source(repo="busy-app/programs", kind="catalog"))
+    catalog = await manager.catalog(manager.store.config.sources[0])
+    await manager.install_program(
+        await manager.prepare_program(
+            manager.store.config.sources[0], catalog, catalog.apps[0]
+        ),
+        lambda line: None,
+    )
+    app = AppsManager(manager, "192.168.1.20")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        card = _details(app)
+
+        assert "app.py --host 192.168.1.20" in card
+        assert "{host}" not in card, "the placeholder is shown filled in"
+        assert "**From** busy-app/programs" in card
+
+
+async def test_typing_narrows_a_catalog_by_name_tag_or_author(tmp_path: Path) -> None:
+    programs = _catalog(
+        night={
+            "app.py": b"x",
+            "manifest.yaml": b"name: Moon\nauthor: zed\ntags:\n  - night\n",
+        }
+    )
+    _, manager = manager_with_catalog(tmp_path, programs, _bar())
+    manager.store.add_source(
+        Source(repo="busy-app/programs", kind="catalog", title="Programs")
+    )
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        await _open_catalog(pilot, app)
+        assert len(_rows(app)) == 3
+
+        app.screen.query_one("#filter", Input).value = "night"
+        await _settle(pilot)
+        assert [row[0] for row in _rows(app)] == ["Moon"]
+
+        app.screen.query_one("#filter", Input).value = "ZED"
+        await _settle(pilot)
+        assert [row[0] for row in _rows(app)] == ["Moon"]
+
+        app.screen.query_one("#filter", Input).value = "nothing like this"
+        await _settle(pilot)
+        assert _rows(app) == []
+        assert "Nothing matches" in str(app.screen.query_one("#about").render())
+
+
+async def test_the_catalog_shows_what_is_installed_and_what_has_changed(
+    tmp_path: Path,
+) -> None:
+    net, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    source = Source(repo="busy-app/programs", kind="catalog", title="Programs")
+    manager.store.add_source(source)
+    catalog = await manager.catalog(source)
+    clock = catalog.find("clock")
+    assert clock is not None
+    await manager.install_program(
+        await manager.prepare_program(source, catalog, clock), lambda line: None
+    )
+    net.programs["clock"]["app.py"] = b"print('v2')\n"
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+        await _open_catalog(pilot, app)
+
+        states = {str(row[0]): str(row[3]) for row in _rows(app)}
+
+    assert states == {"Clock": "update", "Weather": ""}
+
+
+async def test_a_program_with_an_update_says_so_and_updating_asks_first(
+    tmp_path: Path,
+) -> None:
+    net, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    source = Source(repo="busy-app/programs", kind="catalog", title="Programs")
+    manager.store.add_source(source)
+    catalog = await manager.catalog(source)
+    clock = catalog.find("clock")
+    assert clock is not None
+    await manager.install_program(
+        await manager.prepare_program(source, catalog, clock), lambda line: None
+    )
+    net.programs["clock"]["app.py"] = b"print('v2')\n"
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+        assert _rows(app) == [["Clock", "computer", "-", "update"]]
+        assert "update available" in _details(app)
+
+        await pilot.press("u")
+        await _settle_longer(pilot)
+        assert (
+            tmp_path / "programs" / "clock" / "app.py"
+        ).read_bytes() == b"print('hi')\n", "not before the answer"
+        assert "Update Clock" in " ".join(_log(app))
+
+        await pilot.click("#go")
+        await _settle_longer(pilot)
+        await pilot.click("#close")
+        await _settle_longer(pilot)
+
+        assert (
+            tmp_path / "programs" / "clock" / "app.py"
+        ).read_bytes() == b"print('v2')\n"
+        assert _rows(app)[0][3] == "ready"
+
+
+async def test_u_on_something_with_no_update_says_there_is_nothing_to_do(
+    home_manager: Manager,
+) -> None:
+    app = AppsManager(home_manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("u")
+        await _settle(pilot)
+
+        assert app.screen is not None and not app.screen.query("#go")
+
+
+async def test_settings_come_from_the_programs_own_template_and_secrets_are_masked(
+    tmp_path: Path,
+) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    source = Source(repo="busy-app/programs", kind="catalog", title="Programs")
+    manager.store.add_source(source)
+    catalog = await manager.catalog(source)
+    clock = catalog.find("clock")
+    assert clock is not None
+    await manager.install_program(
+        await manager.prepare_program(source, catalog, clock), lambda line: None
+    )
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("c")
+        await _settle(pilot)
+        form = app.screen
+        city = form.query_one("#f-CITY", Input)
+        key = form.query_one("#f-API_KEY", Input)
+
+        assert city.placeholder == "Utrecht", "the example is a hint, not a value"
+        assert city.value == ""
+        assert key.password is True and city.password is False
+
+        city.value = "Rotterdam"
+        key.value = "s3cret"
+        await pilot.click("#ok")
+        await _settle_longer(pilot)
+
+        assert manager.store.config.externals[0].env == {
+            "CITY": "Rotterdam",
+            "API_KEY": "s3cret",
+        }
+        assert "s3cret" not in _details(app), (
+            "the card names settings, never shows them"
+        )  # type: ignore[attr-defined]
+        assert "API_KEY" in _details(app)
+
+
+async def test_a_program_that_declares_no_settings_says_so(tmp_path: Path) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    source = Source(repo="busy-app/programs", kind="catalog")
+    manager.store.add_source(source)
+    catalog = await manager.catalog(source)
+    weather = catalog.find("weather")
+    assert weather is not None
+    await manager.install_program(
+        await manager.prepare_program(source, catalog, weather), lambda line: None
+    )
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("c")
+        await _settle(pilot)
+
+        assert not app.screen.query("#ok"), "no empty form"
+
+
+async def test_removing_an_installed_program_asks_and_deletes_its_files(
+    tmp_path: Path,
+) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    source = Source(repo="busy-app/programs", kind="catalog")
+    manager.store.add_source(source)
+    catalog = await manager.catalog(source)
+    await manager.install_program(
+        await manager.prepare_program(source, catalog, catalog.apps[0]),
+        lambda line: None,
+    )
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("d")
+        await _settle(pilot)
+        assert (tmp_path / "programs" / "clock").exists(), "not before the answer"
+        await pilot.press("y")
+        await _settle_longer(pilot)
+
+    assert not (tmp_path / "programs" / "clock").exists()
+    assert manager.store.config.externals == []
+
+
+async def test_o_opens_the_page_of_a_program(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr("examples.apps.tui.webbrowser.open", opened.append)
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    source = Source(repo="busy-app/programs", kind="catalog")
+    manager.store.add_source(source)
+    catalog = await manager.catalog(source)
+    await manager.install_program(
+        await manager.prepare_program(source, catalog, catalog.apps[0]),
+        lambda line: None,
+    )
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("o")
+        await _settle(pilot)
+
+    assert opened == ["https://github.com/busy-app/programs/tree/main/apps/clock"]
+
+
+async def test_being_offline_at_the_start_is_a_line_in_the_banner(
+    tmp_path: Path,
+) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    manager.store.add_source(Source(repo="busy-app/programs", kind="catalog"))
+
+    def offline(url: str, headers: dict, limit: int):
+        raise ManagerError("cannot reach GitHub: offline")
+
+    manager.github.fetch = offline
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        banner = app.screen.query_one("#banner", Static)
+
+        assert banner.display is True
+        assert "could not check busy-app/programs for updates" in str(banner.render())
+
+
+async def test_a_catalog_that_cannot_be_read_says_so_in_its_window(
+    tmp_path: Path,
+) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    manager.store.add_source(Source(repo="busy-app/programs", kind="catalog"))
+
+    def broken(url: str, headers: dict, limit: int):
+        raise ManagerError("cannot reach GitHub: offline")
+
+    manager.github.fetch = broken
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        await _open_catalog(pilot, app)
+
+        status = app.screen.query_one("#status")
+
+        assert "Could not read the catalog" in str(status.render())
+
+
+async def test_arrows_move_through_the_list_without_leaving_the_filter(
+    tmp_path: Path,
+) -> None:
+    """
+    Type, arrow, Enter - and the program taken is the one arrowed to, not the
+    first on the list.
+    """
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    manager.store.add_source(Source(repo="busy-app/programs", kind="catalog"))
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        await _open_catalog(pilot, app)
+        assert app.screen.focused is app.screen.query_one("#filter")
+
+        await pilot.press("down")
+        await _settle(pilot)
+        assert app.screen.focused is app.screen.query_one("#filter"), "still typing"
+        await pilot.press("enter")
+        await _settle_longer(pilot)
+
+        assert "Install Weather" in " ".join(_log(app))

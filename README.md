@@ -416,8 +416,9 @@ and keeps running while it receives updates. Press `h` for its command help and
 ### Manage the apps on a bar
 
 `examples/apps` installs, launches and removes the JavaScript apps on a bar,
-from GitHub releases or built from source, and starts programs from your
-computer alongside them. It needs one more package for its terminal interface:
+from GitHub releases or built from source, and installs and starts programs from
+your computer - including those from a catalog such as the community one -
+alongside them. It needs one more package for its terminal interface:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install textual
