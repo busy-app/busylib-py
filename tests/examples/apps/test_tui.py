@@ -84,7 +84,7 @@ async def test_the_list_has_the_bars_apps_and_the_computers(
             ["Beta", "bar", "2.0.0", "installed"],
             ["Clock", "computer", "-", "ready"],
         ]
-        assert app.sub_title == "192.168.1.20"
+        assert app.sub_title == "192.168.1.20 - connected, API 27.9.0"
 
 
 async def test_the_card_follows_the_cursor(home_manager: Manager) -> None:
@@ -773,3 +773,128 @@ async def test_arrows_move_through_the_list_without_leaving_the_filter(
         await _settle_longer(pilot)
 
         assert "Install Weather" in " ".join(_log(app))
+
+
+# Whether the bar is there ------------------------------------------------------------
+
+
+def _toasts(app: AppsManager) -> list[str]:
+    return [f"{n.title}: {n.message}" for n in app._notifications]
+
+
+async def _until(pilot, done, seconds: float = 6.0) -> None:
+    """
+    Wait for something that happens on its own schedule, such as a retry.
+    """
+    for _ in range(int(seconds / 0.05)):
+        if done():
+            return
+        await pilot.pause(0.05)
+    raise AssertionError("it did not happen in time")
+
+
+async def test_the_title_bar_says_the_bar_is_there(tmp_path: Path) -> None:
+    manager = manager_for(tmp_path, _bar())
+    app = AppsManager(manager, "192.168.1.20")
+    async with app.run_test(size=SIZE) as pilot:
+        await _until(pilot, lambda: "connected" in app.sub_title)
+
+        assert app.sub_title == "192.168.1.20 - connected, API 27.9.0"
+        assert not any("Connected" in t for t in _toasts(app)), (
+            "reaching it the first time is not news"
+        )
+
+
+async def test_losing_the_bar_is_said_in_the_title_the_banner_and_a_toast(
+    tmp_path: Path,
+) -> None:
+    bar = _bar(("a.app", "Alpha", "1.0.0"))
+    manager = manager_for(tmp_path, bar)
+    app = AppsManager(manager, "192.168.1.20")
+    async with app.run_test(size=SIZE) as pilot:
+        await _until(pilot, lambda: "connected" in app.sub_title)
+
+        bar.go_away()
+        await _until(pilot, lambda: "lost" in app.sub_title)
+
+        assert app.sub_title == "192.168.1.20 - connection lost - retrying"
+        toast = next(t for t in _toasts(app) if t.startswith("Disconnected"))
+        assert "Lost the connection to the bar" in toast
+        banner = app.screen.query_one("#banner", Static)
+        assert banner.display is True
+        assert "not answering" in str(banner.render())
+
+
+async def test_the_bar_coming_back_is_said_and_the_list_is_looked_at_again(
+    tmp_path: Path,
+) -> None:
+    """
+    A bar that has been restarted may hold different apps, so the list is
+    read again rather than left as it was.
+    """
+    bar = _bar(("a.app", "Alpha", "1.0.0"))
+    manager = manager_for(tmp_path, bar)
+    app = AppsManager(manager, "192.168.1.20")
+    async with app.run_test(size=SIZE) as pilot:
+        await _until(pilot, lambda: len(_rows(app)) == 1)
+        bar.go_away()
+        await _until(pilot, lambda: "lost" in app.sub_title)
+
+        bar.apps.append(types.AppInfo(id="b.app", name="Beta", version="2"))
+        bar.come_back()
+        await _until(pilot, lambda: "connected" in app.sub_title)
+        await _until(pilot, lambda: len(_rows(app)) == 2)
+
+        assert any(
+            t.startswith("Connected: Connected again after") for t in _toasts(app)
+        )
+        assert app.screen.query_one("#banner", Static).display is False
+
+
+async def test_an_update_that_changed_the_firmware_says_so_when_the_bar_returns(
+    tmp_path: Path,
+) -> None:
+    bar = _bar()
+    manager = manager_for(tmp_path, bar)
+    app = AppsManager(manager, "192.168.1.20")
+    async with app.run_test(size=SIZE) as pilot:
+        await _until(pilot, lambda: "connected" in app.sub_title)
+
+        bar.go_away()
+        await _until(pilot, lambda: "lost" in app.sub_title)
+        bar.come_back(api="28.0.0")
+        await _until(pilot, lambda: "28.0.0" in app.sub_title)
+
+        assert any(
+            "went from 27.9.0 to 28.0.0" in t and t.startswith("Firmware changed")
+            for t in _toasts(app)
+        )
+
+
+async def test_a_bar_that_is_not_there_at_the_start_is_one_error_not_a_stream(
+    tmp_path: Path,
+) -> None:
+    bar = _bar()
+    bar.go_away()
+    manager = manager_for(tmp_path, bar)
+    app = AppsManager(manager, "192.168.1.20")
+    async with app.run_test(size=SIZE) as pilot:
+        await _until(pilot, lambda: "not reachable" in app.sub_title)
+        await pilot.pause(2.5)  # long enough for several retries
+
+        errors = [t for t in _toasts(app) if t.startswith("Not connected")]
+        assert len(errors) == 1
+
+        bar.come_back()
+        await _until(pilot, lambda: "connected" in app.sub_title)
+        assert any("Connected to the bar after" in t for t in _toasts(app))
+
+
+async def test_without_a_bar_there_is_nothing_to_watch(tmp_path: Path) -> None:
+    manager = manager_for(tmp_path, None)
+    app = AppsManager(manager, "")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        assert app.sub_title == "no bar"
+        assert not app.workers or all(w.group != "link" for w in app.workers)

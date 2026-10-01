@@ -5,6 +5,7 @@ table, a bar that keeps its apps in a list, and archives built in memory.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import tarfile
@@ -67,6 +68,42 @@ class FakeBar(Bar):
         self.done: list[str] = []
         self.staged_package: bytes = b""
         self.broken: str = ""
+        # The connection: the API it reports, whether it answers, and the
+        # socket the manager holds open to it.
+        self.api = "27.9.0"
+        self.online = True
+        self._socket: asyncio.Event | None = None
+
+    def _event(self) -> asyncio.Event:
+        # Made on first use, inside the loop that will wait on it.
+        if self._socket is None:
+            self._socket = asyncio.Event()
+        return self._socket
+
+    async def version(self, timeout: float = 4.0) -> str:
+        if not self.online:
+            raise ManagerError("the bar did not answer (connection refused)")
+        return self.api
+
+    async def hold(self) -> None:
+        """
+        An open socket: returns only when the bar is told to go away.
+        """
+        if not self.online:
+            raise ManagerError("the bar did not answer (connection refused)")
+        event = self._event()
+        await event.wait()
+        event.clear()
+        raise ManagerError("the connection closed")
+
+    def go_away(self) -> None:
+        self.online = False
+        self._event().set()
+
+    def come_back(self, api: str | None = None) -> None:
+        self.online = True
+        if api is not None:
+            self.api = api
 
     async def installed(self) -> list[types.AppInfo]:
         if self.broken:

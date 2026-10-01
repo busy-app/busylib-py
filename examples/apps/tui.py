@@ -16,6 +16,7 @@ from pathlib import Path
 from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.css.query import NoMatches
 from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Markdown, Static
@@ -31,6 +32,7 @@ from .dialogs import (
     Sources,
     Verdict,
 )
+from . import link
 from .launcher import format_env
 from .manager import Entry, Manager
 from .model import ManagerError
@@ -112,6 +114,8 @@ class Home(Screen[None]):
         # Sentences about things that went wrong in the background, shown in
         # the banner until the next check says otherwise.
         self.notices: list[str] = []
+        # What listing the bar last complained about.
+        self.problem = ""
 
     @property
     def manager(self) -> Manager:
@@ -141,11 +145,8 @@ class Home(Screen[None]):
 
     async def reload(self, keep: str | None = None) -> None:
         entries, problem = await self.manager.entries()
-        warning = self.manager.store.warning
-        banner = self.query_one("#banner", Static)
-        sentences = [item for item in (problem, warning, *self.notices) if item]
-        banner.update(" · ".join(sentences))
-        banner.display = bool(sentences)
+        self.problem = problem
+        self.show_banner()
 
         table = self.query_one(DataTable)
         remembered = keep or self.current_key()
@@ -162,6 +163,27 @@ class Home(Screen[None]):
         if remembered in self.entries:
             table.move_cursor(row=table.get_row_index(remembered))
         self.show(self.current())
+
+    def show_banner(self) -> None:
+        """
+        The one line above the list that says what is wrong right now.
+        """
+        sentences = [
+            item
+            for item in (
+                self.app.link_problem,  # type: ignore[attr-defined]
+                self.problem,
+                self.manager.store.warning,
+                *self.notices,
+            )
+            if item
+        ]
+        try:
+            banner = self.query_one("#banner", Static)
+        except NoMatches:
+            return  # not drawn yet; the next reload draws it from the same state
+        banner.update(" · ".join(dict.fromkeys(sentences)))
+        banner.display = bool(sentences)
 
     async def check_updates(self) -> None:
         """
@@ -588,10 +610,74 @@ class AppsManager(App[None]):
         self.manager = manager
         self.address = address
         self._close = close
+        self.home = Home()
+        # Said in the banner while the bar is away; empty when it is there.
+        self.link_problem = ""
 
-    def on_mount(self) -> None:
-        self.sub_title = self.address or "no bar"
-        self.push_screen(Home())
+    async def on_mount(self) -> None:
+        self.set_link("no bar" if self.manager.bar is None else "connecting...")
+        # Waited for, because the watch reports into the list's own window: a
+        # report that arrives before it exists would fail inside the watch and
+        # end it, and the connection would go unwatched with nothing to say so.
+        await self.push_screen(self.home)
+        if self.manager.bar is not None:
+            self.run_worker(self.keep_link(), exclusive=True, group="link")
+
+    def set_link(self, state: str) -> None:
+        """
+        Put the state of the connection in the title bar, where it is always
+        in sight whichever window is open.
+        """
+        self.sub_title = f"{self.address} - {state}" if self.address else state
+
+    async def keep_link(self) -> None:
+        bar = self.manager.bar
+        assert bar is not None
+        await link.watch(bar, self.on_link)
+
+    def on_link(self, event: link.Event) -> None:
+        """
+        The bar went, or came back. Say so in the title bar and in a toast,
+        and when it is back, look again: a bar that has been restarted may
+        have different apps, or a different firmware.
+        """
+        if isinstance(event, link.Down):
+            self.link_problem = "the bar is not answering - trying again"
+            if event.first:
+                self.set_link("not reachable - retrying")
+                self.notify(
+                    f"Cannot reach the bar: {event.reason}. Trying again.",
+                    title="Not connected",
+                    severity="error",
+                    timeout=10,
+                )
+            else:
+                self.set_link("connection lost - retrying")
+                self.notify(
+                    f"Lost the connection to the bar ({event.reason}). Trying again.",
+                    title="Disconnected",
+                    severity="warning",
+                    timeout=10,
+                )
+        else:
+            self.link_problem = ""
+            self.set_link(f"connected, API {event.api}" if event.api else "connected")
+            if event.after is not None:
+                gone = f"{event.after:.0f} s"
+                self.notify(
+                    f"Connected again after {gone}."
+                    if event.previous
+                    else f"Connected to the bar after {gone}.",
+                    title="Connected",
+                )
+            if event.previous and event.api and event.previous != event.api:
+                self.notify(
+                    f"The bar's API went from {event.previous} to {event.api}: "
+                    "its firmware changed.",
+                    title="Firmware changed",
+                )
+            self.home.run_worker(self.home.reload(), exclusive=True, group="reload")
+        self.home.show_banner()
 
     async def on_unmount(self) -> None:
         if self._close is not None:

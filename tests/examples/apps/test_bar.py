@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+
 import httpx2
 import pytest
 
-from busylib import AsyncBusyBar, types
+from busylib import AsyncBusyBar, exceptions, types
 from examples.apps.bar import Bar, replacing
 from examples.apps.model import ManagerError
 
@@ -169,3 +171,79 @@ def test_what_installing_will_do_is_said_before_it_is_done(
     )
 
     assert replacing(staged) == expected
+
+
+# Whether the bar is there ---------------------------------------------------------
+
+
+def _bar_of(client: object, address: str = "") -> Bar:
+    # The fake scripts only the two calls the connection makes; the rest of the
+    # client's surface is not what these tests are about.
+    return Bar(client, address)  # type: ignore[arg-type]
+
+
+class _Client:
+    """
+    The two calls the connection needs, scripted.
+    """
+
+    def __init__(self, version=None, stream=None) -> None:
+        self._version = version
+        self._stream = stream
+
+    async def version(self):
+        if isinstance(self._version, Exception):
+            raise self._version
+        if self._version == "hang":
+            await asyncio.sleep(30)
+        return types.VersionInfo(api_semver=self._version)
+
+    async def stream_status_ws(self, **_):
+        for item in self._stream or []:
+            if isinstance(item, Exception):
+                raise item
+            yield item
+
+
+async def test_the_version_is_what_the_bar_reports() -> None:
+    assert await _bar_of(_Client("27.9.0")).version() == "27.9.0"
+
+
+async def test_a_bar_that_does_not_answer_a_question_is_known_to_be_gone_quickly() -> (
+    None
+):
+    """
+    The client retries a failed request, which suits a command and not a
+    question asked every few seconds.
+    """
+    with pytest.raises(ManagerError, match="no answer in 0.05 s"):
+        await _bar_of(_Client("hang")).version(timeout=0.05)
+
+
+async def test_a_bar_that_refuses_the_question_says_where_it_was() -> None:
+    client = _Client(
+        exceptions.BusyBarRequestError("refused", method="GET", path="/api/version")
+    )
+
+    with pytest.raises(ManagerError, match="at 10.0.4.20 did not answer"):
+        await _bar_of(client, "10.0.4.20").version()
+
+
+async def test_holding_returns_when_the_socket_closes() -> None:
+    await _bar_of(_Client(stream=[b"a", b"b"])).hold()
+
+
+async def test_holding_says_how_the_socket_broke() -> None:
+    client = _Client(
+        stream=[b"a", exceptions.BusyBarWebSocketError("closed", path="/api/status/ws")]
+    )
+
+    with pytest.raises(ManagerError, match="did not answer"):
+        await _bar_of(client, "10.0.4.20").hold()
+
+
+async def test_a_socket_that_could_not_be_opened_is_the_same_kind_of_answer() -> None:
+    client = _Client(stream=[OSError("connection refused")])
+
+    with pytest.raises(ManagerError, match="the connection broke"):
+        await _bar_of(client).hold()

@@ -58,6 +58,47 @@ panel on the right is the card of whatever is highlighted.
 | `r` | Refresh |
 | `q` | Quit the manager |
 
+## When the bar goes away
+
+A manager that stays open will see the bar go and come back: it restarts after a
+firmware update, its network drops, a cable moves. A list that quietly goes
+stale is worse than one that says it has lost the bar, so the manager keeps a
+connection and reports it:
+
+- the **title bar** always shows the state - `connected, API 27.9.0`,
+  `connection lost - retrying`, or `not reachable - retrying`;
+- a **toast** appears when the connection is lost and when it returns, with how
+  long it was gone; a bar that was never reachable gets one error, not one per
+  retry;
+- when it **returns**, the list is read again, since a restarted bar may hold
+  different apps, and if its API version changed the toast says so - which is how
+  a firmware update shows up from here.
+
+The connection is a WebSocket to the bar's status stream, which closes the
+moment the bar reboots or its network goes, so the loss is seen at once; a bar
+that vanishes without a word is caught by the socket's own keepalive within
+about forty seconds. A closed socket is checked against a fresh question before
+it is called a loss, and if the bar answers but the socket cannot be held (a
+firmware without it, a proxy that does not pass sockets) the manager quietly
+asks every few seconds instead. Retries wait 1, 2, 4, 8 and then 15 seconds.
+
+## A bar behind a tunnel
+
+A bar you cannot reach directly - on a Raspberry Pi's USB network, say - can be
+forwarded to a local port and given to the manager as an address:
+
+```bash
+ssh -N -L 127.0.0.1:8080:10.0.4.20:80 -J jump.example.com user@pi.local
+.venv/bin/python -m examples.apps.main 127.0.0.1:8080
+```
+
+An address is needed because discovery does not cross a tunnel. Pick a local
+port the browser will accept if you also want the bar's own web interface there:
+Chrome, Edge and the Claude Code preview refuse a handful of ports outright -
+`10080` among them - so a forward that answers `curl` can still be a blank page
+in a browser. `8080`, `8000` and `8888` are fine. A bar reached this way sees the
+requests arrive over USB, which is why it asks for no access key.
+
 ## Sources
 
 A source is a GitHub repository. `i` opens the list of them; `a` adds one.

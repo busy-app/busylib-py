@@ -8,7 +8,9 @@ can replace this one class with a table.
 
 from __future__ import annotations
 
-from typing import Protocol
+import asyncio
+from collections.abc import AsyncIterator
+from typing import Any, Protocol
 
 from busylib import exceptions, types
 
@@ -26,6 +28,8 @@ class AppsClient(Protocol):
     async def apps_launch(self, app_id: str) -> types.SuccessResponse: ...
     async def apps_quit(self) -> types.SuccessResponse: ...
     async def apps_delete(self, app_id: str) -> types.SuccessResponse: ...
+    async def version(self) -> types.VersionInfo: ...
+    def stream_status_ws(self) -> AsyncIterator[Any]: ...
 
 
 NO_APPS_YET = (
@@ -124,6 +128,47 @@ class Bar:
             raise self._explain(err, f"removing {app_id}") from err
         except exceptions.BusyBarError as err:
             raise self._unreachable(err) from err
+
+    # The connection ----------------------------------------------------
+
+    async def version(self, timeout: float = 4.0) -> str:
+        """
+        The API version the bar reports, which is also the quickest honest
+        answer to "is it there".
+
+        The client retries a failed request, which is right for a command and
+        wrong for a question asked every few seconds: a bar that has gone
+        should be known to have gone in `timeout` seconds, not after every
+        retry has had its turn.
+        """
+        try:
+            info = await asyncio.wait_for(self.client.version(), timeout)
+        except asyncio.TimeoutError as err:
+            raise ManagerError(f"no answer in {timeout:g} s") from err
+        except exceptions.BusyBarError as err:
+            raise self._unreachable(err) from err
+        return info.api_semver or ""
+
+    async def hold(self) -> None:
+        """
+        Keep a WebSocket to the bar open, and return when it closes.
+
+        A socket is the quickest way to learn a bar has gone: when it reboots
+        or its network drops, the connection closes at once, where polling
+        would find out at the next poll. Its keepalive pings catch the bar
+        that vanishes without saying so, within about forty seconds.
+
+        What arrives on it is not used here; the manager only needs to know
+        whether it is still there. Raises `ManagerError` if the socket could
+        not be opened or broke, and returns if it was closed cleanly.
+        """
+        try:
+            async for _ in self.client.stream_status_ws(decode_protobuf=False):
+                pass
+        except exceptions.BusyBarError as err:
+            raise self._unreachable(err) from err
+        except OSError as err:
+            raise ManagerError(f"the connection broke ({err})") from err
 
     # Messages ----------------------------------------------------------
 
