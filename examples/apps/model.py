@@ -107,10 +107,21 @@ class Source:
     asset: str = "*.tgz"
     subdir: str = ""
     title: str = ""
+    # What the repository holds. "app" is a JavaScript app for the bar, got
+    # from a release or built (`mode` says which). "catalog" is a collection
+    # of programs for this computer, one folder each, got from a branch.
+    kind: Literal["app", "catalog"] = "app"
+    branch: str = ""
 
     @property
     def label(self) -> str:
         return self.title or self.repo
+
+    @property
+    def where_from(self) -> str:
+        if self.kind == "catalog":
+            return "programs"
+        return "releases" if self.mode == "release" else "source (build)"
 
 
 @dataclass
@@ -121,6 +132,10 @@ class ExternalApp:
 
     It is a card (a name and a line about it) plus what is needed to run
     it: a folder and a command. Nothing about it is checked until it is run.
+
+    The command may use `{host}`, the address of the bar the manager is
+    connected to, and `{python}`; both are filled in when it runs, so a
+    program added once follows the bar it is used with.
     """
 
     slug: str
@@ -128,6 +143,12 @@ class ExternalApp:
     path: str
     command: str
     description: str = ""
+    # Set in the program's environment when it runs. Only what a person
+    # typed: a template's example values are documentation, not values.
+    env: dict[str, str] = field(default_factory=dict)
+    # Which Python runs it, for `{python}` in the command; empty means the one
+    # running the manager. A program that installed packages has its own.
+    python: str = ""
 
 
 @dataclass(frozen=True)

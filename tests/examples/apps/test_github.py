@@ -4,7 +4,9 @@ import json
 
 import pytest
 
-from examples.apps.github import GitHub, Reply
+from apps_support import BRANCH, RAW, TREE, CatalogNet, manifest_bytes, program
+
+from examples.apps.github import Cache, GitHub, Reply
 from examples.apps.model import Asset, ManagerError, Source, Version
 
 MANIFEST = json.dumps({"id": "demo.app", "name": "Demo", "version": "1.2.0"}).encode()
@@ -269,3 +271,171 @@ def test_a_manifest_path_that_climbs_out_of_the_repository_is_not_followed() -> 
 
     assert GitHub(net, token="").manifest(source, "v1") is None
     assert net.asked == []
+
+
+# Catalogs ----------------------------------------------------------------------
+
+
+CATALOG = Source(repo="busy-app/programs", kind="catalog")
+
+
+def test_a_catalog_is_the_programs_in_its_apps_folder() -> None:
+    net = CatalogNet({"clock": program("Clock"), "weather": program("Weather")})
+
+    found = GitHub(net, token="").catalog(CATALOG)
+
+    assert [a.slug for a in found.apps] == ["clock", "weather"]
+    assert found.commit == "c0ffee" and found.branch == "main"
+    assert found.apps[0].manifest.description == "About Clock"
+    assert sorted(found.apps[0].files) == ["app.py", "manifest.yaml"]
+
+
+def test_the_cards_are_in_name_order_whatever_order_the_listing_came_in() -> None:
+    net = CatalogNet({"z": program("Alpha"), "a": program("zulu")})
+
+    assert [a.name for a in GitHub(net, token="").catalog(CATALOG).apps] == [
+        "Alpha",
+        "zulu",
+    ]
+
+
+def test_asking_again_costs_two_cheap_requests_and_no_downloads() -> None:
+    """
+    The listing comes back as a 304, which GitHub does not count against the
+    hourly limit, and every manifest is already known by its blob sha.
+    """
+    net = CatalogNet({"clock": program("Clock"), "weather": program("Weather")})
+    cache = Cache()
+    GitHub(net, token="", cache=cache).catalog(CATALOG)
+    net.asked.clear()
+
+    def revalidating(url: str, headers: dict[str, str], limit: int) -> Reply:
+        net.asked.append((url, "If-None-Match" in headers))
+        if "If-None-Match" in headers and url in (BRANCH, TREE):
+            return Reply(304)
+        return net(url, headers, limit)
+
+    again = GitHub(revalidating, token="", cache=cache).catalog(CATALOG)
+
+    assert [a.slug for a in again.apps] == ["clock", "weather"]
+    api = [
+        asked for asked in net.asked if asked[0].startswith("https://api.github.com")
+    ]
+    raw = [asked for asked in net.asked if asked[0].startswith(RAW)]
+    assert [sent for _, sent in api[-2:]] == [True, True]
+    assert raw == [], "nothing is downloaded that was seen before"
+
+
+def test_the_cache_survives_a_restart(tmp_path) -> None:
+    net = CatalogNet({"clock": program("Clock")})
+    GitHub(net, token="", cache=Cache(tmp_path / "cache.json")).catalog(CATALOG)
+
+    revived = Cache(tmp_path / "cache.json")
+
+    assert BRANCH in revived.responses and revived.blobs
+
+
+def test_a_cache_that_cannot_be_read_is_just_empty(tmp_path) -> None:
+    (tmp_path / "cache.json").write_text("{ not json")
+
+    cache = Cache(tmp_path / "cache.json")
+
+    assert (cache.responses, cache.blobs) == ({}, {})
+
+
+def test_a_cache_does_not_grow_without_end(tmp_path) -> None:
+    cache = Cache(tmp_path / "cache.json")
+    for number in range(Cache.LIMIT + 50):
+        cache.blobs[f"sha{number}"] = "x"
+    cache.save()
+
+    kept = Cache(tmp_path / "cache.json")
+
+    assert len(kept.blobs) == Cache.LIMIT
+    assert "sha0" not in kept.blobs and f"sha{Cache.LIMIT + 49}" in kept.blobs
+
+
+def test_one_unreadable_manifest_costs_one_card_not_the_catalog() -> None:
+    net = CatalogNet(
+        {
+            "good": program("Good"),
+            "broken": {"app.py": b"x", "manifest.yaml": b"name: X\n  nested: 1\n"},
+            "no-name": {"app.py": b"x", "manifest.yaml": b"author: me\n"},
+        }
+    )
+
+    found = GitHub(net, token="").catalog(CATALOG)
+
+    assert [a.slug for a in found.apps] == ["good"]
+    assert set(found.problems) == {"broken", "no-name"}
+    assert "not readable" in found.problems["broken"]
+
+
+def test_a_folder_without_a_program_in_it_is_reported_not_listed() -> None:
+    net = CatalogNet({"docs-only": {"manifest.yaml": manifest_bytes("Docs")}})
+
+    found = GitHub(net, token="").catalog(CATALOG)
+
+    assert found.apps == ()
+    assert "no app.py" in found.problems["docs-only"]
+
+
+@pytest.mark.parametrize("slug", ["Has Space", "UPPER", "-lead", "a" * 80])
+def test_a_folder_name_that_could_not_be_installed_safely_is_skipped(slug: str) -> None:
+    net = CatalogNet({slug: program("X"), "fine": program("Fine")})
+
+    found = GitHub(net, token="").catalog(CATALOG)
+
+    assert [a.slug for a in found.apps] == ["fine"]
+    assert slug in found.problems
+
+
+def test_a_manifest_that_is_not_the_file_the_listing_named_is_not_trusted() -> None:
+    """
+    The listing names each file by its content; bytes that do not match are
+    something else - a cache, a proxy - and must not become a card.
+    """
+    net = CatalogNet({"clock": program("Clock")})
+    real = net.__call__
+
+    def tampered(url: str, headers: dict[str, str], limit: int) -> Reply:
+        if url.endswith("/apps/clock/manifest.yaml"):
+            return Reply(200, manifest_bytes("Something else"))
+        return real(url, headers, limit)
+
+    found = GitHub(tampered, token="").catalog(CATALOG)
+
+    assert found.apps == () and "did not match" in found.problems["clock"]
+
+
+def test_a_branch_that_does_not_exist_is_said_plainly() -> None:
+    with pytest.raises(ManagerError, match="was not found"):
+        GitHub(lambda url, headers, limit: Reply(404), token="").catalog(CATALOG)
+
+
+def test_a_listing_that_github_cut_short_is_refused() -> None:
+    net = CatalogNet({"clock": program("Clock")})
+    real = net.__call__
+
+    def truncated(url: str, headers: dict[str, str], limit: int) -> Reply:
+        if url == TREE:
+            return Reply(200, json.dumps({"truncated": True, "tree": []}).encode())
+        return real(url, headers, limit)
+
+    with pytest.raises(ManagerError, match="too large"):
+        GitHub(truncated, token="").catalog(CATALOG)
+
+
+def test_a_catalog_names_its_branch_when_it_is_not_main() -> None:
+    asked: list[str] = []
+
+    def spy(url: str, headers: dict[str, str], limit: int) -> Reply:
+        asked.append(url)
+        return Reply(404)
+
+    with pytest.raises(ManagerError):
+        GitHub(spy, token="").catalog(
+            Source(repo="busy-app/programs", kind="catalog", branch="next")
+        )
+
+    assert asked == ["https://api.github.com/repos/busy-app/programs/branches/next"]

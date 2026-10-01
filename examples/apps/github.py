@@ -13,14 +13,15 @@ from __future__ import annotations
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from . import package
+from . import catalog, package
 from .model import (
     MAX_PACKAGE_BYTES,
     REPO,
@@ -80,13 +81,63 @@ def urllib_fetch(url: str, headers: dict[str, str], limit: int) -> Reply:
         raise ManagerError("GitHub did not answer in time") from err
 
 
+class Cache:
+    """
+    What GitHub already told us, kept between runs.
+
+    Two kinds of thing. A response comes with an ETag, and asking again with
+    it gets a 304 that does not count against the hourly limit - which is what
+    makes opening a catalog on every start affordable. A file is named by its
+    blob sha, so it can never be stale and is kept for good.
+    """
+
+    LIMIT = 300
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path
+        self.responses: dict[str, dict[str, str]] = {}
+        self.blobs: dict[str, str] = {}
+        if path is not None:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                self.responses = dict(data.get("responses", {}))
+                self.blobs = dict(data.get("blobs", {}))
+            except (OSError, ValueError, AttributeError):
+                # A cache is allowed to be lost; it is not allowed to be fatal.
+                self.responses, self.blobs = {}, {}
+
+    def save(self) -> None:
+        if self.path is None:
+            return
+        # Newest last, so trimming from the front drops the oldest.
+        for table in (self.responses, self.blobs):
+            for key in list(table)[: max(0, len(table) - self.LIMIT)]:
+                del table[key]
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_suffix(".tmp")
+            temporary.write_text(
+                json.dumps({"responses": self.responses, "blobs": self.blobs}),
+                encoding="utf-8",
+            )
+            os.replace(temporary, self.path)
+        except OSError:
+            pass
+
+
 class GitHub:
     """
     The few questions the manager asks GitHub.
     """
 
-    def __init__(self, fetch: Fetch = urllib_fetch, token: str | None = None) -> None:
+    def __init__(
+        self,
+        fetch: Fetch = urllib_fetch,
+        token: str | None = None,
+        cache: Cache | None = None,
+    ) -> None:
         self.fetch = fetch
+        self.cache = cache or Cache()
         # Raises the 60-requests-an-hour limit for anonymous calls. Read from
         # the environment because that is where people already keep it.
         self.token = token if token is not None else os.environ.get("GITHUB_TOKEN")
@@ -94,15 +145,31 @@ class GitHub:
     # Plumbing ----------------------------------------------------------
 
     def _api(self, path: str) -> object:
+        url = f"{API}{path}"
         headers = {"Accept": "application/vnd.github+json", "User-Agent": USER_AGENT}
         if self.token:
             # Only ever to the API host. A download is sent to another host
             # by a redirect, and a token must not follow it.
             headers["Authorization"] = f"Bearer {self.token}"
-        reply = self.fetch(f"{API}{path}", headers, 8 * 1024 * 1024)
-        self._check(reply, path)
+        remembered = self.cache.responses.get(url)
+        if remembered:
+            headers["If-None-Match"] = remembered["etag"]
+
+        reply = self.fetch(url, headers, 8 * 1024 * 1024)
+        if reply.status == 304 and remembered:
+            body = remembered["body"].encode()
+        else:
+            self._check(reply, path)
+            body = reply.body
+            etag = reply.headers.get("etag")
+            if etag:
+                self.cache.responses.pop(url, None)  # to the newest end
+                self.cache.responses[url] = {
+                    "etag": etag,
+                    "body": body.decode("utf-8", errors="replace"),
+                }
         try:
-            return json.loads(reply.body)
+            return json.loads(body)
         except ValueError as err:
             raise ManagerError(
                 f"GitHub sent something that is not JSON for {path}"
@@ -231,4 +298,93 @@ class GitHub:
     def source_archive(self, source: Source, ref: str) -> bytes:
         return self._download(
             f"{CODELOAD}/{source.repo}/tar.gz/{quote(ref)}", MAX_SOURCE_BYTES
+        )
+
+    # Catalogs ----------------------------------------------------------
+
+    def raw(
+        self, repo: str, ref: str, path: str, limit: int = 8 * 1024 * 1024
+    ) -> bytes:
+        """
+        One file of a repository at a commit, from the host that serves files
+        without counting requests against the API's limit.
+        """
+        return self._download(f"{RAW}/{repo}/{quote(ref)}/{quote(path)}", limit)
+
+    def catalog(self, source: Source) -> catalog.Catalog:
+        """
+        The programs a catalog repository holds, as of its branch's newest
+        commit.
+
+        Two API calls for the listing (a branch, then its tree) and one raw
+        fetch per manifest - none for a manifest seen before, since a file is
+        named by its blob sha. A manifest that cannot be read costs that
+        program's card and is reported; it does not cost the catalog.
+        """
+        if not REPO.match(source.repo):
+            raise ManagerError(f"{source.repo!r} is not an owner/name repository")
+        branch = source.branch or "main"
+        head = self._api(f"/repos/{source.repo}/branches/{quote(branch, safe='')}")
+        commit = head.get("commit", {}).get("sha") if isinstance(head, dict) else None
+        if not isinstance(commit, str):
+            raise ManagerError(f"{source.repo} has no branch {branch!r}")
+
+        listing = self._api(f"/repos/{source.repo}/git/trees/{commit}?recursive=1")
+        if not isinstance(listing, dict):
+            raise ManagerError(f"GitHub did not list {source.repo}")
+        if listing.get("truncated"):
+            raise ManagerError(
+                f"{source.repo} is too large for GitHub to list in one go"
+            )
+
+        folders: dict[str, dict[str, tuple[str, int]]] = {}
+        for entry in listing.get("tree", []):
+            if entry.get("type") != "blob":
+                continue
+            parts = str(entry.get("path", "")).split("/", 2)
+            if len(parts) == 3 and parts[0] == "apps":
+                folders.setdefault(parts[1], {})[parts[2]] = (
+                    str(entry["sha"]),
+                    int(entry.get("size", 0)),
+                )
+
+        problems: dict[str, str] = {}
+
+        def card(slug: str) -> catalog.CatalogApp | None:
+            entries = folders[slug]
+            if not catalog.SLUG.match(slug):
+                problems[slug] = "not a folder name this can install"
+                return None
+            if "manifest.yaml" not in entries or "app.py" not in entries:
+                problems[slug] = "has no app.py and manifest.yaml"
+                return None
+            sha = entries["manifest.yaml"][0]
+            text = self.cache.blobs.get(sha)
+            try:
+                if text is None:
+                    data = self.raw(
+                        source.repo, commit, f"apps/{slug}/manifest.yaml", 256 * 1024
+                    )
+                    if catalog.git_blob_sha(data) != sha:
+                        problems[slug] = "its manifest did not match the listing"
+                        return None
+                    text = data.decode("utf-8-sig", errors="replace")
+                    self.cache.blobs[sha] = text
+                manifest = catalog.parse_manifest(text)
+            except ManagerError as err:
+                problems[slug] = str(err)
+                return None
+            return catalog.app_from_listing(slug, manifest, entries)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            cards = list(pool.map(card, sorted(folders)))
+        self.cache.save()
+
+        apps = sorted((app for app in cards if app), key=lambda app: app.name.lower())
+        return catalog.Catalog(
+            repo=source.repo,
+            branch=branch,
+            commit=commit,
+            apps=tuple(apps),
+            problems=problems,
         )

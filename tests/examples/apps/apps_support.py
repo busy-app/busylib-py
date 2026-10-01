@@ -11,6 +11,7 @@ import tarfile
 from pathlib import Path
 
 from busylib import types
+from examples.apps import catalog as catalog_module
 from examples.apps.bar import Bar
 from examples.apps.github import GitHub, Reply
 from examples.apps.launcher import Launcher
@@ -112,3 +113,70 @@ def manager_for(
         bar,
         **kwargs,
     )
+
+
+# A repository of programs, as GitHub would serve it -------------------------------
+
+BRANCH = "https://api.github.com/repos/busy-app/programs/branches/main"
+TREE = "https://api.github.com/repos/busy-app/programs/git/trees/c0ffee?recursive=1"
+RAW = "https://raw.githubusercontent.com/busy-app/programs/c0ffee"
+
+
+def manifest_bytes(name: str) -> bytes:
+    return (
+        f"name: {name}\nauthor: me\ndescription: About {name}\ntags:\n  - x\n".encode()
+    )
+
+
+class CatalogNet:
+    """
+    A repository of programs, with the counts of what was asked of it.
+    """
+
+    def __init__(self, programs: dict[str, dict[str, bytes]]) -> None:
+        self.programs = programs
+        self.asked: list[tuple[str, bool]] = []
+
+    def tree(self) -> dict:
+        return {
+            "truncated": False,
+            "tree": [
+                {
+                    "type": "blob",
+                    "path": f"apps/{slug}/{name}",
+                    "sha": catalog_module.git_blob_sha(data),
+                    "size": len(data),
+                }
+                for slug, files in self.programs.items()
+                for name, data in files.items()
+            ],
+        }
+
+    def __call__(self, url: str, headers: dict[str, str], limit: int) -> Reply:
+        self.asked.append((url, "If-None-Match" in headers))
+        if url == BRANCH:
+            return self._json({"commit": {"sha": "c0ffee"}}, "b1")
+        if url == TREE:
+            return self._json(self.tree(), "t1")
+        if url.startswith(RAW + "/apps/"):
+            _, _, slug, name = url.removeprefix(RAW).split("/", 3)
+            data = self.programs.get(slug, {}).get(name)
+            return Reply(200, data) if data is not None else Reply(404)
+        return Reply(404)
+
+    def _json(self, body: object, etag: str) -> Reply:
+        return Reply(200, json.dumps(body).encode(), {"etag": etag})
+
+
+def program(name: str) -> dict[str, bytes]:
+    return {"app.py": b"print('hi')\n", "manifest.yaml": manifest_bytes(name)}
+
+
+def manager_with_catalog(tmp_path: Path, programs: dict, bar=None, **kwargs):
+    """
+    A manager whose GitHub is a catalog of `programs`, and that net.
+    """
+    net = CatalogNet(programs)
+    manager = manager_for(tmp_path, bar, **kwargs)
+    manager.github.fetch = net
+    return net, manager
