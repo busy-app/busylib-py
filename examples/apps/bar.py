@@ -153,16 +153,21 @@ class Bar:
         Then the switch: moving it replaces whatever is running with the app
         for that position, which stops the script. The bar ignores a move to
         the position it already thinks it is at, and which that is cannot be
-        known, so the move goes to Settings and then to Apps: whichever the
+        known, so the move goes to Off and then back to Apps: whichever the
         bar was at, one of the two is a real change, and it ends in the Apps
         menu, which is where quitting an app leads anyway.
+
+        Off is the gentle place to go through. Its app plays the switching-off
+        animation and lets the displays sleep, and leaves the network alone, so
+        the move back arrives; Settings and Busy would start an app of their
+        own for a moment.
 
         The pause lets each change take effect before the next one: the app
         has to be stopped, and joined, before it is replaced again.
         """
         try:
             for step, key in enumerate(
-                (types.InputKey.BACK, types.InputKey.SETTINGS, types.InputKey.APPS)
+                (types.InputKey.BACK, types.InputKey.OFF, types.InputKey.APPS)
             ):
                 if step:
                     await sleep(pause)

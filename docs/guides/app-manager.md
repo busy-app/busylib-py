@@ -70,17 +70,20 @@ tried and failed, the manager does **not** reach for the switch on its own. It
 asks first, because the other way changes what the bar is showing:
 
 > Stop the app by moving the switch? ... press Back and then move the bar's
-> switch to Settings and to Apps, which ends the app and leaves the bar on the
-> Apps menu. Whatever it was showing is replaced.
+> switch to Off and back to Apps, which ends the app and leaves the bar on the
+> Apps menu. The displays go dark for a moment, and whatever was showing is
+> replaced.
 
-On a yes it presses Back, waits, moves the switch to Settings, waits, and moves
-it to Apps. Back goes first because it costs nothing, but the launcher swallows
+On a yes it presses Back, waits, moves the switch to Off, waits, and moves it
+back to Apps. Back goes first because it costs nothing, but the launcher swallows
 it while a script runs, so it helps only a script that handles Back itself. The
 switch is what works: moving it replaces the running app with the app for that
 position, and that stops the script. Two moves, because the bar ignores a move
 to the position it believes it is already at and that cannot be known from
-outside - whichever it was, one of Settings and Apps is a real change. It ends on
-the Apps menu, which is also where a normal quit leads.
+outside - whichever it was, one of Off and Apps is a real change. Off is the
+gentle place to go through: its app plays the switching-off animation and lets
+the displays sleep, and leaves the network alone, so the move back arrives. It
+ends on the Apps menu, which is also where a normal quit leads.
 
 ## When the bar goes away
 

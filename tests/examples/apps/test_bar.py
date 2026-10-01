@@ -281,10 +281,10 @@ async def test_no_app_running_is_not_a_reason_to_move_the_switch() -> None:
     assert not isinstance(raised.value, CannotQuitDirectly)
 
 
-async def test_leaving_by_the_switch_goes_back_then_settings_then_apps() -> None:
+async def test_leaving_by_the_switch_goes_back_then_off_then_apps() -> None:
     """
     The bar ignores a move to the position it believes it is at, and which that
-    is cannot be known - so the move is to Settings and then to Apps, and one
+    is cannot be known - so the move is to Off and then back to Apps, and one
     of the two is always a real change.
     """
     firmware = _Firmware({("POST", "/api/input"): (200, {"result": "OK"})})
@@ -295,7 +295,7 @@ async def test_leaving_by_the_switch_goes_back_then_settings_then_apps() -> None
 
     await firmware.bar().leave_by_switch(pause=1.5, sleep=sleep)
 
-    assert [r.url.params["key"] for r in firmware.seen] == ["back", "settings", "apps"]
+    assert [r.url.params["key"] for r in firmware.seen] == ["back", "off", "apps"]
     assert pauses == [1.5, 1.5], "each change gets time to take effect before the next"
 
 

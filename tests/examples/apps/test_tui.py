@@ -958,7 +958,7 @@ async def test_a_bar_that_cannot_quit_is_asked_about_before_its_switch_is_touche
 
         text = _confirm_text(app)
         assert "Stop the app by moving the switch?" in text
-        assert "Settings and to Apps" in text and "replaced" in text
+        assert "Off and back to Apps" in text and "replaced" in text
         assert bar.done == [], "nothing is pressed while the question is open"
 
 

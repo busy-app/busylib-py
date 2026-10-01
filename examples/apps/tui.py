@@ -700,9 +700,9 @@ class AppsManager(App[None]):
                 Confirm(
                     "Stop the app by moving the switch?",
                     f"{err}. The other way is to press Back and then move the "
-                    "bar's switch to Settings and to Apps, which ends the app "
-                    "and leaves the bar on the Apps menu. Whatever it was "
-                    "showing is replaced.",
+                    "bar's switch to Off and back to Apps, which ends the app "
+                    "and leaves the bar on the Apps menu. The displays go "
+                    "dark for a moment, and whatever was showing is replaced.",
                     ok="Stop the app",
                     variant="warning",
                 )
