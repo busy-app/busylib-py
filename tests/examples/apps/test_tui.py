@@ -782,6 +782,25 @@ def _toasts(app: AppsManager) -> list[str]:
     return [f"{n.title}: {n.message}" for n in app._notifications]
 
 
+async def _toast(pilot, app: AppsManager, text: str) -> str:
+    """
+    Wait for a toast that says `text`, and return it.
+
+    A toast is not there the moment `notify` returns: it is a message the app
+    handles a little later, while the title bar changes at once. Reading the
+    toasts straight after seeing the title change is a race, and a test that
+    wins it on a fast machine and loses it on a slow one.
+    """
+    found: list[str] = []
+
+    def seen() -> bool:
+        found[:] = [t for t in _toasts(app) if text in t]
+        return bool(found)
+
+    await _until(pilot, seen)
+    return found[0]
+
+
 async def _until(pilot, done, seconds: float = 6.0) -> None:
     """
     Wait for something that happens on its own schedule, such as a retry.
@@ -800,6 +819,7 @@ async def test_the_title_bar_says_the_bar_is_there(tmp_path: Path) -> None:
         await _until(pilot, lambda: "connected" in app.sub_title)
 
         assert app.sub_title == "192.168.1.20 - connected, API 27.9.0"
+        await pilot.pause(0.5)  # long enough for a toast to have shown, were there one
         assert not any("Connected" in t for t in _toasts(app)), (
             "reaching it the first time is not news"
         )
@@ -818,8 +838,8 @@ async def test_losing_the_bar_is_said_in_the_title_the_banner_and_a_toast(
         await _until(pilot, lambda: "lost" in app.sub_title)
 
         assert app.sub_title == "192.168.1.20 - connection lost - retrying"
-        toast = next(t for t in _toasts(app) if t.startswith("Disconnected"))
-        assert "Lost the connection to the bar" in toast
+        toast = await _toast(pilot, app, "Lost the connection to the bar")
+        assert toast.startswith("Disconnected")
         banner = app.screen.query_one("#banner", Static)
         assert banner.display is True
         assert "not answering" in str(banner.render())
@@ -845,8 +865,8 @@ async def test_the_bar_coming_back_is_said_and_the_list_is_looked_at_again(
         await _until(pilot, lambda: "connected" in app.sub_title)
         await _until(pilot, lambda: len(_rows(app)) == 2)
 
-        assert any(
-            t.startswith("Connected: Connected again after") for t in _toasts(app)
+        assert (await _toast(pilot, app, "Connected again after")).startswith(
+            "Connected"
         )
         assert app.screen.query_one("#banner", Static).display is False
 
@@ -865,10 +885,8 @@ async def test_an_update_that_changed_the_firmware_says_so_when_the_bar_returns(
         bar.come_back(api="28.0.0")
         await _until(pilot, lambda: "28.0.0" in app.sub_title)
 
-        assert any(
-            "went from 27.9.0 to 28.0.0" in t and t.startswith("Firmware changed")
-            for t in _toasts(app)
-        )
+        toast = await _toast(pilot, app, "went from 27.9.0 to 28.0.0")
+        assert toast.startswith("Firmware changed")
 
 
 async def test_a_bar_that_is_not_there_at_the_start_is_one_error_not_a_stream(
@@ -880,6 +898,7 @@ async def test_a_bar_that_is_not_there_at_the_start_is_one_error_not_a_stream(
     app = AppsManager(manager, "192.168.1.20")
     async with app.run_test(size=SIZE) as pilot:
         await _until(pilot, lambda: "not reachable" in app.sub_title)
+        await _toast(pilot, app, "Cannot reach the bar")
         await pilot.pause(2.5)  # long enough for several retries
 
         errors = [t for t in _toasts(app) if t.startswith("Not connected")]
@@ -887,7 +906,7 @@ async def test_a_bar_that_is_not_there_at_the_start_is_one_error_not_a_stream(
 
         bar.come_back()
         await _until(pilot, lambda: "connected" in app.sub_title)
-        assert any("Connected to the bar after" in t for t in _toasts(app))
+        await _toast(pilot, app, "Connected to the bar after")
 
 
 async def test_without_a_bar_there_is_nothing_to_watch(tmp_path: Path) -> None:
@@ -921,7 +940,7 @@ async def test_x_asks_the_bar_to_quit_and_that_is_all_when_it_can(
 
         assert bar.done == ["quit"]
         assert not app.screen.query("#yes"), "no question when nothing needs asking"
-        assert any("Quit the app on the bar" in t for t in _toasts(app))
+        await _toast(pilot, app, "Quit the app on the bar")
 
 
 async def test_a_bar_that_cannot_quit_is_asked_about_before_its_switch_is_touched(
@@ -974,7 +993,7 @@ async def test_saying_yes_leaves_the_app_by_the_switch_and_says_so(
         await _settle_longer(pilot)
 
         assert bar.done == ["switch"]
-        assert any("Left the app by moving the switch" in t for t in _toasts(app))
+        await _toast(pilot, app, "Left the app by moving the switch")
 
 
 async def test_when_nothing_is_running_there_is_no_question_and_no_switch(
@@ -992,7 +1011,7 @@ async def test_when_nothing_is_running_there_is_no_question_and_no_switch(
 
         assert bar.done == []
         assert not app.screen.query("#yes")
-        assert any("no app is running" in t for t in _toasts(app))
+        await _toast(pilot, app, "no app is running")
 
 
 async def test_the_dashboard_asks_the_same_question(home_manager: Manager) -> None:
