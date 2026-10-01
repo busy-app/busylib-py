@@ -9,6 +9,7 @@ from .base import DEFAULT_BACKOFF
 
 from .access import AccessMixin, AsyncAccessMixin
 from .account import AccountMixin, AsyncAccountMixin
+from .apps import AppsMixin, AsyncAppsMixin
 from .busy import AsyncBusyMixin, BusyMixin
 from .assets import AssetsMixin, AsyncAssetsMixin
 from .audio import AsyncAudioMixin, AudioMixin
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 class BusyBar(
     AccessMixin,
     AccountMixin,
+    AppsMixin,
     BusyMixin,
     TimeMixin,
     UpdaterMixin,
@@ -123,6 +125,7 @@ class BusyBar(
 class AsyncBusyBar(
     AsyncAccessMixin,
     AsyncAccountMixin,
+    AsyncAppsMixin,
     AsyncBusyMixin,
     AsyncTimeMixin,
     AsyncUpdaterMixin,
