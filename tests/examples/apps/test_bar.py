@@ -376,7 +376,13 @@ class _Logs:
     The three calls a log dump makes, scripted and recorded.
     """
 
-    def __init__(self, *, dump=None, read=b"log text", remove=None) -> None:
+    def __init__(
+        self,
+        *,
+        dump: object = None,
+        read: bytes | Exception = b"log text",
+        remove: Exception | None = None,
+    ) -> None:
         self.calls: list[str] = []
         self._dump, self._read, self._remove = dump, read, remove
 
