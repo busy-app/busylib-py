@@ -366,3 +366,88 @@ async def test_a_refused_key_says_why() -> None:
 @pytest.mark.asyncio
 async def test_a_display_that_cannot_be_read_is_just_no_picture() -> None:
     assert await _Firmware({}).bar().front_screen() is None
+
+
+# The bar's log --------------------------------------------------------------------
+
+
+class _Logs:
+    """
+    The three calls a log dump makes, scripted and recorded.
+    """
+
+    def __init__(self, *, dump=None, read=b"log text", remove=None) -> None:
+        self.calls: list[str] = []
+        self._dump, self._read, self._remove = dump, read, remove
+
+    async def log_dump(self, filename=None, *, path=None):
+        self.calls.append(f"dump filename={filename} path={path}")
+        outcomes = self._dump if isinstance(self._dump, list) else [self._dump]
+        outcome = outcomes[min(len(self.calls) - 1, len(outcomes) - 1)]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return types.LogDumpResponse(result="OK", path=path or f"/ext/{filename}.txt")
+
+    async def storage_read(self, path):
+        self.calls.append(f"read {path}")
+        if isinstance(self._read, Exception):
+            raise self._read
+        return self._read
+
+    async def storage_remove(self, path):
+        self.calls.append(f"remove {path}")
+        if isinstance(self._remove, Exception):
+            raise self._remove
+        return types.SuccessResponse(result="OK")
+
+
+def _api_error(status: int) -> exceptions.BusyBarAPIError:
+    return exceptions.BusyBarAPIError("no", status_code=status)
+
+
+@pytest.mark.asyncio
+async def test_the_log_is_dumped_read_and_the_file_removed_again() -> None:
+    client = _Logs(read=b"line one\r\nline two")
+
+    data = await _bar_of(client).fetch_log()
+
+    assert data == b"line one\r\nline two"
+    assert client.calls == [
+        "dump filename=busy_apps_manager path=None",
+        "read /ext/busy_apps_manager.txt",
+        "remove /ext/busy_apps_manager.txt",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_firmware_before_the_name_form_is_asked_for_a_path() -> None:
+    client = _Logs(dump=[_api_error(400), None])
+
+    await _bar_of(client).fetch_log()
+
+    assert client.calls[:2] == [
+        "dump filename=busy_apps_manager path=None",
+        "dump filename=None path=/ext/busy_apps_manager.txt",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_file_that_cannot_be_removed_does_not_cost_the_log() -> None:
+    client = _Logs(remove=exceptions.BusyBarError("busy"))
+
+    assert await _bar_of(client).fetch_log() == b"log text"
+
+
+@pytest.mark.asyncio
+async def test_a_bar_that_wants_its_key_says_so_for_the_log_too() -> None:
+    with pytest.raises(ManagerError, match="needs its access key"):
+        await _bar_of(_Logs(dump=_api_error(403))).fetch_log()
+
+
+@pytest.mark.asyncio
+async def test_a_bar_that_goes_while_the_log_is_read_is_said_to_be_gone() -> None:
+    client = _Logs(read=exceptions.BusyBarError("reset"))
+
+    with pytest.raises(ManagerError, match="did not answer"):
+        await _bar_of(client, "10.0.4.20").fetch_log()
+    assert not any(call.startswith("remove") for call in client.calls)

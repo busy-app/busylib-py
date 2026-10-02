@@ -23,7 +23,6 @@ from examples.apps.manager import Manager
 from examples.apps.model import ManagerError
 from examples.apps.model import Source
 from examples.apps.tui import AppCard, AppsManager, Home
-from examples.apps.view import Remote
 
 SIZE = (140, 44)
 
@@ -1104,42 +1103,40 @@ async def test_without_a_bar_there_is_no_display_to_show(tmp_path: Path) -> None
         assert app.screen.query_one("#view").display is False
 
 
-async def test_the_remote_presses_the_bars_keys_from_the_keyboard(
-    tmp_path: Path,
-) -> None:
+async def test_the_keys_press_the_bars_keys_from_the_list(tmp_path: Path) -> None:
     bar = _bar()
     app = AppsManager(manager_for(tmp_path, bar), "x")
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
-        await pilot.press("v")
-        await _settle(pilot)
 
-        for key in ("enter", "backspace", "space", "left", "right", "3"):
+        for key in ("backspace", "k", "space", "left_square_bracket"):
+            await pilot.press(key)
+            await _settle(pilot)
+        for key in ("right_square_bracket", "1", "2", "3", "4", "5"):
             await pilot.press(key)
             await _settle(pilot)
 
         assert bar.done == [
-            "press OK",
             "press BACK",
+            "press OK",
             "press START",
             "press DOWN",
             "press UP",
+            "press BUSY",
+            "press CUSTOM",
             "press OFF",
+            "press APPS",
+            "press SETTINGS",
         ]
-
-        await pilot.press("escape")
-        await _settle(pilot)
-        assert isinstance(app.screen, Home), "closing it goes back to the list"
+        assert isinstance(app.screen, Home), "no window opened for any of it"
 
 
-async def test_the_remote_has_a_button_for_every_key_and_the_switch(
+async def test_the_pad_beside_the_picture_has_a_button_for_every_key(
     tmp_path: Path,
 ) -> None:
     bar = _bar()
     app = AppsManager(manager_for(tmp_path, bar), "x")
     async with app.run_test(size=SIZE) as pilot:
-        await _settle(pilot)
-        await pilot.press("v")
         await _settle(pilot)
 
         for name in ("back", "ok", "start", "left", "right"):
@@ -1163,7 +1160,23 @@ async def test_the_remote_has_a_button_for_every_key_and_the_switch(
     ]
 
 
-async def test_a_key_the_bar_refuses_is_said_and_the_remote_stays(
+async def test_the_picture_is_on_the_left_and_the_pad_on_the_right(
+    tmp_path: Path,
+) -> None:
+    app = AppsManager(manager_for(tmp_path, _bar()), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        picture = app.screen.query_one(".bar-screen").region
+        pad = app.screen.query_one("#pad").region
+        buttons = [app.screen.query_one(f"#press-{n}").region for n in ("back", "busy")]
+
+        assert picture.right <= pad.x, "side by side, not stacked"
+        assert picture.y == pad.y or abs(picture.y - pad.y) <= 1
+        assert all(pad.contains_region(region) for region in buttons), "none cut off"
+
+
+async def test_a_key_the_bar_refuses_is_said_and_nothing_else_changes(
     tmp_path: Path,
 ) -> None:
     bar = _bar()
@@ -1175,13 +1188,20 @@ async def test_a_key_the_bar_refuses_is_said_and_the_remote_stays(
     app = AppsManager(manager_for(tmp_path, bar), "x")
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
-        await pilot.press("v")
-        await _settle(pilot)
 
-        await pilot.press("enter")
+        await pilot.press("k")
         await _toast(pilot, app, "refused to press")
 
-        assert isinstance(app.screen, Remote)
+        assert isinstance(app.screen, Home)
+
+
+async def test_without_a_bar_the_keys_say_so_and_do_nothing(tmp_path: Path) -> None:
+    app = AppsManager(manager_for(tmp_path, None), "")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("k")
+        await _toast(pilot, app, "no bar to press keys on")
 
 
 # Sources, simply -----------------------------------------------------------------

@@ -51,7 +51,7 @@ highlighted, and above the list is the bar's display, live.
 | `Enter` | Launch the app on the bar, run the program here, or install what is not installed yet |
 | `i` | Install the highlighted offer, or choose from the sources |
 | `a` | Add a source: just `owner/name` |
-| `v` | The bar's display, live, with its keys to press |
+| `l` | The bar's log: dumped, unpacked, searchable |
 | `x` | Quit the app running on the bar, or stop the highlighted program |
 | `d` | Remove the app from the bar, or forget the program |
 | `e` / `m` | Add / modify a program from this computer |
@@ -133,20 +133,38 @@ requests arrive over USB, which is why it asks for no access key.
 ## Seeing the bar
 
 The strip above the list is the bar's front display, drawn in the terminal as
-it changes: whatever an app is showing, you see here. `v` opens it with the
-bar's keys, for when the bar is across the room.
+it changes: whatever an app is showing, you see here. Beside it are the bar's
+keys and switch, as buttons to click and as keys that work wherever the list
+is open:
 
 | Key | Presses |
 | --- | --- |
-| `Enter`, `Backspace`, `Space` | OK, Back, Start |
-| `Left`, `Right` | Scroll |
+| `Backspace`, `k`, `Space` | Back, OK, Start |
+| `[`, `]` | Scroll left, right |
 | `1` to `5` | The switch: Busy, Custom, Off, Apps, Settings |
-| `Esc` or `v` | Close |
 
-Every one is also a button you can click. A key pressed here is
-indistinguishable from one pressed on the bar. The display arrives on the same
-connection the manager keeps open to know the bar is there, so it uses no extra
-one of the four the bar allows.
+A key pressed here is indistinguishable from one pressed on the bar. The
+display arrives on the same connection the manager keeps open to know the bar
+is there, so it uses no extra one of the four the bar allows.
+
+## The bar's log
+
+`l` asks the bar for its log. The bar keeps it in memory and writes it to a
+file on its storage when asked; the manager reads that file, removes it again,
+and unpacks it if it is packed (gzip, bzip2, xz, zip or tar, by what is in it
+and not by its name). The newest lines come first, in a text box, and more are
+added as you scroll towards either end, so a long log opens at once.
+
+| Key | Does |
+| --- | --- |
+| `/` | Search - through the whole log, not only what is in the box |
+| `n`, `N` | Next, previous line with it (past the last, back to the first) |
+| `g`, `G` | The very start, the very end |
+| `r` | Ask the bar again |
+| `Esc` | Close the search, then the log |
+
+The search ignores case and puts the box where the match is, with it
+selected.
 
 ## Sources
 

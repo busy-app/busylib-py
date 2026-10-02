@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.css.query import NoMatches
 from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Markdown, Static
+from textual.widgets import Button, DataTable, Footer, Header, Markdown, Static
 
 from .dialogs import (
     SECRET_NAME,
@@ -40,7 +40,9 @@ from .bar import CannotQuitDirectly
 from .manager import Entry, Manager
 from .mirror import Mirror
 from .model import ManagerError
-from .view import BarScreen, Remote
+from .logview import LogScreen
+from .mirror import KEYS
+from .view import BarScreen, Key, Pad
 
 
 def describe(entry: Entry, manager: Manager) -> str:
@@ -114,7 +116,17 @@ class Home(Screen[None]):
         Binding("i", "install", "Install"),
         Binding("a", "add_source", "Add source"),
         Binding("s", "sources", "Sources", show=False),
-        Binding("v", "remote", "View bar"),
+        Binding("l", "logs", "Logs"),
+        Binding("backspace", "press('back')", "Back", show=False),
+        Binding("k", "press('ok')", "OK", show=False),
+        Binding("space", "press('start')", "Start", show=False),
+        Binding("left_square_bracket", "press('left')", "Scroll ◀", show=False),
+        Binding("right_square_bracket", "press('right')", "Scroll ▶", show=False),
+        Binding("1", "press('busy')", "Busy", show=False),
+        Binding("2", "press('custom')", "Custom", show=False),
+        Binding("3", "press('off')", "Off", show=False),
+        Binding("4", "press('apps')", "Apps", show=False),
+        Binding("5", "press('settings')", "Settings", show=False),
         Binding("x", "stop", "Quit/stop"),
         Binding("d", "remove", "Remove"),
         Binding("e", "add_external", "Add external"),
@@ -148,10 +160,7 @@ class Home(Screen[None]):
         yield Static("", id="banner")
         with Horizontal(id="view"):
             yield BarScreen()
-            yield Static(
-                "The bar's display, live.\n\n[b]v[/b] to press its keys.",
-                id="view-hint",
-            )
+            yield Pad(id="pad")
         with Horizontal(id="main"):
             with Vertical(id="left"):
                 yield DataTable(id="apps", cursor_type="row", zebra_stripes=True)
@@ -425,8 +434,32 @@ class Home(Screen[None]):
         else:
             await self.choose_from_sources()
 
-    def action_remote(self) -> None:
-        self.app.push_screen(Remote())
+    def action_logs(self) -> None:
+        if self.manager.bar is None:
+            self.app.notify("There is no bar to read logs from", severity="warning")
+            return
+        self.app.push_screen(LogScreen())
+
+    @on(Button.Pressed)
+    def pad_pressed(self, event: Button.Pressed) -> None:
+        if isinstance(event.button, Key):
+            self.action_press((event.button.id or "").removeprefix("press-"))
+
+    def action_press(self, name: str) -> None:
+        """
+        Press one of the bar's keys, or move its switch, as a hand would.
+        """
+        self.run_worker(self._press(name), group="press")
+
+    async def _press(self, name: str) -> None:
+        bar = self.manager.bar
+        if bar is None:
+            self.app.notify("There is no bar to press keys on", severity="warning")
+            return
+        try:
+            await bar.press(KEYS[name])
+        except ManagerError as err:
+            self.app.notify(str(err), title="Could not press it", severity="error")
 
     @work
     async def install_offer(self, entry: Entry) -> None:

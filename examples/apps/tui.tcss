@@ -95,25 +95,35 @@ Versions DataTable, Sources DataTable {
     padding: 1 1 0 1;
 }
 
-#view-hint {
-    padding: 0 2;
-    color: $text-muted;
-}
-
 .bar-screen {
     width: 72;
     height: 8;
     background: black;
 }
 
-.pad {
-    height: auto;
-    margin-top: 1;
+/* The keys beside the picture, as small as a button gets, so that the five
+   of one row and the five of the other both fit in what the picture leaves. */
+#pad {
+    width: 1fr;
+    padding: 0 2;
 }
 
-.pad Button {
-    min-width: 10;
+#pad .row {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#pad Button {
+    height: 1;
+    min-width: 0;
+    border: none;
+    padding: 0 1;
     margin-right: 1;
+}
+
+#pad .hint {
+    color: $text-muted;
+    margin-top: 1;
 }
 
 #main {

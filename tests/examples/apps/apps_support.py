@@ -74,6 +74,9 @@ class FakeBar(Bar):
         # What the display shows when asked for outright, before the stream
         # has said anything.
         self.picture: bytes | None = None
+        # What the bar's log dump holds, or why it cannot be had.
+        self.log: bytes = b""
+        self.log_problem = ""
         # The connection: the API it reports, whether it answers, and the
         # socket the manager holds open to it.
         self.api = "27.9.0"
@@ -147,6 +150,11 @@ class FakeBar(Bar):
 
     async def leave_by_switch(self, pause: float = 1.5, sleep=None) -> None:
         self.done.append("switch")
+
+    async def fetch_log(self) -> bytes:
+        if self.log_problem:
+            raise ManagerError(self.log_problem)
+        return self.log
 
     async def front_screen(self) -> bytes | None:
         return self.picture

@@ -13,17 +13,13 @@ from functools import lru_cache
 from rich.color import Color
 from rich.style import Style
 from rich.text import Text
-from textual import on
 from textual.app import ComposeResult
-from textual.binding import Binding
-from textual.containers import Container, Horizontal
-from textual.screen import ModalScreen
-from textual.widgets import Button, Label, Static
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Button, Static
 
 from busylib.frames import Frame
 
-from .mirror import BUTTONS, KEYS, SWITCH
-from .model import ManagerError
+from .mirror import BUTTONS, SWITCH
 
 
 @lru_cache(maxsize=4096)
@@ -73,66 +69,28 @@ class BarScreen(Static):
 
 class Key(Button, can_focus=False):
     """
-    A button on the remote. The keyboard is the other way in, and a button
-    that took focus would swallow Enter and Space.
+    A button of the pad. The keyboard is the other way in, and a button that
+    took focus would swallow Enter and Space.
     """
 
 
-class Remote(ModalScreen[None]):
-    """
-    The bar's display, and its keys and switch to press.
-    """
+# What the keys do on the main screen, which the pad's hint repeats.
+HINT = (
+    "[b]Backspace[/b] Back · [b]k[/b] OK · [b]Space[/b] Start\n"
+    "[b]\\[[/b] [b]][/b] scroll · [b]1[/b]-[b]5[/b] the switch"
+)
 
-    BINDINGS = [
-        Binding("escape,v", "close", "Close"),
-        Binding("enter", "press('ok')", "OK"),
-        Binding("backspace", "press('back')", "Back"),
-        Binding("space", "press('start')", "Start"),
-        Binding("left", "press('left')", "◀", show=False),
-        Binding("right", "press('right')", "▶", show=False),
-        Binding("1", "press('busy')", "Busy", show=False),
-        Binding("2", "press('custom')", "Custom", show=False),
-        Binding("3", "press('off')", "Off", show=False),
-        Binding("4", "press('apps')", "Apps", show=False),
-        Binding("5", "press('settings')", "Settings", show=False),
-    ]
 
-    def __init__(self) -> None:
-        super().__init__(classes="dialog wide")
+class Pad(Vertical):
+    """
+    The bar's keys and switch, to click - and the keys that press them.
+    """
 
     def compose(self) -> ComposeResult:
-        with Container():
-            yield Label("The bar", classes="title")
-            yield BarScreen()
-            with Horizontal(classes="pad"):
-                for name, label, _ in BUTTONS:
-                    yield Key(label, id=f"press-{name}")
-            with Horizontal(classes="pad"):
-                for name, label, _ in SWITCH:
-                    yield Key(label, id=f"press-{name}", variant="primary")
-            yield Static(
-                "Enter OK · Backspace Back · Space Start · ◀ ▶ scroll · "
-                "1-5 the switch · Esc close",
-                classes="hint",
-            )
-
-    @on(Button.Pressed)
-    def pressed(self, event: Button.Pressed) -> None:
-        name = (event.button.id or "").removeprefix("press-")
-        self.action_press(name)
-
-    def action_press(self, name: str) -> None:
-        self.run_worker(self._press(name), group="press")
-
-    async def _press(self, name: str) -> None:
-        bar = self.app.manager.bar  # type: ignore[attr-defined]
-        if bar is None:
-            self.app.notify("There is no bar to press keys on", severity="warning")
-            return
-        try:
-            await bar.press(KEYS[name])
-        except ManagerError as err:
-            self.app.notify(str(err), title="Could not press it", severity="error")
-
-    def action_close(self) -> None:
-        self.dismiss(None)
+        with Horizontal(classes="row"):
+            for name, label, _ in BUTTONS:
+                yield Key(label, id=f"press-{name}")
+        with Horizontal(classes="row"):
+            for name, label, _ in SWITCH:
+                yield Key(label, id=f"press-{name}", variant="primary")
+        yield Static(HINT, classes="hint")

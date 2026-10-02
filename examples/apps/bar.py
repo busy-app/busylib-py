@@ -44,6 +44,11 @@ class AppsClient(Protocol):
         self, *, enable: bool = True, decode_protobuf: bool = True
     ) -> AsyncIterator[Any]: ...
     async def screen(self, display_id: Any) -> bytes: ...
+    async def log_dump(
+        self, filename: str | None = None, *, path: str | None = None
+    ) -> types.LogDumpResponse: ...
+    async def storage_read(self, path: str) -> bytes: ...
+    async def storage_remove(self, path: str) -> types.SuccessResponse: ...
 
 
 NO_APPS_YET = (
@@ -271,6 +276,35 @@ class Bar:
             return await self.client.screen("front")
         except (exceptions.BusyBarError, OSError):
             return None
+
+    async def fetch_log(self) -> bytes:
+        """
+        What the bar has logged, as the file it writes it to.
+
+        The bar keeps its log in memory and writes it out when asked, to a
+        file on its storage; that file is read and then removed again, so the
+        manager leaves nothing behind. Firmware before OpenAPI 25.0.0 names
+        the destination as a path and not a name, so that is the second try.
+        """
+        name = "busy_apps_manager"
+        try:
+            try:
+                dumped = await self.client.log_dump(filename=name)
+            except exceptions.BusyBarAPIError as err:
+                if err.status_code != 400:
+                    raise
+                dumped = await self.client.log_dump(path=f"/ext/{name}.txt")
+            path = dumped.path or f"/ext/{name}.txt"
+            data = await self.client.storage_read(path)
+        except exceptions.BusyBarAPIError as err:
+            raise self._explain(err, "dumping the log") from err
+        except exceptions.BusyBarError as err:
+            raise self._unreachable(err) from err
+        try:
+            await self.client.storage_remove(path)
+        except (exceptions.BusyBarError, OSError):
+            pass  # a stray file is not worth failing a log that was read
+        return data
 
     # Messages ----------------------------------------------------------
 
