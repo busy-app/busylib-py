@@ -79,7 +79,7 @@ nav:
       - Assets and storage: guides/assets-and-storage.md
       - Reading device state: guides/device-state.md
       - Working with timers: guides/timers.md
-      - Managing apps on a bar: guides/app-manager.md
+      - BUSY Bar Manager: guides/manager.md
       - Building a tool: guides/building-a-tool.md
       - Testing against a real bar: guides/integration-tests.md
   - Reference:

@@ -6,12 +6,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from apps_support import CatalogNet, manifest_bytes
+from manager_support import CatalogNet, manifest_bytes
 
-from examples.apps import catalog as catalogs
-from examples.apps.github import GitHub, Reply
-from examples.apps.model import ManagerError, Source
-from examples.apps.programs import STAMP, Programs, needs_update
+from examples.manager import catalog as catalogs
+from examples.manager.github import GitHub, Reply
+from examples.manager.model import ManagerError, Source
+from examples.manager.programs import STAMP, Programs, needs_update
 
 SOURCE = Source(repo="busy-app/programs", kind="catalog")
 

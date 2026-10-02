@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 # The bar's own rule for an application id, from its API: it is also a
@@ -134,15 +135,36 @@ class Source:
     # of programs for this computer, one folder each, got from a branch.
     kind: Literal["app", "catalog"] = "app"
     branch: str = ""
+    # A folder on this computer instead of a GitHub repository. `repo` then
+    # holds its absolute path, which is what names it everywhere a repository
+    # would be named.
+    local: bool = False
 
     @property
     def label(self) -> str:
-        return self.title or self.repo
+        if self.title:
+            return self.title
+        return Path(self.repo).name if self.local else self.repo
+
+    @property
+    def origin(self) -> str:
+        """
+        Where it comes from, for a person: the repository, or the folder with
+        the home directory written as `~`.
+        """
+        if not self.local:
+            return self.repo
+        try:
+            return "~/" + Path(self.repo).relative_to(Path.home()).as_posix()
+        except ValueError:
+            return self.repo
 
     @property
     def where_from(self) -> str:
         if self.kind == "catalog":
             return "programs"
+        if self.local:
+            return "local folder"
         return "releases" if self.mode == "release" else "source (build)"
 
 
@@ -185,16 +207,39 @@ class Version:
     """
     One thing a source can be installed at.
 
-    A release carries the package itself in `asset`; a tag or a branch has
-    none, and is built from source.
+    A release carries the package itself in `asset`; a tag, a branch, a commit
+    or a folder's working copy has none, and is built from source. A build
+    that was made and kept is a version too, with its package in `artifact`,
+    and installing it builds nothing.
     """
 
     ref: str
     label: str
-    kind: Literal["release", "tag", "branch"]
+    kind: Literal["release", "tag", "branch", "commit", "local", "build"]
     asset: Asset | None = None
     published: str = ""
     prerelease: bool = False
+    # For a build already made and kept: the package file.
+    artifact: str = ""
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class Build:
+    """
+    A package built from source and kept on this computer.
+    """
+
+    repo: str
+    subdir: str
+    ref: str
+    label: str
+    app_id: str
+    name: str
+    version: str
+    built_at: str
+    path: str
+    size: int = 0
 
 
 @dataclass(frozen=True)

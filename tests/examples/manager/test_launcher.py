@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from examples.apps.launcher import Launcher, format_env, parse_env
-from examples.apps.model import ExternalApp, ManagerError
+from examples.manager.launcher import Launcher, format_env, parse_env
+from examples.manager.model import ExternalApp, ManagerError
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell commands")
 

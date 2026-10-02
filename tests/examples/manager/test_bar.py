@@ -6,8 +6,8 @@ import httpx2
 import pytest
 
 from busylib import AsyncBusyBar, exceptions, types
-from examples.apps.bar import Bar, CannotQuitDirectly, replacing
-from examples.apps.model import ManagerError
+from examples.manager.bar import Bar, CannotQuitDirectly, replacing
+from examples.manager.model import ManagerError
 
 
 def _app(**overrides: object) -> dict[str, object]:

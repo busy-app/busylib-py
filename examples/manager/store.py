@@ -20,13 +20,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from .model import Config, ExternalApp, ManagerError, Offer, Source
+from .model import Build, Config, ExternalApp, ManagerError, Offer, Source
 
 APP_DIR = "busy-apps"
 DB_NAME = "apps.db"
 # The file this manager kept before it had a database; read once, then left.
 LEGACY_NAME = "apps.json"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sources (
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS sources (
     title TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL DEFAULT 'app',
     branch TEXT NOT NULL DEFAULT '',
+    local INTEGER NOT NULL DEFAULT 0,
     position INTEGER NOT NULL,
     PRIMARY KEY (repo, subdir)
 );
@@ -50,6 +51,18 @@ CREATE TABLE IF NOT EXISTS externals (
     env TEXT NOT NULL DEFAULT '{}',
     python TEXT NOT NULL DEFAULT '',
     position INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS builds (
+    repo TEXT NOT NULL COLLATE NOCASE,
+    subdir TEXT NOT NULL DEFAULT '',
+    ref TEXT NOT NULL,
+    label TEXT NOT NULL,
+    app_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    built_at TEXT NOT NULL,
+    path TEXT PRIMARY KEY,
+    size INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS offers (
     repo TEXT NOT NULL COLLATE NOCASE,
@@ -113,6 +126,12 @@ class Store:
         try:
             with db:
                 db.executescript(SCHEMA)
+                # A database from before local folders could be sources.
+                columns = {row[1] for row in db.execute("PRAGMA table_info(sources)")}
+                if "local" not in columns:
+                    db.execute(
+                        "ALTER TABLE sources ADD COLUMN local INTEGER NOT NULL DEFAULT 0"
+                    )
                 yield db
         finally:
             db.close()
@@ -171,6 +190,7 @@ class Store:
                 title=row["title"],
                 kind=row["kind"],
                 branch=row["branch"],
+                local=bool(row["local"]),
             )
             for row in db.execute("SELECT * FROM sources ORDER BY position")
         ]
@@ -206,7 +226,7 @@ class Store:
     def _insert_source(db: sqlite3.Connection, source: Source) -> None:
         db.execute(
             "INSERT INTO sources (repo, subdir, mode, manifest, asset, title, kind,"
-            " branch, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?,"
+            " branch, local, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,"
             " (SELECT COALESCE(MAX(position), 0) + 1 FROM sources))",
             (
                 source.repo,
@@ -217,6 +237,7 @@ class Store:
                 source.title,
                 source.kind,
                 source.branch,
+                int(source.local),
             ),
         )
 
@@ -241,6 +262,60 @@ class Store:
             for item in self.config.sources
             if not (item.repo.lower() == repo.lower() and item.subdir == subdir)
         ]
+
+    # Builds ------------------------------------------------------------
+
+    def builds(self, repo: str, subdir: str = "") -> list[Build]:
+        """
+        The packages built from a source and kept, newest first.
+        """
+        try:
+            with self._db() as db:
+                rows = db.execute(
+                    "SELECT * FROM builds WHERE repo = ? AND subdir = ? "
+                    "ORDER BY built_at DESC",
+                    (repo, subdir),
+                ).fetchall()
+        except sqlite3.DatabaseError:
+            return []
+        return [Build(**dict(row)) for row in rows]
+
+    def add_build(self, build: Build) -> None:
+        with self._db() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO builds (repo, subdir, ref, label, app_id,"
+                " name, version, built_at, path, size) VALUES (?, ?, ?, ?, ?, ?, ?,"
+                " ?, ?, ?)",
+                (
+                    build.repo,
+                    build.subdir,
+                    build.ref,
+                    build.label,
+                    build.app_id,
+                    build.name,
+                    build.version,
+                    build.built_at,
+                    build.path,
+                    build.size,
+                ),
+            )
+
+    def forget_builds(self, repo: str, subdir: str = "") -> list[str]:
+        """
+        Drop the record of a source's builds; returns the files they were in.
+        """
+        with self._db() as db:
+            paths = [
+                row["path"]
+                for row in db.execute(
+                    "SELECT path FROM builds WHERE repo = ? AND subdir = ?",
+                    (repo, subdir),
+                )
+            ]
+            db.execute(
+                "DELETE FROM builds WHERE repo = ? AND subdir = ?", (repo, subdir)
+            )
+        return paths
 
     # Offers ------------------------------------------------------------
 

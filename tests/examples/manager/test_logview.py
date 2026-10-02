@@ -8,11 +8,11 @@ from __future__ import annotations
 import gzip
 from pathlib import Path
 
-from apps_support import FakeBar, manager_for
+from manager_support import FakeBar, manager_for
 from textual.widgets import Input, TextArea
 
-from examples.apps.logview import CHUNK, EDGE, LogScreen
-from examples.apps.tui import AppsManager, Home
+from examples.manager.logview import CHUNK, EDGE, LogScreen
+from examples.manager.tui import AppsManager, Home
 
 SIZE = (140, 44)
 TOTAL = 3000

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from apps_support import (
+from manager_support import (
     MANIFEST,
     RELEASE,
     RELEASES,
@@ -16,13 +16,13 @@ from apps_support import (
 from textual.widgets import Button, DataTable, Input, Label, RichLog, Static
 
 from busylib import types
-from examples.apps.github import Reply
-from examples.apps import link
-from examples.apps.launcher import Launcher
-from examples.apps.manager import Manager
-from examples.apps.model import ManagerError
-from examples.apps.model import Source
-from examples.apps.tui import AppCard, AppsManager, Home
+from examples.manager.github import Reply
+from examples.manager import link
+from examples.manager.launcher import Launcher
+from examples.manager.manager import Manager
+from examples.manager.model import ManagerError
+from examples.manager.model import Source
+from examples.manager.tui import AppCard, AppsManager, Home
 
 SIZE = (140, 44)
 
@@ -694,7 +694,7 @@ async def test_o_opens_the_page_of_a_program(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     opened: list[str] = []
-    monkeypatch.setattr("examples.apps.tui.webbrowser.open", opened.append)
+    monkeypatch.setattr("examples.manager.tui.webbrowser.open", opened.append)
     _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
     source = Source(repo="busy-app/programs", kind="catalog")
     manager.store.add_source(source)

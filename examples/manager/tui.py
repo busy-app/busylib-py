@@ -737,7 +737,7 @@ class Dashboard(Screen[None]):
 
 
 class AppsManager(App[None]):
-    TITLE = "BUSY Bar apps"
+    TITLE = "BUSY Bar Manager"
     CSS_PATH = "tui.tcss"
     BINDINGS = [Binding("ctrl+q", "quit", "Quit", show=False)]
 

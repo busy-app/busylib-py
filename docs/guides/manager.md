@@ -1,9 +1,9 @@
-# Managing apps on a bar
+# BUSY Bar Manager
 
 A BUSY Bar can run JavaScript applications. Until there is a catalog to pick
 them from, getting one onto a bar means building it or finding a release,
-making a package the bar will take, and uploading it. The app manager in
-[`examples/apps`](https://github.com/busy-app/busylib-py/tree/main/examples/apps)
+making a package the bar will take, and uploading it. The manager in
+[`examples/manager`](https://github.com/busy-app/busylib-py/tree/main/examples/manager)
 does those steps for you, in a terminal, on Windows, macOS or Linux.
 
 It is an example, not part of the installed package: it lives in the source
@@ -28,12 +28,12 @@ checkout, next to the other examples, and shows how the pieces fit together.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install textual
-.\.venv\Scripts\python.exe -m examples.apps.main 192.168.1.20
+.\.venv\Scripts\python.exe -m examples.manager.main 192.168.1.20
 ```
 
 ```bash
 .venv/bin/python -m pip install textual
-.venv/bin/python -m examples.apps.main 192.168.1.20
+.venv/bin/python -m examples.manager.main 192.168.1.20
 ```
 
 Without an address it looks for a bar on the network, as the other examples
@@ -120,7 +120,7 @@ forwarded to a local port and given to the manager as an address:
 
 ```bash
 ssh -N -L 127.0.0.1:8080:10.0.4.20:80 -J jump.example.com user@pi.local
-.venv/bin/python -m examples.apps.main 127.0.0.1:8080
+.venv/bin/python -m examples.manager.main 127.0.0.1:8080
 ```
 
 An address is needed because discovery does not cross a tunnel. Pick a local

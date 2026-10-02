@@ -413,27 +413,27 @@ from Step 2:
 and keeps running while it receives updates. Press `h` for its command help and
 `q` to exit; it does not print a one-line completion message.
 
-### Manage the apps on a bar
+### BUSY Bar Manager
 
-`examples/apps` installs, launches and removes the JavaScript apps on a bar,
+`examples/manager` installs, launches and removes the JavaScript apps on a bar,
 from GitHub releases or built from source, and installs and starts programs from
 your computer - including those from a catalog such as the community one -
 alongside them. It needs one more package for its terminal interface:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install textual
-.\.venv\Scripts\python.exe -m examples.apps.main 10.0.4.20
+.\.venv\Scripts\python.exe -m examples.manager.main 10.0.4.20
 ```
 
 ```bash
 .venv/bin/python -m pip install textual
-.venv/bin/python -m examples.apps.main 10.0.4.20
+.venv/bin/python -m examples.manager.main 10.0.4.20
 ```
 
 **Expected result:** a list of the apps on the bar, with a card for the one
 highlighted. Press `i` to install, `q` to leave. Apps need firmware that has
 them; on older firmware the list says so. See
-[Managing apps on a bar](https://busy-app.github.io/busylib-py/guides/app-manager/).
+[BUSY Bar Manager](https://busy-app.github.io/busylib-py/guides/manager/).
 
 ## Going further
 

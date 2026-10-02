@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from apps_support import BRANCH, RAW, TREE, CatalogNet, manifest_bytes, program
+from manager_support import BRANCH, RAW, TREE, CatalogNet, manifest_bytes, program
 
-from examples.apps.github import Cache, GitHub, Reply
-from examples.apps.model import Asset, ManagerError, Source, Version
+from examples.manager.github import Cache, GitHub, Reply
+from examples.manager.model import Asset, ManagerError, Source, Version
 
 MANIFEST = json.dumps({"id": "demo.app", "name": "Demo", "version": "1.2.0"}).encode()
 

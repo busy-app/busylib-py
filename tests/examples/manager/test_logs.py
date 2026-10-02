@@ -12,8 +12,8 @@ import tarfile
 import zipfile
 
 import pytest
-from examples.apps.logs import MAX_UNPACKED, LogBuffer, unpack
-from examples.apps.model import ManagerError
+from examples.manager.logs import MAX_UNPACKED, LogBuffer, unpack
+from examples.manager.model import ManagerError
 
 LOG = "boot ok\r\nwifi up\r\nERROR: sd card\r\n"
 

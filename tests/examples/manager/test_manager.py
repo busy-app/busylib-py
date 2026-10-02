@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from apps_support import (
+from manager_support import (
     MANIFEST,
     RELEASE,
     RELEASES,
@@ -15,12 +15,12 @@ from apps_support import (
 )
 
 from busylib import types
-from examples.apps import package
-from examples.apps.bar import CannotQuitDirectly
-from examples.apps.github import Reply
-from examples.apps.manager import Entry, Manager
-from examples.apps.model import Asset, ExternalApp, ManagerError, Source, Version
-from examples.apps.store import Store
+from examples.manager import package
+from examples.manager.bar import CannotQuitDirectly
+from examples.manager.github import Reply
+from examples.manager.manager import Entry, Manager
+from examples.manager.model import Asset, ExternalApp, ManagerError, Source, Version
+from examples.manager.store import Store
 
 
 @pytest.mark.asyncio

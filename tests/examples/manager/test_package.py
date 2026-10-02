@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from examples.apps import package
-from examples.apps.model import ManagerError
+from examples.manager import package
+from examples.manager.model import ManagerError
 
 MANIFEST = b'{"id": "demo.app", "name": "Demo", "version": "1.2.0", "author": "Me"}'
 
@@ -177,7 +177,7 @@ def test_a_manifest_the_bar_would_refuse_is_refused_here_first(
 
 
 def test_a_download_larger_than_the_bar_takes_is_refused_before_reading_it() -> None:
-    from examples.apps.model import MAX_PACKAGE_BYTES
+    from examples.manager.model import MAX_PACKAGE_BYTES
 
     with pytest.raises(ManagerError, match="larger than the bar accepts"):
         package.normalize_package(b"x" * (MAX_PACKAGE_BYTES + 1))

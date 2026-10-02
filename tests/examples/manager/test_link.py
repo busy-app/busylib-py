@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from examples.apps.link import POLL, RETRY, Down, Event, Up, watch
-from examples.apps.model import ManagerError
+from examples.manager.link import POLL, RETRY, Down, Event, Up, watch
+from examples.manager.model import ManagerError
 
 
 class Over(Exception):

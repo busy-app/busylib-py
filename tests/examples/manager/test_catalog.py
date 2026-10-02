@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from examples.apps import catalog
-from examples.apps.model import ManagerError
+from examples.manager import catalog
+from examples.manager.model import ManagerError
 
 # Manifests as they really are in the community catalog, quirks included.
 AUDIO = """name: Audio Visualizer

@@ -12,13 +12,13 @@ import tarfile
 from pathlib import Path
 
 from busylib import types
-from examples.apps import catalog as catalog_module
-from examples.apps.bar import Bar, CannotQuitDirectly
-from examples.apps.github import GitHub, Reply
-from examples.apps.launcher import Launcher
-from examples.apps.manager import Manager
-from examples.apps.model import ManagerError
-from examples.apps.store import Store
+from examples.manager import catalog as catalog_module
+from examples.manager.bar import Bar, CannotQuitDirectly
+from examples.manager.github import GitHub, Reply
+from examples.manager.launcher import Launcher
+from examples.manager.manager import Manager
+from examples.manager.model import ManagerError
+from examples.manager.store import Store
 
 MANIFEST = json.dumps(
     {"id": "demo.app", "name": "Demo", "version": "1.2.0", "description": "A demo"}

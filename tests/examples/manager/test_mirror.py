@@ -7,8 +7,8 @@ from __future__ import annotations
 import base64
 
 import pytest
-from examples.apps.mirror import KEYS, Mirror
-from examples.apps.view import draw
+from examples.manager.mirror import KEYS, Mirror
+from examples.manager.view import draw
 
 WIDTH, HEIGHT = 72, 16
 

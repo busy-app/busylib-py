@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from apps_support import (
+from manager_support import (
     MANIFEST,
     RELEASE,
     RELEASES,
@@ -22,8 +22,8 @@ from apps_support import (
     tgz,
 )
 from busylib import types
-from examples.apps.github import Reply
-from examples.apps.model import ManagerError, parse_repo
+from examples.manager.github import Reply
+from examples.manager.model import ManagerError, parse_repo
 
 RAW = "https://raw.githubusercontent.com/busy-app/demo"
 

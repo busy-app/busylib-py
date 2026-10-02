@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from examples.apps import store
-from examples.apps.model import ExternalApp, ManagerError, Offer, Source
-from examples.apps.store import Store, slugify
+from examples.manager import store
+from examples.manager.model import ExternalApp, ManagerError, Offer, Source
+from examples.manager.store import Store, slugify
 
 
 def test_what_was_added_is_there_after_a_restart(tmp_path: Path) -> None:

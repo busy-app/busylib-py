@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from examples.apps import node, package
-from examples.apps.model import ManagerError
+from examples.manager import node, package
+from examples.manager.model import ManagerError
 
 
 @pytest.mark.parametrize(

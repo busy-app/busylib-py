@@ -1,9 +1,9 @@
 """
-Manage the applications on a BUSY Bar, and the programs that go with it.
+BUSY Bar Manager: the applications on a BUSY Bar, and the programs that go with it.
 
-    python -m examples.apps.main                 # find a bar on the network
-    python -m examples.apps.main 192.168.1.20    # or say which
-    python -m examples.apps.main --offline       # no bar: sources and programs only
+    python -m examples.manager.main                 # find a bar on the network
+    python -m examples.manager.main 192.168.1.20    # or say which
+    python -m examples.manager.main --offline       # no bar: sources and programs only
 
 Needs `textual`. Installing from a release needs nothing else; building from
 source needs Node.js and pnpm.
@@ -29,7 +29,7 @@ from .store import Store
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="apps",
+        prog="manager",
         description=(
             "Install, launch and remove the JavaScript apps on a BUSY Bar, from "
             "GitHub releases or built from source, and start programs from this "
