@@ -1,0 +1,170 @@
+/* Dialogs ---------------------------------------------------------------- */
+
+.dialog {
+    align: center middle;
+}
+
+.dialog > Container {
+    width: 70;
+    height: auto;
+    max-height: 95vh;
+    padding: 1 2;
+    background: $surface;
+    border: heavy $primary;
+}
+
+.dialog.wide > Container {
+    width: 96;
+}
+
+.dialog .title {
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+}
+
+.dialog .body {
+    padding-bottom: 1;
+}
+
+.dialog .hint {
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+.dialog .field-label {
+    margin-top: 1;
+    text-style: bold;
+}
+
+.dialog .hidden {
+    display: none;
+}
+
+.dialog .error {
+    color: $error;
+}
+
+.dialog .buttons {
+    height: auto;
+    width: 100%;
+    align-horizontal: right;
+}
+
+.dialog .buttons Button {
+    margin-left: 2;
+}
+
+/* Half the terminal, so the buttons under it stay on screen however short
+   the terminal is; the form scrolls instead. */
+.dialog VerticalScroll {
+    height: auto;
+    max-height: 55vh;
+}
+
+.dialog Input {
+    margin: 0;
+}
+
+Progress RichLog {
+    height: 14;
+    border: round $primary-darken-2;
+    margin: 0 0 1 0;
+}
+
+Progress.failed Container {
+    border: heavy $error;
+}
+
+Versions DataTable, Sources DataTable {
+    height: auto;
+    max-height: 18;
+}
+
+/* The list ---------------------------------------------------------------- */
+
+#banner {
+    background: $warning 25%;
+    color: $text;
+    padding: 0 2;
+    height: auto;
+}
+
+#view {
+    height: 10;
+    padding: 1 1 0 1;
+}
+
+.bar-screen {
+    width: 72;
+    height: 8;
+    background: black;
+}
+
+/* The keys beside the picture, as small as a button gets, so that the five
+   of one row and the five of the other both fit in what the picture leaves. */
+#pad {
+    width: 1fr;
+    padding: 0 2;
+}
+
+#pad .row {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#pad Button {
+    height: 1;
+    min-width: 0;
+    border: none;
+    padding: 0 1;
+    margin-right: 1;
+}
+
+#pad .hint {
+    color: $text-muted;
+    margin-top: 1;
+}
+
+#main {
+    height: 1fr;
+}
+
+#left {
+    width: 3fr;
+}
+
+#right {
+    width: 2fr;
+    padding: 1 2;
+    border-left: tall $primary-darken-2;
+}
+
+/* The dashboard ------------------------------------------------------------ */
+
+#cards {
+    grid-size: 3;
+    grid-gutter: 1 2;
+    grid-rows: 7;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+AppCard {
+    border: round $primary-darken-2;
+    padding: 1 2;
+    height: 7;
+}
+
+AppCard.external {
+    border: round $secondary-darken-1;
+}
+
+AppCard.running {
+    border: round $success;
+}
+
+AppCard:focus {
+    border: heavy $accent;
+    background: $boost;
+}
