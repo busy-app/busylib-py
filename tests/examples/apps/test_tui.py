@@ -1061,9 +1061,7 @@ async def test_the_list_shows_the_bars_display_as_it_streams(tmp_path: Path) -> 
         bar.emit(_frame_message())
         await _settle(pilot)
 
-        picture = _picture(app)
-        assert picture.count("▀") == 72 * 8
-        assert len(picture.splitlines()) == 8, "two rows of pixels to a line"
+        assert _picture(app).count("▀") == 72 * 8
 
 
 async def test_the_display_before_the_stream_says_anything_is_asked_for(

@@ -8,6 +8,7 @@ import base64
 
 import pytest
 from examples.apps.mirror import KEYS, Mirror
+from examples.apps.view import draw
 
 WIDTH, HEIGHT = 72, 16
 
@@ -110,3 +111,47 @@ def test_every_name_on_the_remote_is_a_key_of_the_bar() -> None:
     )
     # Scrolling right is the bar's "up": the selection moves to the next item.
     assert KEYS["right"].name == "UP" and KEYS["left"].name == "DOWN"
+
+
+def test_a_frame_is_drawn_two_rows_of_pixels_to_a_line() -> None:
+    """
+    The upper pixel is the character's colour and the lower its background,
+    so the 72x16 panel is 72 characters wide and 8 lines tall, and a pixel
+    keeps its shape.
+    """
+    mirror = Mirror()
+    mirror.feed(message((255, 0, 0)))  # blue, on the wire
+    assert mirror.frame is not None
+
+    text = draw(mirror.frame)
+
+    lines = text.plain.splitlines()
+    assert (len(lines), {len(line) for line in lines}) == (8, {72})
+    first = text.spans[0].style
+    assert first.color.triplet == (0, 0, 255)  # type: ignore[union-attr]
+    assert first.bgcolor.triplet == (0, 0, 255)  # type: ignore[union-attr]
+
+
+def test_the_upper_pixel_is_the_colour_and_the_lower_the_background() -> None:
+    mirror = Mirror()
+    top = bytes((0, 0, 255)) * 72  # wire order: red
+    bottom = bytes((255, 0, 0)) * 72  # wire order: blue
+    data = (top + bottom) * 8
+    mirror.feed(
+        {
+            "updates": [
+                {
+                    "frame": {
+                        "screen": "FRONT",
+                        "data": base64.b64encode(data).decode(),
+                    }
+                }
+            ]
+        }
+    )
+    assert mirror.frame is not None
+
+    style = draw(mirror.frame).spans[0].style
+
+    assert style.color.triplet == (255, 0, 0)  # type: ignore[union-attr]
+    assert style.bgcolor.triplet == (0, 0, 255)  # type: ignore[union-attr]
