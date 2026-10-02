@@ -18,6 +18,7 @@ from busylib import types
 from examples.apps import package
 from examples.apps.bar import CannotQuitDirectly
 from examples.apps.github import Reply
+from examples.apps.manager import Entry, Manager
 from examples.apps.model import Asset, ExternalApp, ManagerError, Source, Version
 from examples.apps.store import Store
 
@@ -233,7 +234,7 @@ async def test_a_source_is_checked_and_named_before_it_is_kept(tmp_path: Path) -
     source = await manager.add_source(Source(repo="busy-app/demo"))
 
     assert source.title == "Demo"
-    assert Store(tmp_path / "apps.json").load().sources[0].title == "Demo"
+    assert Store(tmp_path / "apps.db").load().sources[0].title == "Demo"
 
 
 @pytest.mark.asyncio
@@ -449,6 +450,14 @@ async def test_an_update_keeps_the_command_and_the_settings_a_person_made(
     assert len(manager.store.config.externals) == 1
 
 
+async def _installed(manager: Manager) -> list[Entry]:
+    """
+    What is on the bar or the computer, without what is merely on offer.
+    """
+    entries, _ = await manager.entries()
+    return [entry for entry in entries if entry.kind != "available"]
+
+
 async def test_a_program_the_catalog_has_changed_is_marked_as_out_of_date(
     tmp_path: Path,
 ) -> None:
@@ -463,12 +472,12 @@ async def test_a_program_the_catalog_has_changed_is_marked_as_out_of_date(
         await manager.prepare_program(PROGRAMS, catalog, clock), lambda line: None
     )
 
-    (before,), _ = await manager.entries()
+    (before,) = await _installed(manager)
     assert before.update is False
 
     net.programs["clock"]["app.py"] = b"print('v2')\n"
-    assert await manager.refresh_catalogs() == []
-    (after,), _ = await manager.entries()
+    assert await manager.refresh_sources() == []
+    (after,) = await _installed(manager)
 
     assert (after.update, after.status) == (True, "update")
 
@@ -486,8 +495,8 @@ async def test_a_neighbour_changing_does_not_mark_a_program(tmp_path: Path) -> N
     )
 
     net.programs["weather"]["app.py"] = b"print('new')\n"
-    await manager.refresh_catalogs()
-    (entry,), _ = await manager.entries()
+    await manager.refresh_sources()
+    (entry,) = await _installed(manager)
 
     assert entry.update is False
 
@@ -501,7 +510,7 @@ async def test_being_offline_when_checking_for_updates_is_a_sentence_not_a_crash
         ManagerError("cannot reach GitHub: offline")
     )
 
-    problems = await manager.refresh_catalogs()
+    problems = await manager.refresh_sources()
 
     assert problems == [
         "could not check busy-app/programs for updates: cannot reach GitHub: offline"

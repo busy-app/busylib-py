@@ -90,6 +90,32 @@ Versions DataTable, Sources DataTable {
     height: auto;
 }
 
+#view {
+    height: 10;
+    padding: 1 1 0 1;
+}
+
+#view-hint {
+    padding: 0 2;
+    color: $text-muted;
+}
+
+.bar-screen {
+    width: 72;
+    height: 8;
+    background: black;
+}
+
+.pad {
+    height: auto;
+    margin-top: 1;
+}
+
+.pad Button {
+    min-width: 10;
+    margin-right: 1;
+}
+
 #main {
     height: 1fr;
 }

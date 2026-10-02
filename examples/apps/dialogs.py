@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from textual import on, work
-from textual.app import ComposeResult
+from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
@@ -554,14 +554,48 @@ class CatalogBrowser(ModalScreen[ProgramPick | None]):
         self.dismiss(None)
 
 
+async def ask_for_source(app: App) -> bool:
+    """
+    Ask where a source is - nothing more than that - and add it. True if one
+    was added.
+
+    What kind of thing it is (a catalog of programs, an app with releases, an
+    app to build) is the manager's to find out, not the person's to say.
+    """
+    manager: Manager = app.manager  # type: ignore[attr-defined]
+
+    async def check(values: dict[str, str]) -> Verdict:
+        await manager.add_repo(values["repo"])
+        return None
+
+    added = await app.push_screen_wait(
+        FormModal(
+            "Add a source",
+            [
+                Field(
+                    "repo",
+                    "GitHub repository",
+                    placeholder="owner/name",
+                    hint="Or paste the link. What it offers shows up in the list "
+                    "as not installed.",
+                )
+            ],
+            ok="Add",
+            check=check,
+        )
+    )
+    return added is not None
+
+
 class Sources(ModalScreen[Pick | ProgramPick | None]):
     """
     The places applications come from, and the way to install from them.
     """
 
     BINDINGS = [
-        Binding("a", "add", "Add app source"),
-        Binding("p", "add_catalog", "Add program catalog"),
+        Binding("a", "add", "Add source"),
+        Binding("A", "add_with_options", "With options"),
+        Binding("p", "add_catalog", "Catalog on a branch", show=False),
         Binding("x", "remove", "Remove"),
         Binding("escape", "back", "Back"),
     ]
@@ -575,8 +609,8 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
             yield DataTable(id="sources", cursor_type="row", zebra_stripes=True)
             yield Static("", id="empty", classes="hint")
             yield Static(
-                "Enter picks a version to install. A source is a GitHub repository: "
-                "its releases, or its source to build.",
+                "Enter picks what to install. A source is a GitHub repository: "
+                "a catalog of programs, or an app's releases or source.",
                 classes="hint",
             )
         yield Footer()
@@ -604,12 +638,7 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
                 key=f"{source.repo}|{source.subdir}",
             )
         empty = self.query_one("#empty", Static)
-        empty.update(
-            ""
-            if sources
-            else "No sources yet. Press a to add an app source, or p to add a "
-            "catalog of programs."
-        )
+        empty.update("" if sources else "No sources yet. Press a and type owner/name.")
         table.focus()
 
     def current(self) -> Source | None:
@@ -645,6 +674,11 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
 
     @work
     async def action_add(self) -> None:
+        if await ask_for_source(self.app):
+            self.reload()
+
+    @work
+    async def action_add_with_options(self) -> None:
         async def check(values: dict[str, str]) -> Verdict:
             repo = values["repo"]
             if not REPO.match(repo):
@@ -663,7 +697,7 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
 
         added = await self.app.push_screen_wait(
             FormModal(
-                "Add a source",
+                "Add an app source, with options",
                 [
                     Field("repo", "GitHub repository", placeholder="owner/name"),
                     Field(

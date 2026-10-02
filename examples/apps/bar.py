@@ -40,7 +40,10 @@ class AppsClient(Protocol):
     async def apps_delete(self, app_id: str) -> types.SuccessResponse: ...
     async def input(self, key: types.InputKey) -> types.SuccessResponse: ...
     async def version(self) -> types.VersionInfo: ...
-    def stream_status_ws(self) -> AsyncIterator[Any]: ...
+    def stream_status_ws(
+        self, *, enable: bool = True, decode_protobuf: bool = True
+    ) -> AsyncIterator[Any]: ...
+    async def screen(self, display_id: Any) -> bytes: ...
 
 
 NO_APPS_YET = (
@@ -57,6 +60,7 @@ class Bar:
     def __init__(self, client: AppsClient, address: str = "") -> None:
         self.client = client
         self.address = address
+        self._listeners: list[Callable[[dict[str, Any]], None]] = []
 
     async def installed(self) -> list[types.AppInfo]:
         try:
@@ -205,6 +209,23 @@ class Bar:
             raise self._unreachable(err) from err
         return info.api_semver or ""
 
+    def listen(self, callback: Callable[[dict[str, Any]], None]) -> Callable[[], None]:
+        """
+        Be handed every message the held socket receives, until the returned
+        function is called.
+
+        The bar accepts only four sockets at a time, so whatever wants to see
+        the stream - the live view of the display - shares the one the manager
+        already keeps open to notice the bar going.
+        """
+        self._listeners.append(callback)
+
+        def stop() -> None:
+            if callback in self._listeners:
+                self._listeners.remove(callback)
+
+        return stop
+
     async def hold(self) -> None:
         """
         Keep a WebSocket to the bar open, and return when it closes.
@@ -214,17 +235,42 @@ class Bar:
         would find out at the next poll. Its keepalive pings catch the bar
         that vanishes without saying so, within about forty seconds.
 
-        What arrives on it is not used here; the manager only needs to know
-        whether it is still there. Raises `ManagerError` if the socket could
-        not be opened or broke, and returns if it was closed cleanly.
+        What arrives on it is passed to whoever is `listen`ing. Raises
+        `ManagerError` if the socket could not be opened or broke, and returns
+        if it was closed cleanly.
         """
         try:
-            async for _ in self.client.stream_status_ws(decode_protobuf=False):
-                pass
+            async for message in self.client.stream_status_ws():
+                if isinstance(message, dict):
+                    for callback in list(self._listeners):
+                        callback(message)
+        except exceptions.BusyBarProtocolError as err:
+            raise ManagerError(f"the bar sent something unreadable ({err})") from err
         except exceptions.BusyBarError as err:
             raise self._unreachable(err) from err
         except OSError as err:
             raise ManagerError(f"the connection broke ({err})") from err
+
+    async def press(self, key: types.InputKey) -> None:
+        """
+        Press one of the bar's keys, or move its switch, as a hand would.
+        """
+        try:
+            await self.client.input(key)
+        except exceptions.BusyBarAPIError as err:
+            raise self._explain(err, "press a key") from err
+        except exceptions.BusyBarError as err:
+            raise self._unreachable(err) from err
+
+    async def front_screen(self) -> bytes | None:
+        """
+        What the front display shows now, for the moment before the stream
+        has said anything. None if the bar will not say.
+        """
+        try:
+            return await self.client.screen("front")
+        except (exceptions.BusyBarError, OSError):
+            return None
 
     # Messages ----------------------------------------------------------
 

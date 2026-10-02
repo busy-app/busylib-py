@@ -13,15 +13,17 @@ from apps_support import (
     program,
     tgz,
 )
-from textual.widgets import Button, DataTable, Input, RichLog, Static
+from textual.widgets import Button, DataTable, Input, Label, RichLog, Static
 
 from busylib import types
 from examples.apps.github import Reply
+from examples.apps import link
 from examples.apps.launcher import Launcher
 from examples.apps.manager import Manager
 from examples.apps.model import ManagerError
 from examples.apps.model import Source
-from examples.apps.tui import AppCard, AppsManager
+from examples.apps.tui import AppCard, AppsManager, Home
+from examples.apps.view import Remote
 
 SIZE = (140, 44)
 
@@ -217,9 +219,8 @@ async def test_installing_from_a_source_goes_through_asking(tmp_path: Path) -> N
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
 
+        # The source's app is on the list, not installed, and `i` installs it.
         await pilot.press("i")
-        await _settle(pilot)
-        await pilot.press("enter")  # the source
         await _settle(pilot)
         await pilot.press("enter")  # its only version
         await _settle(pilot)
@@ -250,8 +251,6 @@ async def test_saying_no_at_the_question_installs_nothing(tmp_path: Path) -> Non
         await _settle(pilot)
         await pilot.press("enter")
         await _settle(pilot)
-        await pilot.press("enter")
-        await _settle(pilot)
         await pilot.click("#stop")
         await _settle(pilot)
 
@@ -270,7 +269,7 @@ async def test_a_package_that_is_wrong_ends_the_install_with_the_reason(
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
 
-        await pilot.press("i")
+        await pilot.press("s")
         await _settle(pilot)
         await pilot.press("enter")
         await _settle(pilot)
@@ -289,7 +288,7 @@ async def test_a_source_is_added_from_the_sources_window(tmp_path: Path) -> None
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
 
-        await pilot.press("i")
+        await pilot.press("s")
         await _settle(pilot)
         await pilot.press("a")
         await _settle(pilot)
@@ -308,7 +307,7 @@ async def test_a_mistyped_repository_is_explained_in_the_form(tmp_path: Path) ->
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
 
-        await pilot.press("i")
+        await pilot.press("s")
         await _settle(pilot)
         await pilot.press("a")
         await _settle(pilot)
@@ -318,7 +317,7 @@ async def test_a_mistyped_repository_is_explained_in_the_form(tmp_path: Path) ->
         await _settle(pilot)
 
         assert app.screen is form
-        assert "owner/name" in str(form.query_one("#e-repo").render())
+        assert "owner/name" in str(form.query_one("#form-error").render())
     assert manager.store.config.sources == []
 
 
@@ -364,7 +363,7 @@ async def test_the_question_comes_after_what_it_is_about(tmp_path: Path) -> None
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
 
-        await pilot.press("i")
+        await pilot.press("s")
         await _settle(pilot)
         await pilot.press("enter")
         await _settle(pilot)
@@ -426,7 +425,7 @@ def _catalog(**extra: dict) -> dict:
 
 
 async def _open_catalog(pilot, app) -> None:
-    await pilot.press("i")
+    await pilot.press("s")
     await _settle(pilot)
     await pilot.press("enter")
     await _settle_longer(pilot)
@@ -440,7 +439,7 @@ async def test_a_catalog_is_added_browsed_and_a_program_installed_after_asking(
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
 
-        await pilot.press("i")
+        await pilot.press("s")
         await _settle(pilot)
         await pilot.press("p")
         await _settle(pilot)
@@ -470,7 +469,8 @@ async def test_a_catalog_is_added_browsed_and_a_program_installed_after_asking(
         await pilot.click("#close")
         await _settle(pilot)
 
-        assert [row[0] for row in _rows(app)] == ["Clock"]
+        # Clock is installed now; the catalog's other program is still on offer.
+        assert [row[0] for row in _rows(app)] == ["Clock", "Weather"]
         assert "busy-app/programs" in _details(app)
 
 
@@ -568,7 +568,10 @@ async def test_a_program_with_an_update_says_so_and_updating_asks_first(
     app = AppsManager(manager, "x")
     async with app.run_test(size=SIZE) as pilot:
         await _settle_longer(pilot)
-        assert _rows(app) == [["Clock", "computer", "-", "update"]]
+        assert _rows(app) == [
+            ["Clock", "computer", "-", "update"],
+            ["Weather", "computer", "-", "not installed"],
+        ]
         assert "update available" in _details(app)
 
         await pilot.press("u")
@@ -1028,3 +1031,262 @@ async def test_the_dashboard_asks_the_same_question(home_manager: Manager) -> No
         await _settle_longer(pilot)
 
         assert bar.done == ["switch"]
+
+
+# The bar's display, and its keys -------------------------------------------------
+
+
+def _picture(app: AppsManager) -> str:
+    return str(app.screen.query_one(".bar-screen").render())
+
+
+def _frame_message(wire: tuple[int, int, int] = (255, 0, 0)) -> dict:
+    import base64
+
+    data = bytes(wire) * (72 * 16)
+    return {
+        "updates": [
+            {"frame": {"screen": "FRONT", "data": base64.b64encode(data).decode()}}
+        ]
+    }
+
+
+async def test_the_list_shows_the_bars_display_as_it_streams(tmp_path: Path) -> None:
+    bar = _bar()
+    app = AppsManager(manager_for(tmp_path, bar), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        assert "waiting" in _picture(app)
+
+        bar.emit(_frame_message())
+        await _settle(pilot)
+
+        picture = _picture(app)
+        assert picture.count("▀") == 72 * 8
+        assert len(picture.splitlines()) == 8, "two rows of pixels to a line"
+
+
+async def test_the_display_before_the_stream_says_anything_is_asked_for(
+    tmp_path: Path,
+) -> None:
+    """
+    The stream sends a frame when something changes, which on a quiet bar may
+    be a long time after the manager started looking.
+    """
+    bar = _bar()
+    bar.picture = bytes(72 * 16 * 3)
+    app = AppsManager(manager_for(tmp_path, bar), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        app.on_link(link.Up(api="27.9.0"))
+        await _settle(pilot)
+
+        assert "▀" in _picture(app)
+
+
+async def test_losing_the_bar_blanks_the_display(tmp_path: Path) -> None:
+    bar = _bar()
+    app = AppsManager(manager_for(tmp_path, bar), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        bar.emit(_frame_message())
+        await _settle(pilot)
+
+        app.on_link(link.Down("gone"))
+        await _settle(pilot)
+
+        assert "not connected" in _picture(app)
+
+
+async def test_without_a_bar_there_is_no_display_to_show(tmp_path: Path) -> None:
+    app = AppsManager(manager_for(tmp_path, None), "")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        assert app.screen.query_one("#view").display is False
+
+
+async def test_the_remote_presses_the_bars_keys_from_the_keyboard(
+    tmp_path: Path,
+) -> None:
+    bar = _bar()
+    app = AppsManager(manager_for(tmp_path, bar), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        await pilot.press("v")
+        await _settle(pilot)
+
+        for key in ("enter", "backspace", "space", "left", "right", "3"):
+            await pilot.press(key)
+            await _settle(pilot)
+
+        assert bar.done == [
+            "press OK",
+            "press BACK",
+            "press START",
+            "press DOWN",
+            "press UP",
+            "press OFF",
+        ]
+
+        await pilot.press("escape")
+        await _settle(pilot)
+        assert isinstance(app.screen, Home), "closing it goes back to the list"
+
+
+async def test_the_remote_has_a_button_for_every_key_and_the_switch(
+    tmp_path: Path,
+) -> None:
+    bar = _bar()
+    app = AppsManager(manager_for(tmp_path, bar), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        await pilot.press("v")
+        await _settle(pilot)
+
+        for name in ("back", "ok", "start", "left", "right"):
+            await pilot.click(f"#press-{name}")
+            await _settle(pilot)
+        for name in ("busy", "custom", "off", "apps", "settings"):
+            await pilot.click(f"#press-{name}")
+            await _settle(pilot)
+
+    assert bar.done == [
+        "press BACK",
+        "press OK",
+        "press START",
+        "press DOWN",
+        "press UP",
+        "press BUSY",
+        "press CUSTOM",
+        "press OFF",
+        "press APPS",
+        "press SETTINGS",
+    ]
+
+
+async def test_a_key_the_bar_refuses_is_said_and_the_remote_stays(
+    tmp_path: Path,
+) -> None:
+    bar = _bar()
+
+    async def refuse(key) -> None:
+        raise ManagerError("the bar refused to press a key")
+
+    bar.press = refuse  # type: ignore[method-assign]
+    app = AppsManager(manager_for(tmp_path, bar), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+        await pilot.press("v")
+        await _settle(pilot)
+
+        await pilot.press("enter")
+        await _toast(pilot, app, "refused to press")
+
+        assert isinstance(app.screen, Remote)
+
+
+# Sources, simply -----------------------------------------------------------------
+
+
+async def test_a_source_is_added_by_its_name_and_appears_as_not_installed(
+    tmp_path: Path,
+) -> None:
+    manager = manager_for(tmp_path, _bar(), SOURCE_ROUTES)
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("a")
+        await _settle(pilot)
+        app.screen.query_one("#f-repo", Input).value = "busy-app/demo"
+        await pilot.click("#ok")
+        await _settle_longer(pilot)
+
+        assert isinstance(app.screen, Home), "one question, and it is over"
+        assert _rows(app) == [["Demo", "bar", "1.2.0", "not installed"]]
+        assert "Not installed" in _details(app)
+
+
+async def test_enter_on_something_not_installed_installs_it_after_asking(
+    tmp_path: Path,
+) -> None:
+    bar = _bar()
+    manager = manager_for(tmp_path, bar, SOURCE_ROUTES)
+    await manager.add_repo("busy-app/demo")
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("enter")  # the offer
+        await _settle(pilot)
+        await pilot.press("enter")  # its only version
+        await _settle(pilot)
+        assert bar.done == [] and app.screen.query_one("#ask").display is True
+
+        await pilot.click("#go")
+        await _settle(pilot)
+        await pilot.click("#close")
+        await _settle(pilot)
+
+        assert bar.done == ["install 5"]
+        assert _rows(app) == [["Demo", "bar", "1.2.0", "installed"]]
+
+
+async def test_a_catalogs_program_is_installed_from_the_list_too(
+    tmp_path: Path,
+) -> None:
+    _, manager = manager_with_catalog(tmp_path, _catalog(), _bar())
+    await manager.add_repo("busy-app/programs")
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+        assert [row[3] for row in _rows(app)] == ["not installed", "not installed"]
+
+        await pilot.press("i")  # Clock, under the cursor
+        await _settle_longer(pilot)
+        assert "Install Clock" in " ".join(_log(app))
+        await pilot.click("#go")
+        await _settle_longer(pilot)
+        await pilot.click("#close")
+        await _settle(pilot)
+
+        assert [(r[0], r[3]) for r in _rows(app)] == [
+            ("Clock", "ready"),
+            ("Weather", "not installed"),
+        ]
+
+
+async def test_forgetting_a_source_from_its_offer_asks_and_clears_the_list(
+    tmp_path: Path,
+) -> None:
+    manager = manager_for(tmp_path, _bar(), SOURCE_ROUTES)
+    await manager.add_repo("busy-app/demo")
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("d")
+        await _settle(pilot)
+        assert "Forget the source busy-app/demo" in " ".join(
+            str(w.render()) for w in app.screen.query(Label)
+        )
+        await pilot.press("y")
+        await _settle(pilot)
+
+        assert _rows(app) == []
+    assert manager.store.config.sources == []
+
+
+async def test_the_dashboard_is_for_starting_so_it_leaves_out_what_is_not_there(
+    tmp_path: Path,
+) -> None:
+    manager = manager_for(tmp_path, _bar(("a.app", "Alpha", "1.0.0")), SOURCE_ROUTES)
+    await manager.add_repo("busy-app/demo")
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+        await pilot.press("b")
+        await _settle_longer(pilot)
+
+        assert [card.entry.name for card in app.screen.query(AppCard)] == ["Alpha"]

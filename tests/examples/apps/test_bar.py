@@ -309,3 +309,60 @@ async def test_leaving_by_the_switch_stops_if_the_bar_goes_away_midway() -> None
         await firmware.bar().leave_by_switch(sleep=sleep)
 
     assert len(firmware.seen) == 1, "no further presses after one has failed"
+
+
+# Sharing the socket ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_what_the_socket_receives_is_handed_to_whoever_listens() -> None:
+    bar = _bar_of(_Client(stream=[{"updates": [1]}, b"raw", "text", {"updates": [2]}]))
+    heard: list[dict] = []
+    stop = bar.listen(heard.append)
+
+    await bar.hold()
+    stop()
+    await _bar_of(_Client(stream=[{"updates": [3]}])).hold()
+
+    # Only the decoded messages; and nothing after listening stopped.
+    assert heard == [{"updates": [1]}, {"updates": [2]}]
+
+
+@pytest.mark.asyncio
+async def test_a_message_the_bar_sends_that_cannot_be_read_is_not_a_lost_bar() -> None:
+    bar = _bar_of(
+        _Client(
+            stream=[
+                exceptions.BusyBarProtocolError(
+                    "bad", method="GET", path="/api/status/ws"
+                )
+            ]
+        )
+    )
+
+    with pytest.raises(ManagerError, match="unreadable"):
+        await bar.hold()
+
+
+@pytest.mark.asyncio
+async def test_a_key_is_pressed_as_a_hand_would() -> None:
+    firmware = _Firmware({("POST", "/api/input"): (200, {"result": "OK"})})
+
+    await firmware.bar().press(types.InputKey.OK)
+
+    request = firmware.seen[0]
+    assert (request.method, request.url.path) == ("POST", "/api/input")
+    assert request.url.params["key"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_a_refused_key_says_why() -> None:
+    firmware = _Firmware({("POST", "/api/input"): (403, {"error": "Forbidden"})})
+
+    with pytest.raises(ManagerError, match="needs its access key"):
+        await firmware.bar().press(types.InputKey.OK)
+
+
+@pytest.mark.asyncio
+async def test_a_display_that_cannot_be_read_is_just_no_picture() -> None:
+    assert await _Firmware({}).bar().front_screen() is None

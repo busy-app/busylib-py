@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
 import pytest
 
 from examples.apps import store
-from examples.apps.model import ExternalApp, ManagerError, Source
+from examples.apps.model import ExternalApp, ManagerError, Offer, Source
 from examples.apps.store import Store, slugify
 
 
 def test_what_was_added_is_there_after_a_restart(tmp_path: Path) -> None:
-    path = tmp_path / "apps.json"
+    path = tmp_path / "apps.db"
     first = Store(path)
     first.add_source(
         Source(repo="busy-app/demo", mode="build", subdir="apps/x", title="Demo")
@@ -31,7 +32,7 @@ def test_what_was_added_is_there_after_a_restart(tmp_path: Path) -> None:
 
 
 def test_a_first_run_has_nothing_and_writes_nothing(tmp_path: Path) -> None:
-    path = tmp_path / "apps.json"
+    path = tmp_path / "apps.db"
 
     config = Store(path).load()
 
@@ -40,7 +41,7 @@ def test_a_first_run_has_nothing_and_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_the_same_repository_is_not_a_source_twice(tmp_path: Path) -> None:
-    keeper = Store(tmp_path / "apps.json")
+    keeper = Store(tmp_path / "apps.db")
     keeper.add_source(Source(repo="busy-app/demo"))
 
     with pytest.raises(ManagerError, match="already a source"):
@@ -52,7 +53,7 @@ def test_one_repository_can_be_two_sources_in_different_folders(tmp_path: Path) 
     A monorepo holding several applications is one repository and several
     things to install.
     """
-    keeper = Store(tmp_path / "apps.json")
+    keeper = Store(tmp_path / "apps.db")
     keeper.add_source(Source(repo="busy-app/apps", subdir="clock"))
     keeper.add_source(Source(repo="busy-app/apps", subdir="weather"))
 
@@ -60,18 +61,18 @@ def test_one_repository_can_be_two_sources_in_different_folders(tmp_path: Path) 
 
 
 def test_removing_a_source_keeps_the_others(tmp_path: Path) -> None:
-    keeper = Store(tmp_path / "apps.json")
+    keeper = Store(tmp_path / "apps.db")
     keeper.add_source(Source(repo="a/one"))
     keeper.add_source(Source(repo="b/two"))
 
     keeper.remove_source("a/one")
 
     assert [s.repo for s in keeper.config.sources] == ["b/two"]
-    assert [s.repo for s in Store(tmp_path / "apps.json").load().sources] == ["b/two"]
+    assert [s.repo for s in Store(tmp_path / "apps.db").load().sources] == ["b/two"]
 
 
 def test_saving_an_external_app_again_replaces_it(tmp_path: Path) -> None:
-    keeper = Store(tmp_path / "apps.json")
+    keeper = Store(tmp_path / "apps.db")
     keeper.save_external(ExternalApp("clock", "Clock", "/a", "run"))
 
     keeper.save_external(ExternalApp("clock", "Clock 2", "/b", "run2"))
@@ -80,7 +81,7 @@ def test_saving_an_external_app_again_replaces_it(tmp_path: Path) -> None:
 
 
 def test_two_apps_with_one_name_get_different_slugs(tmp_path: Path) -> None:
-    keeper = Store(tmp_path / "apps.json")
+    keeper = Store(tmp_path / "apps.db")
     keeper.save_external(
         ExternalApp(keeper.unused_slug("My Clock"), "My Clock", "/", "x")
     )
@@ -107,42 +108,121 @@ def test_a_file_that_cannot_be_read_is_set_aside_not_overwritten(
     """
     It may be the only copy of something a person typed.
     """
-    path = tmp_path / "apps.json"
-    path.write_text("{ this is not json")
+    path = tmp_path / "apps.db"
+    path.write_text("this is not a database")
 
     keeper = Store(path)
     config = keeper.load()
 
     assert (config.sources, config.externals) == ([], [])
     assert "could not be read" in keeper.warning
-    assert (tmp_path / "apps.json.bad").read_text() == "{ this is not json"
+    assert (tmp_path / "apps.db.bad").read_text() == "this is not a database"
 
     # And the manager carries on with a fresh file.
     keeper.add_source(Source(repo="a/b"))
     assert Store(path).load().sources == [Source(repo="a/b")]
 
 
-def test_a_file_from_a_newer_manager_with_extra_fields_is_not_lost(
+def test_a_database_from_a_newer_manager_is_set_aside_not_misread(
     tmp_path: Path,
 ) -> None:
-    path = tmp_path / "apps.json"
-    path.write_text(
-        json.dumps({"version": 9, "sources": [{"repo": "a/b", "future": 1}]})
-    )
+    path = tmp_path / "apps.db"
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA user_version = 99")
 
     keeper = Store(path)
     keeper.load()
 
     assert keeper.config.sources == []
-    assert (tmp_path / "apps.json.bad").exists()
+    assert "newer manager" in keeper.warning
+    assert (tmp_path / "apps.db.bad").exists()
 
 
-def test_a_save_is_never_half_written(tmp_path: Path) -> None:
-    keeper = Store(tmp_path / "deep" / "apps.json")
+def test_what_the_json_file_held_is_taken_in_once(tmp_path: Path) -> None:
+    """
+    Before it had a database the manager kept one JSON file. A person who
+    upgrades must find their sources where they left them - and the old
+    file is kept, since it is still a copy of what they typed.
+    """
+    legacy = tmp_path / "apps.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "sources": [{"repo": "a/b", "title": "Mine"}],
+                "externals": [
+                    {
+                        "slug": "clock",
+                        "name": "Clock",
+                        "path": "/x",
+                        "command": "run",
+                        "env": {"CITY": "Utrecht"},
+                    }
+                ],
+            }
+        )
+    )
+
+    first = Store(tmp_path / "apps.db").load()
+
+    assert [s.title for s in first.sources] == ["Mine"]
+    assert first.externals[0].env == {"CITY": "Utrecht"}
+    assert not legacy.exists()
+    assert (tmp_path / "apps.json.imported").exists()
+    # Opened again, nothing is taken in twice.
+    assert len(Store(tmp_path / "apps.db").load().sources) == 1
+
+
+def test_the_first_run_creates_the_database_only_when_something_is_kept(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "deep" / "apps.db"
+    keeper = Store(path)
+    keeper.load()
+    assert not path.exists()
+
     keeper.add_source(Source(repo="a/b"))
 
-    assert not list((tmp_path / "deep").glob("*.tmp"))
-    assert json.loads((tmp_path / "deep" / "apps.json").read_text())["version"] == 1
+    assert path.exists()
+
+
+def test_what_a_source_offered_is_there_after_a_restart(tmp_path: Path) -> None:
+    path = tmp_path / "apps.db"
+    keeper = Store(path)
+    keeper.add_source(Source(repo="a/b"))
+    keeper.add_source(Source(repo="c/d", kind="catalog"))
+    keeper.set_offers("c/d", "", [Offer("c/d", "", "clock", "Clock", description="x")])
+    keeper.set_offers("a/b", "", [Offer("a/b", "", "", "Demo", "1.0", app_id="demo")])
+
+    offers = Store(path).offers()
+
+    # In the order the sources were added.
+    assert [(o.repo, o.name, o.app_id) for o in offers] == [
+        ("a/b", "Demo", "demo"),
+        ("c/d", "Clock", ""),
+    ]
+
+
+def test_seeing_a_source_again_replaces_what_it_offered(tmp_path: Path) -> None:
+    keeper = Store(tmp_path / "apps.db")
+    keeper.add_source(Source(repo="c/d", kind="catalog"))
+    keeper.set_offers(
+        "c/d", "", [Offer("c/d", "", "a", "A"), Offer("c/d", "", "b", "B")]
+    )
+
+    keeper.set_offers("c/d", "", [Offer("c/d", "", "b", "B 2")])
+
+    assert [o.name for o in keeper.offers()] == ["B 2"]
+
+
+def test_forgetting_a_source_forgets_what_it_offered(tmp_path: Path) -> None:
+    keeper = Store(tmp_path / "apps.db")
+    keeper.add_source(Source(repo="a/b"))
+    keeper.set_offers("a/b", "", [Offer("a/b", "", "", "Demo")])
+
+    keeper.remove_source("a/b")
+
+    assert keeper.offers() == []
 
 
 @pytest.mark.parametrize(

@@ -24,7 +24,15 @@ from . import package
 from .bar import Bar, replacing
 from .github import GitHub
 from .launcher import Launcher, parse_env
-from .model import ExternalApp, ManagerError, Package, Source, Version
+from .model import (
+    ExternalApp,
+    ManagerError,
+    Offer,
+    Package,
+    Source,
+    Version,
+    parse_repo,
+)
 from .programs import Installed, Plan, Programs, needs_update
 from .store import Store
 
@@ -38,7 +46,7 @@ class Entry:
     """
 
     key: str
-    kind: Literal["bar", "external"]
+    kind: Literal["bar", "external", "available"]
     name: str
     version: str = ""
     description: str = ""
@@ -51,10 +59,14 @@ class Entry:
     # the catalog now has something newer.
     origin: str = ""
     update: bool = False
+    # For one a source offers and nothing has installed yet: what it offers,
+    # and whether it would go on the bar or on this computer.
+    offer: Offer | None = None
+    target: str = ""
 
     @property
     def where(self) -> str:
-        return "bar" if self.kind == "bar" else "computer"
+        return self.target or ("bar" if self.kind == "bar" else "computer")
 
     def with_running(self, running: bool) -> Entry:
         """
@@ -74,6 +86,7 @@ class Prepared:
 
     package: Package
     staged: types.AppStageResult
+    source: Source | None = None
 
     @property
     def summary(self) -> str:
@@ -164,7 +177,59 @@ class Manager:
 
         external = [self._external_entry(app) for app in self.store.config.externals]
         external.sort(key=lambda entry: entry.name.lower())
-        return listed + external, problem
+        return listed + external + self._available(listed, external), problem
+
+    def _available(self, on_bar: list[Entry], external: list[Entry]) -> list[Entry]:
+        """
+        What the sources offer that is not installed, as the last look at
+        them saw it - so the list has them before the network has answered,
+        and without it.
+        """
+        sources = {(s.repo.lower(), s.subdir): s for s in self.store.config.sources}
+        on_the_bar = {entry.ident for entry in on_bar}
+        folders = {Path(e.external.path) for e in external if e.external}
+        found: list[Entry] = []
+        for offer in self.store.offers():
+            source = sources.get((offer.repo.lower(), offer.subdir))
+            if source is None:
+                continue
+            if source.kind == "catalog":
+                if self.programs.folder(offer.slug) in folders:
+                    continue
+            elif offer.app_id and offer.app_id in on_the_bar:
+                continue
+            found.append(
+                Entry(
+                    key=f"available:{offer.repo}|{offer.subdir}|{offer.slug}",
+                    kind="available",
+                    name=offer.name,
+                    version=offer.version,
+                    description=offer.description,
+                    author=offer.author,
+                    ident=offer.slug or offer.repo,
+                    status="not installed",
+                    origin=offer.repo,
+                    offer=offer,
+                    target="computer" if source.kind == "catalog" else "bar",
+                )
+            )
+        return found
+
+    def source_of(self, entry: Entry) -> Source | None:
+        """
+        The source an available entry is offered by.
+        """
+        offer = entry.offer
+        if offer is None:
+            return None
+        return next(
+            (
+                s
+                for s in self.store.config.sources
+                if s.repo.lower() == offer.repo.lower() and s.subdir == offer.subdir
+            ),
+            None,
+        )
 
     def _external_entry(self, app: ExternalApp) -> Entry:
         stamp = self.stamp_of(app)
@@ -201,6 +266,43 @@ class Manager:
 
     # Sources -----------------------------------------------------------
 
+    async def add_repo(self, text: str) -> Source:
+        """
+        Add a source from nothing but where it is: `owner/name`, or a link.
+
+        What kind of source it is gets worked out here, and whatever it
+        offers appears in the list as not installed.
+        """
+        repo = parse_repo(text)
+        if any(s.repo.lower() == repo.lower() for s in self.store.config.sources):
+            raise ManagerError(f"{repo} is already a source")
+        return await self.add_source(await self.detect(repo))
+
+    async def detect(self, repo: str) -> Source:
+        """
+        What a repository is for: a catalog of programs (an `apps/` folder of
+        them), an app with releases to install, or an app to build from source.
+        """
+        try:
+            as_catalog = Source(repo=repo, kind="catalog")
+            if (await self.catalog(as_catalog)).apps:
+                return as_catalog
+        except ManagerError:
+            pass  # not a catalog; the next question says if it is not there at all
+        try:
+            await asyncio.to_thread(self.github.versions, Source(repo=repo))
+            return Source(repo=repo)
+        except ManagerError:
+            pass
+        built = Source(repo=repo, mode="build")
+        versions = await asyncio.to_thread(self.github.versions, built)
+        if await asyncio.to_thread(self.github.manifest, built, versions[0].ref):
+            return built
+        raise ManagerError(
+            f"{repo} has nothing to install: no apps/ folder of programs, no release "
+            "with a .tgz package, and no app manifest in its source"
+        )
+
     async def add_source(self, source: Source) -> Source:
         """
         Add a source after checking there is something to install from it.
@@ -209,28 +311,60 @@ class Manager:
         in the repository name into a message in the form that was just
         filled in, instead of a puzzle later.
         """
+        offers = await self._look(source)
         if source.kind == "catalog":
-            found = await self.catalog(source)
-            if not found.apps:
+            if not offers:
+                problems = self.catalogs[source.repo].problems
                 raise ManagerError(
                     f"{source.repo} has no programs in its apps/ folder"
-                    + (
-                        f" ({len(found.problems)} could not be read)"
-                        if found.problems
-                        else ""
-                    )
+                    + (f" ({len(problems)} could not be read)" if problems else "")
                 )
             source.title = source.title or source.repo.split("/", 1)[1]
-            self.store.add_source(source)
-            return source
+        elif not source.title and offers[0].app_id:
+            source.title = offers[0].name
+        self.store.add_source(source)
+        self.store.set_offers(source.repo, source.subdir, offers)
+        return source
+
+    async def _look(self, source: Source) -> list[Offer]:
+        """
+        What a source has to install right now.
+        """
+        repo, subdir = source.repo, source.subdir
+        if source.kind == "catalog":
+            found = await self.catalog(source)
+            return [
+                Offer(
+                    repo,
+                    subdir,
+                    app.slug,
+                    app.name,
+                    description=app.manifest.description,
+                    author=app.manifest.author,
+                )
+                for app in found.apps
+            ]
         versions = await asyncio.to_thread(self.github.versions, source)
         manifest = await asyncio.to_thread(
             self.github.manifest, source, versions[0].ref
         )
-        if manifest is not None and not source.title:
-            source.title = manifest.name
-        self.store.add_source(source)
-        return source
+        if manifest is None:
+            return [Offer(repo, subdir, "", source.label, versions[0].label)]
+        return [
+            Offer(
+                repo,
+                subdir,
+                "",
+                manifest.name,
+                manifest.version,
+                manifest.description,
+                manifest.author,
+                manifest.id,
+            )
+        ]
+
+    def forget_source(self, source: Source) -> None:
+        self.store.remove_source(source.repo, source.subdir)
 
     # Catalogs ----------------------------------------------------------
 
@@ -239,20 +373,21 @@ class Manager:
         self.catalogs[source.repo] = found
         return found
 
-    async def refresh_catalogs(self) -> list[str]:
+    async def refresh_sources(self) -> list[str]:
         """
-        Ask every catalog source what it has now, so that installed programs
-        can be told they are out of date. Returns a sentence per catalog that
-        could not be asked - being offline is not an error worth stopping for.
+        Ask every source what it has now, so that what is available is true
+        and installed programs can be told they are out of date. Returns a
+        sentence per source that could not be asked - being offline is not an
+        error worth stopping for.
         """
         problems: list[str] = []
-        for source in self.store.config.sources:
-            if source.kind != "catalog":
-                continue
+        for source in list(self.store.config.sources):
             try:
-                await self.catalog(source)
+                offers = await self._look(source)
             except ManagerError as err:
                 problems.append(f"could not check {source.repo} for updates: {err}")
+                continue
+            self.store.set_offers(source.repo, source.subdir, offers)
         return problems
 
     def page_url(self, entry: Entry) -> str | None:
@@ -365,7 +500,7 @@ class Manager:
                 f"the bar read the package as {staged.staged.id!r}, not "
                 f"{built.manifest.id!r}; refusing to install it"
             )
-        return Prepared(built, staged)
+        return Prepared(built, staged, source)
 
     def _build(self, archive: bytes, source: Source, say: Say) -> Package:
         with tempfile.TemporaryDirectory(prefix="busy-apps-") as temporary:
@@ -383,6 +518,33 @@ class Manager:
         if self.bar is None:
             raise ManagerError("there is no bar to install on")
         await self.bar.install(prepared.staged)
+        self._learn(prepared)
+
+    def _learn(self, prepared: Prepared) -> None:
+        """
+        Note what an install turned out to be, so that a source whose
+        manifest could not be read ahead of time is no longer offered as
+        something not yet installed.
+        """
+        source, manifest = prepared.source, prepared.package.manifest
+        if source is None or source.kind != "app":
+            return
+        self.store.set_offers(
+            source.repo,
+            source.subdir,
+            [
+                Offer(
+                    source.repo,
+                    source.subdir,
+                    "",
+                    manifest.name,
+                    manifest.version,
+                    manifest.description,
+                    manifest.author,
+                    manifest.id,
+                )
+            ],
+        )
 
     # Using what is there -----------------------------------------------
 
@@ -391,6 +553,10 @@ class Manager:
         Start an entry: launch it on the bar, or run it on this computer.
         Returns a sentence about what happened.
         """
+        if entry.kind == "available":
+            raise ManagerError(
+                f"{entry.name} is not installed yet; press i to install it"
+            )
         if entry.kind == "bar":
             if self.bar is None:
                 raise ManagerError(

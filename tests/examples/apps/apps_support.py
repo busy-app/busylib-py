@@ -71,6 +71,9 @@ class FakeBar(Bar):
         # What asking the bar to quit its app comes to: "works" (the
         # default), "unavailable" (old firmware), or "none running".
         self.quit_answer = "works"
+        # What the display shows when asked for outright, before the stream
+        # has said anything.
+        self.picture: bytes | None = None
         # The connection: the API it reports, whether it answers, and the
         # socket the manager holds open to it.
         self.api = "27.9.0"
@@ -145,6 +148,19 @@ class FakeBar(Bar):
     async def leave_by_switch(self, pause: float = 1.5, sleep=None) -> None:
         self.done.append("switch")
 
+    async def front_screen(self) -> bytes | None:
+        return self.picture
+
+    async def press(self, key: types.InputKey) -> None:
+        self.done.append(f"press {key.name}")
+
+    def emit(self, message: dict) -> None:
+        """
+        Say something on the socket the manager holds, as the bar would.
+        """
+        for callback in list(self._listeners):
+            callback(message)
+
     async def delete(self, app_id: str) -> None:
         self.done.append(f"delete {app_id}")
         self.apps = [a for a in self.apps if a.id != app_id]
@@ -154,7 +170,7 @@ def manager_for(
     tmp_path: Path, bar: Bar | None, routes: dict | None = None, **kwargs
 ) -> Manager:
     return Manager(
-        Store(tmp_path / "apps.json"),
+        Store(tmp_path / "apps.db"),
         GitHub(Net(routes or {}), token=""),
         Launcher(tmp_path / "logs"),
         bar,

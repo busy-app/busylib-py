@@ -31,12 +31,16 @@ from .dialogs import (
     ProgramPick,
     Sources,
     Verdict,
+    Versions,
+    ask_for_source,
 )
 from . import link
 from .launcher import format_env
 from .bar import CannotQuitDirectly
 from .manager import Entry, Manager
+from .mirror import Mirror
 from .model import ManagerError
+from .view import BarScreen, Remote
 
 
 def describe(entry: Entry, manager: Manager) -> str:
@@ -54,6 +58,21 @@ def describe(entry: Entry, manager: Manager) -> str:
         if entry.info is not None and entry.info.is_debug:
             lines += ["_A debug app: the bar shows it only in debug mode._", ""]
         lines += ["**Enter** launch · **x** quit the running app · **d** remove"]
+        return "\n".join(lines)
+
+    if entry.kind == "available":
+        lines = [f"## {entry.name}", ""]
+        meta = " · ".join(part for part in (entry.version, entry.author) if part)
+        if meta:
+            lines += [f"**{meta}**", ""]
+        if entry.description:
+            lines += [entry.description, ""]
+        lines += [
+            f"Not installed · offered by `{entry.origin}` · would go on "
+            f"{'the bar' if entry.where == 'bar' else 'this computer'}",
+            "",
+            "**Enter** or **i** install · **d** forget the source",
+        ]
         return "\n".join(lines)
 
     app = entry.external
@@ -92,8 +111,10 @@ def describe(entry: Entry, manager: Manager) -> str:
 
 class Home(Screen[None]):
     BINDINGS = [
-        Binding("i", "sources", "Install"),
+        Binding("i", "install", "Install"),
+        Binding("a", "add_source", "Add source"),
         Binding("s", "sources", "Sources", show=False),
+        Binding("v", "remote", "View bar"),
         Binding("x", "stop", "Quit/stop"),
         Binding("d", "remove", "Remove"),
         Binding("e", "add_external", "Add external"),
@@ -125,6 +146,12 @@ class Home(Screen[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static("", id="banner")
+        with Horizontal(id="view"):
+            yield BarScreen()
+            yield Static(
+                "The bar's display, live.\n\n[b]v[/b] to press its keys.",
+                id="view-hint",
+            )
         with Horizontal(id="main"):
             with Vertical(id="left"):
                 yield DataTable(id="apps", cursor_type="row", zebra_stripes=True)
@@ -133,6 +160,7 @@ class Home(Screen[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one("#view").display = self.manager.bar is not None
         table = self.query_one(DataTable)
         table.add_column("Name", key="name")
         table.add_column("Where", key="where")
@@ -188,12 +216,13 @@ class Home(Screen[None]):
 
     async def check_updates(self) -> None:
         """
-        Ask the catalogs what they have now, so installed programs can say
-        they are out of date. Quiet when there is nothing to ask.
+        Ask the sources what they have now, so that what is available is true
+        and installed programs can say they are out of date. Quiet when there
+        is nothing to ask.
         """
-        if not any(s.kind == "catalog" for s in self.manager.store.config.sources):
+        if not self.manager.store.config.sources:
             return
-        self.notices = await self.manager.refresh_catalogs()
+        self.notices = await self.manager.refresh_sources()
         await self.reload()
 
     def tick(self) -> None:
@@ -241,6 +270,9 @@ class Home(Screen[None]):
     async def selected(self) -> None:
         entry = self.current()
         if entry is not None:
+            if entry.kind == "available":
+                self.install_offer(entry)
+                return
             await self.app.attempt(self.manager.activate(entry))  # type: ignore[attr-defined]
             self.tick()
 
@@ -259,6 +291,20 @@ class Home(Screen[None]):
     async def action_remove(self) -> None:
         entry = self.current()
         if entry is None:
+            return
+        if entry.kind == "available":
+            source = self.manager.source_of(entry)
+            if source is not None and await self.app.push_screen_wait(
+                Confirm(
+                    f"Forget the source {source.repo}?",
+                    "Everything it offers leaves the list. Nothing installed is "
+                    "touched.",
+                    ok="Forget",
+                    variant="error",
+                )
+            ):
+                self.manager.forget_source(source)
+                await self.reload()
             return
         if entry.kind == "bar":
             heading, body, ok = (
@@ -363,8 +409,66 @@ class Home(Screen[None]):
             await self.reload(keep=entry.key)
 
     @work
+    async def action_add_source(self) -> None:
+        if await ask_for_source(self.app):
+            await self.reload()
+
+    @work
+    async def action_install(self) -> None:
+        """
+        Install the one under the cursor if it is on offer; otherwise choose
+        from the sources.
+        """
+        entry = self.current()
+        if entry is not None and entry.kind == "available":
+            await self.install_offer_now(entry)
+        else:
+            await self.choose_from_sources()
+
+    def action_remote(self) -> None:
+        self.app.push_screen(Remote())
+
+    @work
+    async def install_offer(self, entry: Entry) -> None:
+        await self.install_offer_now(entry)
+
+    async def install_offer_now(self, entry: Entry) -> None:
+        """
+        Install what a source offers: pick a version of an app, or fetch the
+        program from its catalog.
+        """
+        source = self.manager.source_of(entry)
+        if source is None:
+            return
+        if source.kind == "catalog":
+            try:
+                catalog = self.manager.catalogs.get(source.repo) or (
+                    await self.manager.catalog(source)
+                )
+            except ManagerError as err:
+                self.app.notify(str(err), severity="error")
+                return
+            program = catalog.find(entry.ident)
+            if program is None:
+                self.app.notify(
+                    f"{source.repo} no longer has {entry.name}", severity="warning"
+                )
+                return
+            await self.install_program(ProgramPick(source, catalog, program))
+            return
+        version = await self.app.push_screen_wait(
+            Versions(source, lambda: self.manager.versions(source))
+        )
+        if version is not None:
+            await self.install(Pick(source, version))
+
+    @work
     async def action_sources(self) -> None:
+        await self.choose_from_sources()
+
+    async def choose_from_sources(self) -> None:
         pick = await self.app.push_screen_wait(Sources())
+        await self.reload()
         if isinstance(pick, ProgramPick):
             await self.install_program(pick)
         elif pick is not None:
@@ -559,6 +663,7 @@ class Dashboard(Screen[None]):
 
     async def load(self) -> None:
         entries, problem = await self.manager.entries()
+        entries = [entry for entry in entries if entry.kind != "available"]
         banner = self.query_one("#banner", Static)
         banner.update(problem)
         banner.display = bool(problem)
@@ -614,10 +719,32 @@ class AppsManager(App[None]):
         self.address = address
         self._close = close
         self.home = Home()
+        self.mirror = Mirror()
         # Said in the banner while the bar is away; empty when it is there.
         self.link_problem = ""
 
+    @property
+    def screen_note(self) -> str:
+        """
+        What the display area says when there is no picture to show.
+        """
+        if self.manager.bar is None:
+            return "no bar"
+        return "not connected" if self.link_problem else "waiting for the display..."
+
+    async def load_picture(self) -> None:
+        """
+        The display as it is now, for the moment before the stream has sent a
+        frame of its own - which it does only when something changes.
+        """
+        bar = self.manager.bar
+        data = await bar.front_screen() if bar is not None else None
+        if data and self.mirror.frame is None:
+            self.mirror.show_screen(data)
+
     async def on_mount(self) -> None:
+        if self.manager.bar is not None:
+            self.manager.bar.listen(self.mirror.feed)
         self.set_link("no bar" if self.manager.bar is None else "connecting...")
         # Waited for, because the watch reports into the list's own window: a
         # report that arrives before it exists would fail inside the watch and
@@ -646,6 +773,7 @@ class AppsManager(App[None]):
         """
         if isinstance(event, link.Down):
             self.link_problem = "the bar is not answering - trying again"
+            self.mirror.clear()
             if event.first:
                 self.set_link("not reachable - retrying")
                 self.notify(
@@ -664,6 +792,7 @@ class AppsManager(App[None]):
                 )
         else:
             self.link_problem = ""
+            self.run_worker(self.load_picture(), group="picture")
             self.set_link(f"connected, API {event.api}" if event.api else "connected")
             if event.after is not None:
                 gone = f"{event.after:.0f} s"

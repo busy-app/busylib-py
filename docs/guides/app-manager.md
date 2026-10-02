@@ -41,13 +41,17 @@ do. `--token` gives the access key when the bar wants one, and `--offline`
 starts without a bar, for managing sources and programs on their own.
 
 The main screen lists everything that can be started: the applications on the
-bar, found by asking it, and the programs you added from this computer. The
-panel on the right is the card of whatever is highlighted.
+bar, found by asking it, and the programs you added from this computer. After
+those come the things your sources offer that are not installed yet, marked
+*not installed*. The panel on the right is the card of whatever is
+highlighted, and above the list is the bar's display, live.
 
 | Key | Does |
 | --- | --- |
-| `Enter` | Launch the app on the bar, or run the program here |
-| `i` | Install an app from a source |
+| `Enter` | Launch the app on the bar, run the program here, or install what is not installed yet |
+| `i` | Install the highlighted offer, or choose from the sources |
+| `a` | Add a source: just `owner/name` |
+| `v` | The bar's display, live, with its keys to press |
 | `x` | Quit the app running on the bar, or stop the highlighted program |
 | `d` | Remove the app from the bar, or forget the program |
 | `e` / `m` | Add / modify a program from this computer |
@@ -126,11 +130,45 @@ Chrome, Edge and the Claude Code preview refuse a handful of ports outright -
 in a browser. `8080`, `8000` and `8888` are fine. A bar reached this way sees the
 requests arrive over USB, which is why it asks for no access key.
 
+## Seeing the bar
+
+The strip above the list is the bar's front display, drawn in the terminal as
+it changes: whatever an app is showing, you see here. `v` opens it with the
+bar's keys, for when the bar is across the room.
+
+| Key | Presses |
+| --- | --- |
+| `Enter`, `Backspace`, `Space` | OK, Back, Start |
+| `Left`, `Right` | Scroll |
+| `1` to `5` | The switch: Busy, Custom, Off, Apps, Settings |
+| `Esc` or `v` | Close |
+
+Every one is also a button you can click. A key pressed here is
+indistinguishable from one pressed on the bar. The display arrives on the same
+connection the manager keeps open to know the bar is there, so it uses no extra
+one of the four the bar allows.
+
 ## Sources
 
-A source is a GitHub repository. `i` opens the list of them; `a` adds one.
+A source is a GitHub repository. Add one with `a`, and type nothing but where
+it is - `owner/name`, or paste the link:
+
+```
+busy-app/demo
+https://github.com/maxswinkels/busybar-apps
+```
+
+The manager works out what it is: a catalog of programs (an `apps/` folder of
+them), an app with releases to install, or an app to build from source. Whatever
+it offers appears in the list as *not installed*; `Enter` or `i` installs it,
+and it leaves the offers once it is installed. `d` on an offer forgets its
+source. What the sources offer is remembered between runs, so the list has it
+before the network has answered, and without it; each start asks again.
+
 Adding a source asks GitHub straight away, so a typo in the name is a message
-in the form and not a puzzle later.
+in the form and not a puzzle later. `s` opens the list of sources, where
+`A` adds an app source with options (the install mode, a folder, a manifest
+path) and `p` a catalog on a branch other than `main`.
 
 A source installs in one of two ways:
 
@@ -253,8 +291,10 @@ does - schedules, autostart, a web dashboard, a proxy for the bar.
 
 ## Where things are kept
 
-Sources and programs are one JSON file in the place your system keeps such
-things (`--config` points elsewhere):
+Sources, programs and what each source offers are one SQLite database,
+`apps.db`, in the place your system keeps such things (`--config` points to
+another file). A manager that used the older `apps.json` takes it in once and
+keeps it as `apps.json.imported`:
 
 | System | Folder |
 | --- | --- |
@@ -265,7 +305,7 @@ things (`--config` points elsewhere):
 Next to it are `manager.log`, `http-cache.json` (what GitHub answered, kept so
 the next start is cheap), `programs/` with the installed programs and their
 environments, and a `logs` folder with one file per program.
-A file that cannot be read is moved aside as `apps.json.bad` rather than
+A database that cannot be read is moved aside as `apps.db.bad` rather than
 overwritten.
 
 ## From your own code

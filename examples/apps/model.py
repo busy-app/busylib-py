@@ -23,6 +23,12 @@ REPO = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9_\-]{0,38}/(?!\.{1,2}$)[A-Za-z0-9_.\-]{1,100}$"
 )
 
+# The forms a person has a repository in: a link, an ssh remote, or the name.
+_REPO_URL = re.compile(
+    r"^(?:https?://(?:www\.)?github\.com/|git@github\.com:|github\.com/)"
+    r"(?P<repo>[^/\s]+/[^/\s#?]+)"
+)
+
 # The bar refuses a package larger than this with a 413.
 MAX_PACKAGE_BYTES = 100 * 1024 * 1024
 
@@ -35,6 +41,22 @@ class ManagerError(Exception):
     interface can show the message and carry on; anything else is a bug and
     is allowed to be loud.
     """
+
+
+def parse_repo(text: str) -> str:
+    """
+    `owner/name` from whatever a person pasted: the name itself, a link to the
+    repository or to a folder or page in it, or a git remote.
+    """
+    text = text.strip()
+    found = _REPO_URL.match(text)
+    repo = found["repo"] if found else text
+    repo = repo.removesuffix(".git")
+    if not REPO.match(repo):
+        raise ManagerError(
+            "use the form owner/name, as in github.com/owner/name (or paste the link)"
+        )
+    return repo
 
 
 @dataclass(frozen=True)
@@ -173,6 +195,27 @@ class Version:
     asset: Asset | None = None
     published: str = ""
     prerelease: bool = False
+
+
+@dataclass(frozen=True)
+class Offer:
+    """
+    One thing a source has to install, as it was last seen.
+
+    Remembered between runs so that the list can show what is available
+    before the network has answered, and without it when the network is gone.
+    An app source offers one thing (`slug` empty, `app_id` the id its
+    manifest gives); a catalog offers one per program (`slug` the folder).
+    """
+
+    repo: str
+    subdir: str
+    slug: str
+    name: str
+    version: str = ""
+    description: str = ""
+    author: str = ""
+    app_id: str = ""
 
 
 @dataclass
