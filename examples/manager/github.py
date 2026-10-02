@@ -237,7 +237,7 @@ class GitHub:
                         label=release.get("name") or release["tag_name"],
                         kind="release",
                         asset=asset,
-                        published=(release.get("published_at") or "")[:10],
+                        published=release.get("published_at") or "",
                         prerelease=bool(release.get("prerelease")),
                     )
                 )
@@ -259,6 +259,34 @@ class GitHub:
         for tag in tags if isinstance(tags, list) else []:
             versions.append(Version(ref=tag["name"], label=tag["name"], kind="tag"))
         return versions
+
+    def commits(self, source: Source, limit: int = 30) -> list[Version]:
+        """
+        The newest commits of the default branch, for building one that no
+        release or tag names.
+        """
+        if not REPO.match(source.repo):
+            raise ManagerError(f"{source.repo!r} is not an owner/name repository")
+        listing = self._api(f"/repos/{source.repo}/commits?per_page={limit}")
+        found: list[Version] = []
+        for item in listing if isinstance(listing, list) else []:
+            sha = str(item.get("sha") or "")
+            commit = item.get("commit") or {}
+            if not sha:
+                continue
+            subject = (commit.get("message") or "").split("\n", 1)[0]
+            found.append(
+                Version(
+                    ref=sha,
+                    label=f"{sha[:7]} {subject}".strip(),
+                    kind="commit",
+                    published=(commit.get("committer") or {}).get("date") or "",
+                    note=(commit.get("author") or {}).get("name") or "",
+                )
+            )
+        if not found:
+            raise ManagerError(f"{source.repo} has no commits GitHub would list")
+        return found
 
     def manifest(self, source: Source, ref: str) -> AppManifest | None:
         """

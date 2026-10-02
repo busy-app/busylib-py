@@ -329,27 +329,42 @@ class Versions(ModalScreen[Version | None]):
     The versions a source can be installed at, newest first.
     """
 
-    BINDINGS = [Binding("escape", "back", "Back")]
+    BINDINGS = [
+        Binding("b", "commit", "Build a commit"),
+        Binding("escape", "back", "Back"),
+    ]
 
     def __init__(
-        self, source: Source, load: Callable[[], Awaitable[list[Version]]]
+        self,
+        source: Source,
+        load: Callable[[], Awaitable[list[Version]]],
+        commits: Callable[[], Awaitable[list[Version]]] | None = None,
+        *,
+        title: str = "",
     ) -> None:
         super().__init__(classes="dialog wide")
         self.source = source
         self.load = load
+        # How to list commits, if this window may offer to build one.
+        self.commits = commits
+        self.heading = title or f"Versions of {self.source.label}"
         self.versions: list[Version] = []
 
     def compose(self) -> ComposeResult:
         with Container():
-            yield Label(f"Versions of {self.source.label}", classes="title")
-            yield Label("Asking GitHub...", id="status")
+            yield Label(self.heading, classes="title")
+            yield Label("Looking...", id="status")
             yield DataTable(id="versions", cursor_type="row", zebra_stripes=True)
-            yield Static("Enter installs the highlighted version.", classes="hint")
+            yield Static(
+                "Enter installs the highlighted version."
+                + (" b picks a commit to build." if self.commits else ""),
+                classes="hint",
+            )
         yield Footer()
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_columns("Version", "Kind", "Published", "Note")
+        table.add_columns("Version", "Kind", "Date", "Note")
         table.display = False
         self.run_worker(self.fill(), exclusive=True)
 
@@ -364,11 +379,21 @@ class Versions(ModalScreen[Version | None]):
         status.display = False
         table = self.query_one(DataTable)
         for version in self.versions:
-            note = "pre-release" if version.prerelease else ""
-            if version.asset:
-                note = f"{note + ', ' if note else ''}{version.asset.name}"
+            notes = [
+                part
+                for part in (
+                    "pre-release" if version.prerelease else "",
+                    version.asset.name if version.asset else "",
+                    version.note,
+                )
+                if part
+            ]
             table.add_row(
-                version.label, version.kind, version.published, note, key=version.ref
+                version.label,
+                version.kind,
+                version.published[:10],
+                ", ".join(notes),
+                key=version.ref,
             )
         table.display = True
         table.focus()
@@ -377,6 +402,24 @@ class Versions(ModalScreen[Version | None]):
     def chosen(self, event: DataTable.RowSelected) -> None:
         ref = event.row_key.value
         self.dismiss(next((v for v in self.versions if v.ref == ref), None))
+
+    @work
+    async def action_commit(self) -> None:
+        """
+        Choose a commit to build - one no release or tag names.
+        """
+        if self.commits is None:
+            return
+        commits = self.commits
+        chosen = await self.app.push_screen_wait(
+            Versions(
+                self.source,
+                commits,
+                title=f"Commits of {self.source.label}: Enter builds one",
+            )
+        )
+        if chosen is not None:
+            self.dismiss(chosen)
 
     def action_back(self) -> None:
         self.dismiss(None)
@@ -574,10 +617,11 @@ async def ask_for_source(app: App) -> bool:
             [
                 Field(
                     "repo",
-                    "GitHub repository",
-                    placeholder="owner/name",
-                    hint="Or paste the link. What it offers shows up in the list "
-                    "as not installed.",
+                    "GitHub repository or folder",
+                    placeholder="owner/name  or  ~/projects/my-app",
+                    hint="A name or a pasted link for GitHub, a path for a folder "
+                    "on this computer. What it offers shows up in the list as "
+                    "not installed.",
                 )
             ],
             ok="Add",
@@ -621,7 +665,7 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
 
     def on_mount(self) -> None:
         self.query_one(DataTable).add_columns(
-            "Name", "Repository", "Install from", "Folder"
+            "Name", "Repository or folder", "Install from", "In it"
         )
         self.reload()
 
@@ -632,7 +676,7 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
         for source in sources:
             table.add_row(
                 source.label,
-                source.repo,
+                source.origin,
                 source.where_from,
                 source.subdir or "",
                 key=f"{source.repo}|{source.subdir}",
@@ -667,7 +711,11 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
                 self.dismiss(program)
             return
         version = await self.app.push_screen_wait(
-            Versions(source, lambda: self.manager.versions(source))
+            Versions(
+                source,
+                lambda: self.manager.versions(source),
+                lambda: self.manager.commits(source),
+            )
         )
         if version is not None:
             self.dismiss(Pick(source, version))
@@ -772,13 +820,14 @@ class Sources(ModalScreen[Pick | ProgramPick | None]):
         yes = await self.app.push_screen_wait(
             Confirm(
                 f"Forget {source.label}?",
-                "Apps already installed from it stay on the bar.",
+                "Apps already installed from it stay on the bar. Builds kept from it "
+                "are deleted.",
                 ok="Forget",
                 variant="error",
             )
         )
         if yes:
-            self.manager.store.remove_source(source.repo, source.subdir)
+            self.manager.forget_source(source)
             self.reload()
 
     def action_back(self) -> None:

@@ -168,15 +168,22 @@ selected.
 
 ## Sources
 
-A source is a GitHub repository. Add one with `a`, and type nothing but where
-it is - `owner/name`, or paste the link:
+A source is a GitHub repository, or a folder on this computer. Add one with
+`a`, and type nothing but where it is - `owner/name`, a pasted link, or a path:
 
 ```
 busy-app/demo
 https://github.com/maxswinkels/busybar-apps
+~/projects/my-app
 ```
 
-The manager works out what it is: a catalog of programs (an `apps/` folder of
+A path is told from a repository by how it is written: from the root, `~`, `.`
+or a drive, or a folder that exists. A folder is one app, with its manifest in
+`src/appmeta/` or `appmeta/` as for any source. The list's *From* column says
+where each thing comes from: the repository, or the folder (`~` for your home
+directory).
+
+For a repository, the manager works out what it is: a catalog of programs (an `apps/` folder of
 them), an app with releases to install, or an app to build from source. Whatever
 it offers appears in the list as *not installed*; `Enter` or `i` installs it,
 and it leaves the offers once it is installed. `d` on an offer forgets its
@@ -214,6 +221,34 @@ Replace Demo 1.0.0 with 1.2.0. Go ahead?
 
 Nothing on the bar has changed at that point. Cancelling leaves the bar as it
 was, apart from the package it keeps until another replaces it.
+
+## Versions, and building a commit
+
+Enter on an app that is not installed (or `i` in the sources window) lists
+everything it can be installed at, newest first:
+
+- what the source publishes: releases; for a source built from source, its
+  default branch and tags; for a folder, its working copy;
+- every build you made from it before - see below.
+
+Dated things are in the order they happened, whatever time zone they were
+written in; the heads that have no date (a branch, the working copy) sit
+above them.
+
+`b` in that window lists the newest commits - GitHub's, or `git log` for a
+folder that is a repository - and Enter on one **builds that commit**. It
+needs Node and pnpm like any build. The working copy of a folder is built on a
+copy of it, without `.git`, `node_modules` and `dist`, so nothing is left in
+your project.
+
+Every package built from source is **kept** on this computer, under `builds/`
+next to the database, and from then on is one more row in the list of
+versions, labelled with where it was built from. Installing it again builds
+nothing, and it is still there after the repository has moved on. Forgetting a
+source deletes the builds kept from it.
+
+A folder that is already an app - `appmeta/manifest.json` and its files, no
+`package.json` - is packaged as it is, with no build.
 
 ## What a package is
 
@@ -320,7 +355,8 @@ keeps it as `apps.json.imported`:
 | macOS | `~/Library/Application Support/busy-apps` |
 | Linux | `$XDG_CONFIG_HOME/busy-apps` or `~/.config/busy-apps` |
 
-Next to it are `manager.log`, `http-cache.json` (what GitHub answered, kept so
+Next to it are `builds/` (the packages built from source, one folder per
+source), `manager.log`, `http-cache.json` (what GitHub answered, kept so
 the next start is cheap), `programs/` with the installed programs and their
 environments, and a `logs` folder with one file per program.
 A database that cannot be read is moved aside as `apps.db.bad` rather than

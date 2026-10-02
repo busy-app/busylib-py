@@ -57,6 +57,8 @@ def describe(entry: Entry, manager: Manager) -> str:
         if entry.description:
             lines += [entry.description, ""]
         lines += [f"`{entry.ident}` · on the bar", ""]
+        if entry.came_from:
+            lines += [f"**From** {entry.came_from}", ""]
         if entry.info is not None and entry.info.is_debug:
             lines += ["_A debug app: the bar shows it only in debug mode._", ""]
         lines += ["**Enter** launch · **x** quit the running app · **d** remove"]
@@ -70,7 +72,7 @@ def describe(entry: Entry, manager: Manager) -> str:
         if entry.description:
             lines += [entry.description, ""]
         lines += [
-            f"Not installed · offered by `{entry.origin}` · would go on "
+            f"Not installed · offered by `{entry.came_from}` · would go on "
             f"{'the bar' if entry.where == 'bar' else 'this computer'}",
             "",
             "**Enter** or **i** install · **d** forget the source",
@@ -173,6 +175,7 @@ class Home(Screen[None]):
         table = self.query_one(DataTable)
         table.add_column("Name", key="name")
         table.add_column("Where", key="where")
+        table.add_column("From", key="from")
         table.add_column("Version", key="version")
         table.add_column("Status", key="status")
         self.set_interval(2.0, self.tick)
@@ -194,6 +197,7 @@ class Home(Screen[None]):
             table.add_row(
                 entry.name,
                 entry.where,
+                entry.came_from or "-",
                 entry.version or "-",
                 entry.status,
                 key=entry.key,
@@ -490,7 +494,11 @@ class Home(Screen[None]):
             await self.install_program(ProgramPick(source, catalog, program))
             return
         version = await self.app.push_screen_wait(
-            Versions(source, lambda: self.manager.versions(source))
+            Versions(
+                source,
+                lambda: self.manager.versions(source),
+                lambda: self.manager.commits(source),
+            )
         )
         if version is not None:
             await self.install(Pick(source, version))

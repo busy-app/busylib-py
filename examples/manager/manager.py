@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+from datetime import datetime, timezone
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -20,11 +21,12 @@ from typing import Literal
 from busylib import types
 
 from . import catalog as catalogs
-from . import package
+from . import localrepo, package
 from .bar import Bar, replacing
 from .github import GitHub
 from .launcher import Launcher, parse_env
 from .model import (
+    Build,
     ExternalApp,
     ManagerError,
     Offer,
@@ -34,7 +36,7 @@ from .model import (
     parse_repo,
 )
 from .programs import Installed, Plan, Programs, needs_update
-from .store import Store
+from .store import Store, slugify
 
 Say = Callable[[str], None]
 
@@ -63,6 +65,8 @@ class Entry:
     # and whether it would go on the bar or on this computer.
     offer: Offer | None = None
     target: str = ""
+    # Where it came from, for the list: a repository, or a folder.
+    came_from: str = ""
 
     @property
     def where(self) -> str:
@@ -174,6 +178,10 @@ class Manager:
             except ManagerError as err:
                 problem = str(err)
         listed.sort(key=lambda entry: entry.name.lower())
+        origins = self._origins()
+        listed = [
+            replace(entry, came_from=origins.get(entry.ident, "")) for entry in listed
+        ]
 
         external = [self._external_entry(app) for app in self.store.config.externals]
         external.sort(key=lambda entry: entry.name.lower())
@@ -209,6 +217,7 @@ class Manager:
                     ident=offer.slug or offer.repo,
                     status="not installed",
                     origin=offer.repo,
+                    came_from=source.origin,
                     offer=offer,
                     target="computer" if source.kind == "catalog" else "bar",
                 )
@@ -231,6 +240,20 @@ class Manager:
             None,
         )
 
+    def _origins(self) -> dict[str, str]:
+        """
+        Where each app the sources know about comes from, by the id the bar
+        lists it under.
+        """
+        places = {
+            (s.repo.lower(), s.subdir): s.origin for s in self.store.config.sources
+        }
+        return {
+            offer.app_id: places[(offer.repo.lower(), offer.subdir)]
+            for offer in self.store.offers()
+            if offer.app_id and (offer.repo.lower(), offer.subdir) in places
+        }
+
     def _external_entry(self, app: ExternalApp) -> Entry:
         stamp = self.stamp_of(app)
         update = stamp is not None and self.has_update(stamp, app)
@@ -248,6 +271,7 @@ class Manager:
             external=app,
             origin=stamp.repo if stamp else "",
             update=update,
+            came_from=stamp.repo if stamp else _home_relative(app.path),
         )
 
     def stamp_of(self, app: ExternalApp) -> Installed | None:
@@ -273,10 +297,24 @@ class Manager:
         What kind of source it is gets worked out here, and whatever it
         offers appears in the list as not installed.
         """
+        if localrepo.looks_like_path(text):
+            return await self.add_local(text)
         repo = parse_repo(text)
         if any(s.repo.lower() == repo.lower() for s in self.store.config.sources):
             raise ManagerError(f"{repo} is already a source")
         return await self.add_source(await self.detect(repo))
+
+    async def add_local(self, text: str, manifest: str = "") -> Source:
+        """
+        Add a folder on this computer as a source of one app: its working
+        copy, and any commit of it if it is a git repository.
+        """
+        folder = await asyncio.to_thread(localrepo.resolve, text)
+        if any(s.repo == str(folder) for s in self.store.config.sources):
+            raise ManagerError(f"{folder} is already a source")
+        return await self.add_source(
+            Source(repo=str(folder), local=True, mode="build", manifest=manifest)
+        )
 
     async def detect(self, repo: str) -> Source:
         """
@@ -331,6 +369,22 @@ class Manager:
         What a source has to install right now.
         """
         repo, subdir = source.repo, source.subdir
+        if source.local:
+            _, found = await asyncio.to_thread(
+                package.find_manifest, Path(repo), source.manifest
+            )
+            return [
+                Offer(
+                    repo,
+                    subdir,
+                    "",
+                    found.name,
+                    found.version,
+                    found.description,
+                    found.author,
+                    found.id,
+                )
+            ]
         if source.kind == "catalog":
             found = await self.catalog(source)
             return [
@@ -364,6 +418,12 @@ class Manager:
         ]
 
     def forget_source(self, source: Source) -> None:
+        """
+        Drop a source, and the builds kept from it: they are this manager's
+        own cache, and nothing else would ever name them again.
+        """
+        for path in self.store.forget_builds(source.repo, source.subdir):
+            Path(path).unlink(missing_ok=True)
         self.store.remove_source(source.repo, source.subdir)
 
     # Catalogs ----------------------------------------------------------
@@ -463,7 +523,61 @@ class Manager:
         return updated
 
     async def versions(self, source: Source) -> list[Version]:
-        return await asyncio.to_thread(self.github.versions, source)
+        """
+        Everything a source can be installed at: what it publishes (releases,
+        or branches and tags to build; for a folder, its working copy) and
+        what has been built from it before. Whatever has a date is in order of
+        it, newest first, below the heads that have none.
+        """
+        kept = [
+            self._kept(build) for build in self.store.builds(source.repo, source.subdir)
+        ]
+        try:
+            if source.local:
+                base = await asyncio.to_thread(self._working_copy, source)
+            else:
+                base = await asyncio.to_thread(self.github.versions, source)
+        except ManagerError:
+            if not kept:
+                raise
+            base = []
+        undated = [v for v in base if not v.published]
+        dated = sorted(
+            [*(v for v in base if v.published), *kept], key=_when, reverse=True
+        )
+        return [*undated, *dated]
+
+    @staticmethod
+    def _kept(build: Build) -> Version:
+        return Version(
+            ref=f"build:{Path(build.path).name}",
+            label=f"{build.version} · {build.label}",
+            kind="build",
+            published=build.built_at,
+            artifact=build.path,
+            note=f"built from {build.ref[:7]}",
+        )
+
+    @staticmethod
+    def _working_copy(source: Source) -> list[Version]:
+        folder = Path(source.repo)
+        state = localrepo.head(folder)
+        return [
+            Version(
+                ref="working-copy",
+                label="Working copy" + (f" ({state})" if state else ""),
+                kind="local",
+                note="built now, from the files as they are",
+            )
+        ]
+
+    async def commits(self, source: Source) -> list[Version]:
+        """
+        The newest commits of a source, to build one of them.
+        """
+        if source.local:
+            return await asyncio.to_thread(localrepo.commits, Path(source.repo))
+        return await asyncio.to_thread(self.github.commits, source)
 
     # Installing --------------------------------------------------------
 
@@ -482,12 +596,14 @@ class Manager:
             data = await asyncio.to_thread(self.github.release_package, version)
             say("checking the package")
             built = await asyncio.to_thread(package.normalize_package, data)
+        elif version.kind == "build":
+            say(f"using the build kept at {version.artifact}")
+            data = await asyncio.to_thread(_read, version.artifact)
+            built = await asyncio.to_thread(package.normalize_package, data)
         else:
-            say(f"downloading the source at {version.ref}")
-            archive = await asyncio.to_thread(
-                self.github.source_archive, source, version.ref
-            )
+            archive = await asyncio.to_thread(self._source_of, source, version, say)
             built = await asyncio.to_thread(self._build, archive, source, say)
+            await asyncio.to_thread(self._keep, source, version, built, say)
 
         say(
             f"{built.manifest.name} {built.manifest.version} ({built.manifest.id}), "
@@ -502,6 +618,53 @@ class Manager:
             )
         return Prepared(built, staged, source)
 
+    def _source_of(self, source: Source, version: Version, say: Say) -> bytes:
+        """
+        The files a version is built from: a copy of the folder's working
+        copy, a commit of a local repository, or GitHub's archive of a ref.
+        """
+        if source.local:
+            folder = Path(source.repo)
+            if version.kind == "local":
+                say(f"copying the working copy of {folder.name}")
+                return localrepo.snapshot(folder)
+            say(f"taking commit {version.ref[:7]} out of {folder.name}")
+            return localrepo.archive(folder, version.ref)
+        say(f"downloading the source at {version.ref[:12]}")
+        return self.github.source_archive(source, version.ref)
+
+    def _keep(self, source: Source, version: Version, built: Package, say: Say) -> None:
+        """
+        Keep a package that was built, so that it can be installed again
+        without building and shows in the list of versions. Failing to is not
+        a reason to fail the install it was made for.
+        """
+        now = datetime.now(timezone.utc)
+        ref = version.ref if version.kind != "local" else "working copy"
+        name = f"{now:%Y%m%dT%H%M%S}-{(version.ref if version.kind == 'commit' else 'copy')[:7]}.tgz"
+        folder = self.store.dir / "builds" / slugify(source.repo)
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_bytes(built.data)
+            self.store.add_build(
+                Build(
+                    repo=source.repo,
+                    subdir=source.subdir,
+                    ref=ref,
+                    label=version.label,
+                    app_id=built.manifest.id,
+                    name=built.manifest.name,
+                    version=built.manifest.version,
+                    built_at=now.isoformat(timespec="seconds"),
+                    path=str(folder / name),
+                    size=len(built.data),
+                )
+            )
+        except OSError as err:
+            say(f"could not keep the build ({err})")
+            return
+        say(f"kept the build as {folder / name}")
+
     def _build(self, archive: bytes, source: Source, say: Say) -> Package:
         with tempfile.TemporaryDirectory(prefix="busy-apps-") as temporary:
             root = package.safe_extract(archive, Path(temporary))
@@ -510,6 +673,12 @@ class Manager:
                 raise ManagerError(
                     f"{source.subdir!r} is not a folder in {source.repo}"
                 )
+            if (
+                not (folder / "package.json").exists()
+                and (folder / package.MANIFEST).is_file()
+            ):
+                say("there is no build step; packaging the folder as it is")
+                return package.pack_directory(folder)
             return package.build_from_source(
                 folder, manifest_hint=source.manifest, run=self.run, say=say
             )
@@ -667,3 +836,31 @@ class Manager:
             description=description.strip(),
             env=parse_env(env),
         )
+
+
+def _when(version: Version) -> str:
+    """
+    A version's date as something that sorts: UTC, so that a build and a
+    release from different zones fall in the order they happened.
+    """
+    try:
+        moment = datetime.fromisoformat(version.published.replace("Z", "+00:00"))
+    except ValueError:
+        return version.published
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).isoformat()
+
+
+def _read(path: str) -> bytes:
+    try:
+        return Path(path).read_bytes()
+    except OSError as err:
+        raise ManagerError(f"the kept build cannot be read ({err})") from err
+
+
+def _home_relative(path: str) -> str:
+    try:
+        return "~/" + Path(path).relative_to(Path.home()).as_posix()
+    except ValueError:
+        return path

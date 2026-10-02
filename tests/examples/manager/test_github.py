@@ -66,7 +66,7 @@ def test_releases_with_a_package_are_the_versions() -> None:
         ("v1.0.0", True),
     ]
     assert versions[0].asset == Asset("demo.tgz", "https://dl/v1.1.0/demo.tgz", 10)
-    assert versions[0].published == "2026-09-30"
+    assert versions[0].published == "2026-09-30T10:00:00Z"
 
 
 def test_a_release_without_the_package_is_not_offered() -> None:

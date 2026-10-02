@@ -74,16 +74,17 @@ def home_manager(tmp_path: Path) -> Manager:
 
 
 async def test_the_list_has_the_bars_apps_and_the_computers(
-    home_manager: Manager,
+    home_manager: Manager, tmp_path: Path
 ) -> None:
     app = AppsManager(home_manager, "192.168.1.20")
     async with app.run_test(size=SIZE) as pilot:
         await _settle(pilot)
 
         assert _rows(app) == [
-            ["Alpha", "bar", "1.0.0", "installed"],
-            ["Beta", "bar", "2.0.0", "installed"],
-            ["Clock", "computer", "-", "ready"],
+            ["Alpha", "bar", "-", "1.0.0", "installed"],
+            ["Beta", "bar", "-", "2.0.0", "installed"],
+            # A program added by hand comes from the folder it was added from.
+            ["Clock", "computer", str(tmp_path), "-", "ready"],
         ]
         assert app.sub_title == "192.168.1.20 - connected, API 27.9.0"
 
@@ -568,8 +569,8 @@ async def test_a_program_with_an_update_says_so_and_updating_asks_first(
     async with app.run_test(size=SIZE) as pilot:
         await _settle_longer(pilot)
         assert _rows(app) == [
-            ["Clock", "computer", "-", "update"],
-            ["Weather", "computer", "-", "not installed"],
+            ["Clock", "computer", "busy-app/programs", "-", "update"],
+            ["Weather", "computer", "busy-app/programs", "-", "not installed"],
         ]
         assert "update available" in _details(app)
 
@@ -588,7 +589,7 @@ async def test_a_program_with_an_update_says_so_and_updating_asks_first(
         assert (
             tmp_path / "programs" / "clock" / "app.py"
         ).read_bytes() == b"print('v2')\n"
-        assert _rows(app)[0][3] == "ready"
+        assert _rows(app)[0][4] == "ready"
 
 
 async def test_u_on_something_with_no_update_says_there_is_nothing_to_do(
@@ -1222,7 +1223,9 @@ async def test_a_source_is_added_by_its_name_and_appears_as_not_installed(
         await _settle_longer(pilot)
 
         assert isinstance(app.screen, Home), "one question, and it is over"
-        assert _rows(app) == [["Demo", "bar", "1.2.0", "not installed"]]
+        assert _rows(app) == [
+            ["Demo", "bar", "busy-app/demo", "1.2.0", "not installed"]
+        ]
         assert "Not installed" in _details(app)
 
 
@@ -1248,7 +1251,7 @@ async def test_enter_on_something_not_installed_installs_it_after_asking(
         await _settle(pilot)
 
         assert bar.done == ["install 5"]
-        assert _rows(app) == [["Demo", "bar", "1.2.0", "installed"]]
+        assert _rows(app) == [["Demo", "bar", "busy-app/demo", "1.2.0", "installed"]]
 
 
 async def test_a_catalogs_program_is_installed_from_the_list_too(
@@ -1259,7 +1262,7 @@ async def test_a_catalogs_program_is_installed_from_the_list_too(
     app = AppsManager(manager, "x")
     async with app.run_test(size=SIZE) as pilot:
         await _settle_longer(pilot)
-        assert [row[3] for row in _rows(app)] == ["not installed", "not installed"]
+        assert [row[4] for row in _rows(app)] == ["not installed", "not installed"]
 
         await pilot.press("i")  # Clock, under the cursor
         await _settle_longer(pilot)
@@ -1269,7 +1272,7 @@ async def test_a_catalogs_program_is_installed_from_the_list_too(
         await pilot.click("#close")
         await _settle(pilot)
 
-        assert [(r[0], r[3]) for r in _rows(app)] == [
+        assert [(r[0], r[4]) for r in _rows(app)] == [
             ("Clock", "ready"),
             ("Weather", "not installed"),
         ]
@@ -1308,3 +1311,142 @@ async def test_the_dashboard_is_for_starting_so_it_leaves_out_what_is_not_there(
         await _settle_longer(pilot)
 
         assert [card.entry.name for card in app.screen.query(AppCard)] == ["Alpha"]
+
+
+# Folders, commits and kept builds ------------------------------------------------
+
+
+def _project(tmp_path: Path) -> Path:
+    folder = tmp_path / "my-app"
+    (folder / "src/appmeta").mkdir(parents=True)
+    (folder / "src/appmeta/manifest.json").write_bytes(MANIFEST)
+    (folder / "pnpm-lock.yaml").write_text("")
+    return folder
+
+
+async def test_a_folder_is_added_by_typing_its_path(tmp_path: Path) -> None:
+    folder = _project(tmp_path)
+    manager = manager_for(tmp_path / "config", _bar())
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("a")
+        await _settle(pilot)
+        app.screen.query_one("#f-repo", Input).value = str(folder)
+        await pilot.click("#ok")
+        await _settle_longer(pilot)
+
+        assert isinstance(app.screen, Home)
+        assert _rows(app) == [["Demo", "bar", str(folder), "1.2.0", "not installed"]]
+        assert str(folder) in _details(app)
+
+
+async def test_a_path_that_is_no_folder_is_explained_in_the_form(
+    tmp_path: Path,
+) -> None:
+    app = AppsManager(manager_for(tmp_path, _bar()), "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle(pilot)
+
+        await pilot.press("a")
+        await _settle(pilot)
+        form = app.screen
+        form.query_one("#f-repo", Input).value = str(tmp_path / "nope")
+        await pilot.click("#ok")
+        await _settle(pilot)
+
+        assert app.screen is form
+        assert "is not a folder" in str(form.query_one("#form-error").render())
+
+
+async def test_the_versions_window_lists_what_was_built_among_the_releases(
+    tmp_path: Path,
+) -> None:
+    from examples.manager.model import Build
+
+    manager = manager_for(tmp_path, _bar(), SOURCE_ROUTES)
+    await manager.add_repo("busy-app/demo")
+    manager.store.add_build(
+        Build("busy-app/demo", "", "abc1234" * 5 + "abcde", "abc1234 Fix it", "demo.app",
+              "Demo", "1.3.0", "2026-10-02T08:00:00+00:00", str(tmp_path / "k.tgz"))
+    )  # fmt: skip
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("i")
+        await _settle_longer(pilot)
+
+        rows = _rows(app)
+        assert [(r[1], r[2]) for r in rows] == [
+            ("build", "2026-10-02"),
+            ("release", "2026-09-30"),
+        ]
+        assert "abc1234 Fix it" in rows[0][0] and "built from abc1234" in rows[0][3]
+        assert "b picks a commit" in " ".join(
+            str(w.render()) for w in app.screen.query(Static)
+        )
+
+
+async def test_b_in_the_versions_window_builds_a_commit_and_asks_before_installing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from examples.manager import package
+
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    monkeypatch.setattr(package.shutil, "which", lambda name: f"/bin/{name}")
+
+    def build(argv: list[str], cwd: Path) -> tuple[int, str]:
+        if argv[1:] == ["run", "build"]:
+            out = cwd / "dist/demo.app/appmeta"
+            out.mkdir(parents=True)
+            (out / "manifest.json").write_bytes(MANIFEST)
+        return (0, "v25.2.1\n") if argv[1:] == ["--version"] else (0, "")
+
+    routes = {
+        **SOURCE_ROUTES,
+        "https://api.github.com/repos/busy-app/demo/commits?per_page=30": [
+            {
+                "sha": sha,
+                "commit": {
+                    "message": "Fix the thing",
+                    "committer": {"date": "2026-10-01T10:00:00Z"},
+                },
+            }
+        ],
+        f"https://codeload.github.com/busy-app/demo/tar.gz/{sha}": Reply(
+            200,
+            tgz(
+                {
+                    "demo-abc/src/appmeta/manifest.json": MANIFEST,
+                    "demo-abc/pnpm-lock.yaml": b"",
+                }
+            ),
+        ),
+    }
+    bar = _bar()
+    manager = manager_for(tmp_path, bar, routes, run=build)
+    await manager.add_repo("busy-app/demo")
+    app = AppsManager(manager, "x")
+    async with app.run_test(size=SIZE) as pilot:
+        await _settle_longer(pilot)
+
+        await pilot.press("i")  # the offer's versions
+        await _settle_longer(pilot)
+        await pilot.press("b")  # a commit to build
+        await _settle_longer(pilot)
+        assert [r[0] for r in _rows(app)] == [f"{sha[:7]} Fix the thing"]
+
+        await pilot.press("enter")
+        await _settle_longer(pilot)
+
+        assert bar.done == [] and app.screen.query_one("#ask").display is True
+        assert "kept the build" in " ".join(_log(app))
+        await pilot.click("#go")
+        await _settle_longer(pilot)
+        await pilot.click("#close")
+        await _settle(pilot)
+
+    assert bar.done == ["install 5"]
+    assert len(manager.store.builds("busy-app/demo")) == 1
