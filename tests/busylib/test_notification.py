@@ -710,3 +710,46 @@ async def test_a_folder_says_which_of_two_files_of_one_name_is_meant() -> None:
         await notification.resolve_icon(
             bar, "draw_tool/info", application_name="home_assistant"
         )
+
+
+# What the layout table is for: measured on a bar, in rows from the anchor.
+# (accent row, body top, body bottom, descender bottom) of a capital with an
+# accent and of a letter with a tail.
+SMALL_ROWS = {"accent": 0, "body_top": 2, "body_bottom": 6, "tail": 7}
+PANEL_ROWS = 16
+
+
+def test_small_second_line_keeps_its_accent_apart_from_the_first() -> None:
+    """
+    An accent on the second line (Й, Ё) belongs to that line: it has to be
+    below the first line's body with a row between, and the tail of its
+    letters has to be on the panel.
+    """
+    top_y, bottom_y = notification.TWO_LINE_Y["small"]
+    first_body_bottom = top_y + SMALL_ROWS["body_bottom"]
+    # The bottom line is anchored by its bottom: its box ends two rows above
+    # `bottom_y`, and is as tall as the first line's.
+    box = SMALL_ROWS["tail"] - SMALL_ROWS["accent"]
+    last_row = bottom_y - 2
+    second_accent = last_row - box
+
+    assert second_accent >= first_body_bottom + 2, "a blank row under the first line"
+    assert last_row <= PANEL_ROWS - 1, "the tail of its letters is on the panel"
+
+
+def test_small_second_line_has_no_better_place() -> None:
+    """
+    One row up and the accent is under the first line; one row down and the
+    tails are off the panel. The table's value is the only one that works.
+    """
+    top_y, bottom_y = notification.TWO_LINE_Y["small"]
+    box = SMALL_ROWS["tail"] - SMALL_ROWS["accent"]
+
+    def fits(y: int) -> bool:
+        last_row = y - 2
+        return (
+            last_row - box >= top_y + SMALL_ROWS["body_bottom"] + 2
+            and last_row <= PANEL_ROWS - 1
+        )
+
+    assert [y for y in range(14, 20) if fits(y)] == [bottom_y]
