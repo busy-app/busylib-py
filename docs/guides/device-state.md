@@ -156,8 +156,9 @@ async for message in bb.stream_status_ws():
                 scroll(delta)
 ```
 
-Both halves of a press are reported, so a long press is distinguishable from
-a short one; `is_press` is there because most callers only want one of them.
+Both press and release events are reported, so a long press can be
+distinguished from a short one; `is_press` is there because most callers only
+want one of them.
 
 Two things worth knowing. The bar reports the selector **only when it moves** -
 nothing answers "where is it now" - so its position is unknown until the first
