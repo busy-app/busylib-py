@@ -120,19 +120,19 @@ malformed update can't reach a renderer.
 
 ## What an update leaves out
 
-proto3 omits any field holding its type's default, so an update the bar did
+proto3 omits any field holding its type's default, so an update the BUSY Bar did
 send can be missing the very thing it is about. Two of those bite:
 
 - a number that is absent means zero - a muted volume, an unplugged USB, a
   panel at its dimmest;
 - `battery_status` absent means `DISCHARGING`, because that is the first
-  value of the firmware's enum. A bar simply running on its battery reports
+  value of the firmware's enum. A BUSY Bar simply running on its battery reports
   the most common state of all as nothing at all.
 
 `apply_state_stream_update` reads both the way the device means them. What it
 cannot do is tell you whether a cable is plugged in: the firmware knows
 (`vbus_present` internally) but does not put it on the wire, and `usb_voltage`
-reads non-zero on a bar that is discharging with nothing attached.
+reads non-zero on a BUSY Bar that is discharging with nothing attached.
 
 ## Buttons, the selector and the wheel
 
@@ -156,11 +156,11 @@ async for message in bb.stream_status_ws():
                 scroll(delta)
 ```
 
-Both halves of a press are reported, so a long press is distinguishable from
+Both press and release events are reported, so a long press is distinguishable from
 a short one; `is_press` is there because most callers only want one of them.
 
-Two things worth knowing. The bar reports the selector **only when it moves** -
-nothing answers "where is it now" - so its position is unknown until the first
+Two things worth knowing. The BUSY Bar reports the selector **only when it moves** -
+there’s no way to ask "where is it now" - so its position is unknown until the first
 move after you start listening. And the same events come back when input is
 sent with `input()`, because the firmware makes no distinction between a
 button pressed by a finger and one pressed over HTTP:

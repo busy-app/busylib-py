@@ -1,8 +1,8 @@
-# Connecting to a bar
+# Connecting to a BUSY Bar
 
 ## Addresses
 
-A bar plugged in over USB comes up as a network device at the well-known
+A BUSY Bar plugged in over USB comes up as a network device at the well-known
 address **`10.0.4.20`**, with no Wi-Fi configuration needed. Once it joins a
 network it also gets a normal address on that network, and either works:
 
@@ -24,14 +24,14 @@ do not paste `git`, `py`, or `uv` commands into a Python file or `>>>` prompt.
 
 The [quick start](../index.md#installation) has copyable Windows and
 macOS/Linux installation commands, a complete `check_busybar.py` file, and
-the expected successful output. The bar's `/docs` page documents its raw HTTP
+the expected successful output. The BUSY Bar's `/docs` page documents its raw HTTP
 API; it does not execute Python examples from this documentation.
 
 ## Access keys
 
 On current firmware the access key is enforced only on connections arriving
-over Wi-Fi — USB and localhost traffic skips the check — so a bar reached at
-`10.0.4.20` usually needs no token whatever access mode it is in. Treat that
+over Wi-Fi — USB and localhost traffic skips the check — so a BUSY Bar reached at
+`10.0.4.20` usually needs no token regardless of its access mode. Treat that
 as an observation about the firmware in front of you rather than a guarantee,
 and handle a `403` on the USB path too.
 
@@ -57,7 +57,7 @@ print(info.mode, info.key_valid)  # 'key' True
 key True
 ```
 
-This means the bar has access-key mode enabled. `key_valid` describes the
+This means the BUSY Bar has access-key mode enabled. `key_valid` describes the
 device configuration, not whether the token supplied by this client is valid.
 
 !!! note
@@ -83,13 +83,13 @@ Front desk 192.168.1.20
 ```
 
 Each line is the advertised device name and Wi-Fi address. No output is normal
-on firmware that does not advertise the service; a USB-connected bar remains
+on firmware that does not advertise the service; a USB-connected BUSY Bar remains
 available at `10.0.4.20`.
 
 Discovery browses for the `_http._tcp` mDNS service and classifies each
 address it finds: anything in `10.0.4.*` is treated as the USB link, everything
 else as Wi-Fi. Only instances whose name starts with `busybar-` are treated as
-bars; other, unrelated `_http._tcp` services on the network are ignored.
+a BUSY Bar; other, unrelated `_http._tcp` services on the network are ignored.
 
 !!! warning
     Shipped firmware does not advertise itself under `_http._tcp` yet, so
@@ -136,7 +136,7 @@ replacement, rather than letting an opaque `404` come back:
 
 These did exist once — `wifi/enable` and `wifi/disable` up to firmware 0.2.0,
 `account/profile` from 0.6.0-rc to 0.8.1 — but every firmware since serves
-none of them, and the library targets a far newer API than those bars run. To
+none of them, and the library targets a far newer API than those BUSY Bars run. To
 talk to firmware that old, pin a `busylib` version from the same era, as the
 versioning policy describes; `api_request()` remains the escape hatch.
 

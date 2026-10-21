@@ -6,9 +6,9 @@ explicitly:
 | Display | Size | Kind |
 | --- | --- | --- |
 | `DisplayName.FRONT` | 72 × 16 | RGB LED matrix, ~16M colours |
-| `DisplayName.BACK` | 160 × 80 | Monochrome OLED, 16 shades of grey |
+| `DisplayName.BACK` | 160 × 80 | Monochrome OLED, 16 shades of gray |
 
-Those numbers matter: an element positioned outside its display is accepted by
+Those numbers matter: an element positioned outside the display is accepted by
 the device but never becomes visible. The client checks for this and logs a
 warning rather than failing, so watch for it while developing:
 
@@ -54,7 +54,7 @@ payload = types.DisplayElements(
 `application_name` groups everything your app draws, which is what
 `display_clear` and `assets_delete` operate on.
 
-Creating this payload prints nothing and does not update the bar. It becomes
+Creating this payload prints nothing and does not update the BUSY Bar. It becomes
 visible only after you pass it to `display_draw`.
 
 ### Text
@@ -134,13 +134,13 @@ bb.display_draw(payload, sanitize_text=True)
 ```
 
 Each substitution is logged, so you can see what was removed and why.
-The call itself prints nothing; the bar receives the cleaned text rather than
+The call itself prints nothing; the BUSY Bar receives the cleaned text rather than
 characters the firmware cannot render.
 
 ## Reading the screen back
 
 `frame()` returns the current contents of a display as a `Frame`, which is how
-the `remote` example mirrors the bar in a terminal:
+the `remote` example mirrors the BUSY Bar in a terminal:
 
 ```python
 frame = bb.frame(0)  # 0 = front, 1 = back

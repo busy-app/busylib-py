@@ -17,37 +17,34 @@
 [![Python versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://pypi.org/project/busylib/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/busy-app/busylib-py/blob/main/LICENSE)
 
-A Python client for the BUSY Bar API. Draw on both displays, play audio, manage
-files and assets, read device state, and forward input — from a script instead
-of the device UI.
+A Python client for the BUSY Bar HTTP API. Draw on both displays, play audio, manage files and assets, read device state, and forward input — from a script instead of the device web UI.
 
 ## Full documentation
 
-This file is the tour. The guides go deeper, and they are also this site's
-home page, so the links are absolute and work from PyPI and GitHub alike:
+This file is the tour. The guides below go deeper, and the links are absolute and work from PyPI and GitHub alike:
 
 | Guide | |
 | --- | --- |
-| [Connecting to a bar](https://busy-app.github.io/busylib-py/guides/connecting/) | Discovery, addresses, access keys |
+| [Connecting to a BUSY Bar](https://busy-app.github.io/busylib-py/guides/connecting/) | Discovery, addresses, access keys |
 | [Drawing on the displays](https://busy-app.github.io/busylib-py/guides/displays/) | Elements, both panels, reading the screen back |
 | [Sending notifications](https://busy-app.github.io/busylib-py/guides/notifications/) | Built-in templates, and writing your own |
 | [Working with timers](https://busy-app.github.io/busylib-py/guides/timers/) | Snapshots, phases, starting and stopping |
-| [Stock assets](https://busy-app.github.io/busylib-py/guides/stock-assets/) | The pictures, animations, sounds and themes every bar ships with |
-| [Assets and storage](https://busy-app.github.io/busylib-py/guides/assets-and-storage/) | Uploading files the bar can draw and play |
+| [Stock assets](https://busy-app.github.io/busylib-py/guides/stock-assets/) | The pictures, animations, sounds and themes every BUSY Bar ships with |
+| [Assets and storage](https://busy-app.github.io/busylib-py/guides/assets-and-storage/) | Uploading files the BUSY Bar can draw and play |
 | [Reading device state](https://busy-app.github.io/busylib-py/guides/device-state/) | One-off snapshots and streamed updates |
 | [Building a tool](https://busy-app.github.io/busylib-py/guides/building-a-tool/) | Putting a small app together |
-| [Testing against a real bar](https://busy-app.github.io/busylib-py/guides/integration-tests/) | Running the integration suite |
+| [Testing against a real BUSY Bar](https://busy-app.github.io/busylib-py/guides/integration-tests/) | Running the integration suite |
 
 The [API reference](https://busy-app.github.io/busylib-py/api/clients/) covers
 every client method, type and exception.
 
 ## You just unboxed a BUSY Bar
 
-This guide takes you from a bar still in its box to a small working app.
+The guide takes you from a BUSY Bar still in its box to a small working app.
 
-Bars ship with **firmware 1.0.2**. Plug one into your computer over USB and it
+BUSY Bar ships with **firmware 1.0.2**. Plug it into your computer over USB and it
 comes up as a network device at **`10.0.4.20`** — no Wi-Fi setup needed yet.
-Open <http://10.0.4.20> in a browser and you'll get the bar's own web UI, which
+Open <http://10.0.4.20> in a browser and you'll get the BUSY Bar's own web UI, which
 is a good way to confirm the connection before writing any code.
 
 Everything that UI does is the same HTTP API this library speaks, so anything
@@ -68,7 +65,7 @@ You will use two kinds of code below:
   paste terminal commands such as `git`, `py`, or `uv` into a Python file or a
   `>>>` Python prompt.
 
-The page at <http://10.0.4.20> is the bar's web UI. Its `/docs` page describes
+The page at <http://10.0.4.20> is the BUSY Bar's web UI. Its `/docs` page describes
 the raw HTTP API; it does not run Python examples from this guide.
 
 ### Windows (PowerShell)
@@ -93,7 +90,7 @@ python3 -m pip install --upgrade busylib
 
 ## Step 1 — Connect over USB
 
-With the bar plugged in, create a file named `check_busybar.py` in your editor
+With the BUSY Bar plugged in, create a file named `check_busybar.py` in your editor
 and paste **only** this Python code into it:
 
 ```python
@@ -122,13 +119,13 @@ Connected to BUSY Bar. API 27.5.0
 
 The API version is the connection check. Some firmware does not report a
 human-readable firmware version, branch, or build date; missing values for
-those fields do not mean the bar is disconnected.
+those fields do not mean the BUSY Bar is disconnected.
 
 Current firmware enforces its access key only on connections arriving over
-Wi-Fi, so a bar reached over USB usually needs no token. If you do get a
+Wi-Fi, so a BUSY Bar reached over USB usually needs no token. If you do get a
 `403 Forbidden` here, pass the key as a token the same way as below.
 
-Once the bar is on Wi-Fi you can use its Wi-Fi address instead, or let the
+Once the BUSY Bar is on Wi-Fi you can use its Wi-Fi address instead, or let the
 library find it for you — see [Discovering devices](#discovering-devices-on-the-network).
 That path *can* answer `403 Forbidden`, which means an access key is set —
 a 4–10 digit PIN, the same one the web UI asks for:
@@ -137,14 +134,14 @@ a 4–10 digit PIN, the same one the web UI asks for:
 bb = BusyBar("192.168.1.20", token="1234")
 ```
 
-Creating a client does not print anything or contact the bar yet. The first
+Creating a client does not print anything or contact the BUSY Bar yet. The first
 method call, such as `bb.version()`, is what verifies the address and token.
 
 ## Step 2 — First-time setup
 
 The guided setup wizard is optional and lives in the source repository; it is
 not installed by `pip install busylib`. It can update firmware, configure
-Wi-Fi and timezone, rename the bar, and link a cloud account.
+Wi-Fi and timezone, rename the BUSY Bar, and link a cloud account.
 
 Run these **terminal commands**, not Python code. They do not require `uv`.
 
@@ -180,7 +177,7 @@ BUSY Bar setup
 
 It walks through firmware update, Wi-Fi, timezone, device name, and linking the
 bar to a BUSY cloud account. Steps already done are marked `[x]` and skipped, so
-it's safe to re-run at any time — for example after the bar reboots into new
+it's safe to re-run at any time — for example after the BUSY Bar reboots into new
 firmware.
 
 Useful flags:
@@ -202,10 +199,10 @@ display, shows an icon on the back one, and plays a sound.
 Two things to know before you start:
 
 - The **front** display is a **72×16** RGB LED matrix. The **back** display is
-  **160×80**, 16 shades of grey. Elements placed outside those bounds simply
+  **160×80**, 16 shades of gray. Elements placed outside those bounds simply
   won't be visible, so keep coordinates inside them.
 - Every element needs an `id` and belongs to an `application_name`, which is how
-  the bar groups what your app draws.
+  the BUSY Bar groups what your app draws.
 
 ### 3.1 Say hello on the front display
 
@@ -244,7 +241,7 @@ send a display update; it remains visible until you replace or clear it.
 
 ### 3.2 Add a picture
 
-Images and audio have to be uploaded to the bar before you can reference them.
+Images and audio have to be uploaded to the BUSY Bar before you can reference them.
 Note that `assets_upload` sends bytes as-is — it does **not** convert them, so
 resize and re-encode the file for the target display first:
 
@@ -270,7 +267,7 @@ bb.assets_upload(
 ```
 
 `convert_for_storage` scales and crops the image to fit, and converts audio into
-the format the bar expects. (`storage_write`, further down, applies the same
+the format the BUSY Bar expects. (`storage_write`, further down, applies the same
 conversion automatically — `assets_upload` is the lower-level path.)
 
 **Expected result:** nothing is printed and the display does not change yet.
@@ -315,8 +312,8 @@ bb.audio_play(application_name="my-app", path=filename)
 
 Stop playback with `bb.audio_stop()`.
 
-**Expected result:** nothing is printed and the bar starts playing the
-converted sound. If it stays silent, check the bar's volume and that the file
+**Expected result:** nothing is printed and the BUSY Bar starts playing the
+converted sound. If it stays silent, check the BUSY Bar's volume and that the file
 was converted and uploaded under the same application name.
 
 ### 3.4 Clean up
@@ -392,12 +389,12 @@ Connected to BUSY Bar. API 27.5.0
 
 **Expected device result:** `BUILDING` appears on the front display, the icon
 appears on the back display, and the alert sound starts. The API number and the
-exact media rendering depend on the connected bar and your input files.
+exact media rendering depend on the connected BUSY Bar and your input files.
 
 ### Try the interactive example
 
 `examples/remote` mirrors both displays in your terminal, forwards key presses
-to the bar, and has commands for drawing text, playing audio, renaming the
+to the BUSY Bar, and has commands for drawing text, playing audio, renaming the
 device, and running setup. It needs the source checkout and virtual environment
 from Step 2:
 
@@ -415,7 +412,7 @@ and keeps running while it receives updates. Press `h` for its command help and
 
 ## Going further
 
-Client method names follow BUSY Bar API path segments instead of generic
+Client method names follow BUSY Bar HTTP API path segments instead of generic
 `get_*`/`set_*` prefixes. For example, `/api/display/draw` maps to
 `display_draw`, `/api/audio/play` maps to `audio_play`, and
 `/api/storage/remove` maps to `storage_remove`.
@@ -493,7 +490,7 @@ Brightness: auto
 Volume: 100.0
 ```
 
-The values are live device state and will differ on your bar. A missing system
+The values are live device state and will differ on your BUSY Bar. A missing system
 or power section simply omits its corresponding line; it does not invalidate
 the other responses.
 
@@ -524,13 +521,13 @@ Device: "Anna's BUSY Bar" (id "aabbccddeeff")
   Over Wi-Fi: 192.168.100.2
 ```
 
-Each group identifies one discovered bar and the addresses currently known for
+Each group identifies one discovered BUSY Bar and the addresses currently known for
 it. On firmware that does not advertise mDNS, this loop prints nothing; use the
 USB address instead.
 
 Both the `remote` and `setup` examples use this automatically when no address is
 given: they discover devices via mDNS, let you pick one by name if more than one
-is found, and prompt for the access key if the bar needs one. Shipped firmware
+is found, and prompt for the access key if the BUSY Bar needs one. Shipped firmware
 doesn't advertise itself under `_http._tcp` yet, so if nothing is found they
 fall back to the well-known USB address `10.0.4.20`.
 
@@ -539,7 +536,7 @@ fall back to the well-known USB address `10.0.4.20`.
 Unlike `assets_upload`, `storage_write` converts media for the device
 automatically:
 
-Every storage path has to start with `/ext`, which is the bar's user-writable
+Every storage path has to start with `/ext`, which is the BUSY Bar's user-writable
 area. A path outside it is not rejected with an error — the device simply
 stops answering, so the call ends in a timeout after retries.
 
@@ -612,24 +609,24 @@ that asset first or choose a path you already uploaded.
 
 By default, `version()` records the device `api_semver` and logs a warning when
 it does not match the library compatibility header — which is what you'll see on
-a factory bar until you update it.
+a factory BUSY Bar until you update it.
 
-Strict mode turns that warning into an error, so an incompatible bar fails fast
+Strict mode turns that warning into an error, so an incompatible BUSY Bar fails fast
 instead of misbehaving later. It will raise on firmware 1.0.2, so use it once
-your bar is updated:
+your BUSY Bar is updated:
 
 ```python
 bb = BusyBar("10.0.4.20", compatibility_mode="strict")
 bb.version()  # raises BusyBarAPIVersionError if the firmware is too old
 ```
 
-**Expected result:** a supported bar returns normally without output. Factory
+**Expected result:** a supported BUSY Bar returns normally without output. Factory
 firmware 1.0.2 instead raises `BusyBarAPIVersionError`, which tells you to
 update firmware or use a matching library release before invoking newer API
 methods.
 
 For migrations and diagnostics, methods can expose the minimum device API
-version their current implementation targets - the number the bar reports as
+version their current implementation targets - the number the BUSY Bar reports as
 `api_semver` - which is not necessarily the version where the underlying
 endpoint first appeared.
 
@@ -639,7 +636,7 @@ metadata = bb.method_compatibility("log_dump")
 ```
 
 The metadata says this helper targets the `POST /api/log_dump` contract from
-OpenAPI `25.0.0`; it is compatibility information, not a request to the bar.
+OpenAPI `25.0.0`; it is compatibility information, not a request to the BUSY Bar.
 
 ### Versioning policy
 
@@ -691,8 +688,8 @@ is optional: `pip install busylib[media]`. Everything else, including reading
 frames off the displays, works without it.
 
 `make test` runs the suite against a mock device and needs no hardware. If you
-have a bar to hand, there is a second suite that drives a real one over USB,
+have a BUSY Bar to hand, there is a second suite that drives a real one over USB,
 over the local network and through the cloud — see
-[Testing against a real bar](https://busy-app.github.io/busylib-py/guides/integration-tests/).
+[Testing against a real BUSY Bar](https://busy-app.github.io/busylib-py/guides/integration-tests/).
 It found two client methods that had never worked, because a mock accepts
 payloads the device rejects.

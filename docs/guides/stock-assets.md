@@ -18,7 +18,7 @@ They live under `/ext/apps_assets/`, in two trees:
 | `shared/` | For anyone: icons, status animations, fonts, notification sounds |
 | `busy/` | The BUSY timer's own decoration - session animations, indicators, its themes |
 
-## How to reference one
+## How to reference an asset
 
 Anything that draws or plays takes **`stock_path`** for a built-in and `path`
 for a file you uploaded. A stock path is the tree, the folder and the file
@@ -58,12 +58,8 @@ square. Nothing stops you drawing either one anywhere; it will just look wrong.
 
 ## What is there
 
-The counts below come from the firmware sources, not from a bar: a bar
-carries whatever its owner has uploaded or deleted, and a bar on an older
-build has whatever that build shipped - as this one does, with 19 of the 20
-status animations, because the twentieth landed a week after it was built. So
-this is what a bar ships with, and [asking a bar](#reading-the-map-from-a-bar)
-is how you find out what one actually has.
+The counts below come from the firmware sources and show what a BUSY Bar ships with at the moment of writing. Note that a BUSY Bar carries whatever its owner has uploaded or deleted, and a BUSY Bar on an older
+build may have fewer assets than shown here - like the one used in this guide, which had only 19 animations at the time. So [asking a BUSY Bar](#reading-the-map-from-a-busy-bar) is how you find out what one actually has.
 
 `make stock-assets FIRMWARE=<checkout>` regenerates the table, and `CHECK=1`
 reports drift without writing:
@@ -155,7 +151,7 @@ from busylib.features import notification
 await notification.notify(bar, "Laundry done", icon="check", application_name="my-app")
 ```
 
-`notification.icons(bar)` returns every image the bar actually holds, each with
+`notification.icons(bar)` returns every image the BUSY Bar actually holds, each with
 the width read from its file header - the `dt_*` sticker set included (food,
 faces, activities: `dt_coffee`, `dt_emoji_happy`, `dt_work` ...). Pass a
 `StockIcon` from that list anywhere a name is taken.
@@ -175,7 +171,7 @@ the transitions between phases.
 
 These are the only pictures kept here rather than linked: the source is a zip
 of frames, which no browser unpacks. They are thinned to about two dozen frames
-with the delay stretched to match, so the movement is the bar's at a fraction
+with the delay stretched to match, so the movement is the BUSY Bar's at a fraction
 of the weight.
 
 <!-- begin stock animations gallery -->
@@ -228,7 +224,7 @@ types.AnimationElement(
 
 The first three have short names in `notification.STOCK_SOUNDS` (`event`,
 `reminder`, `volume`) and are what `notify(sound=...)` takes. The players below
-point at the firmware's own WAV sources, so this is what a bar actually plays -
+point at the firmware's own WAV sources, so this is what a BUSY Bar actually plays -
 **on GitHub they are not shown**, since it drops audio players from a rendered
 file; the [published guide](https://busy-app.github.io/busylib-py/guides/stock-assets/)
 has them.
@@ -255,7 +251,7 @@ largest do not fit two lines on the front display, which is why
 ### Themes
 
 `busy/themes/<name>/theme.json` - twelve of them, and they are what a session
-looks like on the bar. They are chosen by name, not by path:
+looks like on the BUSY Bar. They are chosen by name, not by path:
 
 ```python
 from busylib.features import timer
@@ -265,7 +261,7 @@ await timer.start(bar, theme="meeting")  # for this session only
 await timer.set_card_theme(bar, "busy", "dnd")  # from now on
 ```
 
-A theme a bar does not have raises `UnknownThemeError` rather than being
+A theme a BUSY Bar does not have raises `UnknownThemeError` rather than being
 written and silently ignored. See [timers](timers.md).
 
 ## Your own assets
@@ -302,7 +298,7 @@ mine = await assets.copy_to_application(bar, theirs, "my-app")
 await notification.notify(bar, "Deployed", icon=mine.name, application_name="my-app")
 ```
 
-## Reading the map from a bar
+## Reading the map from a BUSY Bar
 
 Firmware adds and removes assets, and an owner can upload their own, so the
 bar is the only authority:
