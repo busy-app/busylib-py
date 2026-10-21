@@ -1,6 +1,6 @@
 # Working with timers
 
-## The bar does not run a clock you can read
+## BUSY Bar does not run a clock you can read
 
 `GET /api/busy/snapshot` does not tell you what the timer is doing now. It
 returns the **last snapshot that was applied**, exactly as it was applied,
@@ -10,7 +10,7 @@ get the same numbers back both times.
 That is deliberate, not a gap. It is how the apps keep one timer in step
 across several clients: whoever changes the timer writes a snapshot, the
 freshest timestamp wins, and every client works out the current state for
-itself. The bar is the shared store, not the clock.
+itself. The BUSY Bar is the shared store, not the clock.
 
 So a snapshot on its own is a starting point plus a date. To get from there
 to "what is the timer doing", you advance it by the time that has passed —
@@ -155,26 +155,26 @@ Three things they take care of:
 
 **A session may have settings of its own, and they do not touch the card.**
 With nothing but a slot, `start()` runs what that card describes - the thing
-the bar's own switch would start. Give it a kind or a length and the session
+the BUSY Bar's own switch would start. Give it a kind or a length and the session
 runs that instead, travelling in the snapshot: the card keeps its name, its
 lengths and its theme, and the app still shows the session under that card's
 name. This is what an automation wants - "a countdown for forty-five minutes"
 should not rewrite a card somebody arranged by hand.
 
-**A session can name a card the bar does not hold.** The bar keeps two cards,
+**A session can name a card the BUSY Bar does not hold.** The BUSY Bar keeps two cards,
 one per switch position; the BUSY app keeps more. `card_id` names any of them,
-and then nothing on the bar is read or written - the two cards are not involved
+and then nothing on the BUSY Bar is read or written - the two cards are not involved
 even by name, and the app shows the session under the card it does know. Such a
 session has no card to inherit from, so its kind and lengths come from the call.
 
-**The bar will not run just any length.** Both ends are checked, and the
+**The BUSY Bar will not run just any length.** Both ends are checked, and the
 firmware says so nowhere useful: a card written with a two-minute work phase
 answers `OK` and keeps what it had, and a session with one comes back as
 `400 Failed to parse snapshot`. An interval phase runs 5 minutes to 8 hours,
 a session has 2 to 35 work phases, and a countdown - checked at the top only -
 runs up to 24 hours with no floor at all. `busylib` raises before the write
 rather than letting either silence through. The numbers are the firmware's own
-(`applications/services/busy_timer/busy_timer_common.h`), confirmed on a bar.
+(`applications/services/busy_timer/busy_timer_common.h`), confirmed on a BUSY Bar.
 
 **Pausing has to recompute the remaining time.** The stored snapshot's figure
 was true when it was written; writing it back unchanged hands the session back
@@ -183,12 +183,12 @@ the time it already spent. `set_paused()` takes the figure from
 meantime.
 
 **A session theme and a card theme are different things.** `set_session_theme`
-lasts as long as the session - stop it and the bar shows the card's theme
+lasts as long as the session - stop it and the BUSY Bar shows the card's theme
 again, confirmed on hardware. `set_card_theme` outlasts the session and does
 not change what is on screen now.
 
-**Which themes there are is a question for the bar.** Themes are assets:
-one bar has what the firmware shipped, another has one its owner uploaded, a
+**Which themes there are is a question for the BUSY Bar.** Themes are assets:
+one BUSY Bar has what the firmware shipped, another has one its owner uploaded, a
 third is missing one its owner deleted. So there is no list to write down -
 `timer.themes(bar)` reads it:
 
@@ -197,21 +197,21 @@ options = await timer.themes(bar)  # ['back_soon', 'booked', 'busy', 'coding', .
 ```
 
 It reads two things, because neither alone is the answer: the asset
-directories, and whichever themes the bar's own cards are set to. The second
+directories, and whichever themes the BUSY Bar's own cards are set to. The second
 is how the firmware's built-in default gets in - it has no directory, so a
-listing alone would report that a bar cannot show the theme it is showing
+listing alone would report that a BUSY Bar cannot show the theme it is showing
 right now.
 
 Setting a theme checks it against that list first, because **the device will
 not**: a card naming a theme that does not exist is stored and read back
-happily, and only the bar's screen shows that anything is wrong. A theme it
+happily, and only the BUSY Bar's screen shows that anything is wrong. A theme it
 does not have raises `UnknownThemeError`, which carries what it does have. If
 you already have the list - because you offered it to someone - pass it as
 `known=` and save the lookup.
 
 **Changing a card is for when the change should last.** A session can carry
 settings of its own (see `start()` above), and that is what an automation
-wants; `timer.configure()` is for the other case - when the bar's own switch
+wants; `timer.configure()` is for the other case - when the BUSY Bar's own switch
 should start something different from now on, and the BUSY app should show
 it:
 
@@ -220,7 +220,7 @@ await timer.configure(bar, "busy", work_ms=25 * 60_000)
 await timer.start(bar, "busy")
 ```
 
-The change outlasts the session, and the bar and the phone app see it - which
+The change outlasts the session, and the BUSY Bar and the phone app see it - which
 is the same thing they do to each other.
 
 **One call is enough to set something of a given length.** `duration_ms`
@@ -250,14 +250,14 @@ card already holds edits it instead, so its lengths survive.
 **Phases under five minutes are dropped in silence.** The device stores
 nothing and answers `{"result": "OK"}`; the card keeps what it had. Found by
 bisection on firmware r971 - four minutes ignored, five, six and seven kept -
-and documented nowhere, the bar's own OpenAPI even offering `120000` as its
+and documented nowhere, the BUSY Bar's own OpenAPI even offering `120000` as its
 example. `configure()` raises `PhaseTooShortError` rather than let a caller
-watch a bar run the wrong timer.
+watch a BUSY Bar run the wrong timer.
 
 **A card write needs a fresh timestamp.** The device keeps whichever copy of a
 card is newer and silently discards the rest, answering `{"result": "OK"}`
 either way. A card read back and written unchanged carries the stored
-`profile_timestamp_ms`, which is not newer - and a bar that has never had one
+`profile_timestamp_ms`, which is not newer - and a BUSY Bar that has never had one
 written reports `0` - so the write disappears with no error at all.
 `set_card_theme` stamps it for you.
 
@@ -311,7 +311,7 @@ Stopping is a `NOT_STARTED` snapshot with a fresh timestamp.
 
 Two things to know, both learned the hard way:
 
-**A length the bar will not run is reported as an unparseable snapshot.**
+**A length the BUSY Bar will not run is reported as an unparseable snapshot.**
 `400 Failed to parse snapshot` is misleading: the JSON parsed fine, and the
 firmware is refusing a number. An interval phase runs 5 minutes to 8 hours
 and a session has 2 to 35 work phases (`busy_timer_common.h`); a countdown is

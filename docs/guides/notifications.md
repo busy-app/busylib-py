@@ -71,8 +71,9 @@ There are two, and the one that suits the arguments is chosen for you:
 
 Two templates cover four layouts: one or two lines, and with or without an
 icon. An icon only changes where the text starts, which is worked out from the
-icon's own width, so "with an icon" is not a separate arrangement. The shipped icons are 5, 8 and 11 pixels wide,
-which is why that offset is computed rather than fixed.
+icon's own width, so "with an icon" is not a separate arrangement. The shipped
+icons are 5, 8 and 11 pixels wide, which is why that offset is computed rather
+than fixed.
 
 `large` and `extra_large` are missing from the two-line row because two
 lines of them do not fit 16 pixels. Asking anyway is an error rather than a

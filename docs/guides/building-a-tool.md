@@ -1,16 +1,16 @@
 # Building a tool with busylib
 
 The setup wizard that ships with the library is a small, real program: it
-reads what a bar is currently doing, decides what's left to configure, and
+reads what a BUSY Bar is currently doing, decides what's left to configure, and
 changes only that. This page walks through how it's put together, because the
-same shape works for most tools you'd write against a bar.
+same shape works for most tools you'd write against a BUSY Bar.
 
 The code shown here isn't a transcription — it's pulled straight from
 `examples/setup/operations.py`, so it can't drift from the program that runs.
 
 ## One function per device operation
 
-Every interaction with the bar is its own function that takes a client and
+Every interaction with the BUSY Bar is its own function that takes a client and
 returns plain data. No printing, no prompting, no program state:
 
 ::: examples.setup.operations.read_device_name
@@ -57,7 +57,7 @@ Some device actions are asynchronous: you ask, then poll for the outcome.
 
 The subtlety here cost a release fix: `available_version` keeps the result of
 an *earlier* check, so acting on it while a new check is running gets a
-`400 "Update not available"` back. Waiting for the device's own status to
+`400 "Update not available"` response. Waiting for the device's own status to
 read `available` is what makes the install stick.
 
 ## Operations that are allowed to fail
@@ -77,7 +77,7 @@ returns an empty list and says why in the log.
 ## Assembling the pipeline
 
 With the operations in place, a step is only the conversation: what to show,
-what to ask, and when the work is already done.
+what to ask, and whether the work is already done.
 
 ```python
 class NameStep(SetupStep):

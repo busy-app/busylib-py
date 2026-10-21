@@ -1,7 +1,7 @@
 # Assets and storage
 
-Before uploading anything, check whether the bar already has it: every bar
-ships with icons, animations, sounds, fonts and themes, and referencing one
+Before uploading anything, check whether the BUSY Bar already has it: every device
+ships with icons, animations, sounds, fonts and themes, and referencing them
 costs nothing. See [stock assets](stock-assets.md).
 
 There are two ways to put a file on a BUSY Bar, and the difference matters:
@@ -13,7 +13,7 @@ There are two ways to put a file on a BUSY Bar, and the difference matters:
 
 `assets_upload` is the lower-level path. If you hand it a photo straight off
 disk, that's exactly what lands on the device: wrong dimensions, wrong format,
-nothing useful on screen. Convert first.
+nothing useful on the screen. Convert first.
 
 ## Converting
 
@@ -46,7 +46,7 @@ and re-encoded as PNG. Supported: `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tif`,
 
 Audio (`.mp3`, `.ogg`, `.aac`, `.m4a`, `.flac`, `.wav`) and video/GIF
 (`.gif`, `.mov`, `.mp4`, `.mkv`, `.avi`, `.webm`) are converted to the formats
-the bar plays and displays.
+the BUSY Bar plays and displays.
 
 Unknown extensions pass through untouched, so plain data files are safe:
 
@@ -64,11 +64,11 @@ OK
 The file now exists at `/ext/my-app/data.txt`; media files passed to this method
 are converted before they are written.
 
-Storage paths have to start with `/ext`, the bar's user-writable area. A path
-outside it is not answered at all — no error response — so the call ends in a
+Storage paths have to start with `/ext`, the BUSY Bar's user-writable area. A path
+outside `/ext` receives no response at all - not even an error — so the call ends in a
 timeout after retries rather than telling you the path was wrong.
 
-Anything that *is* recognised but fails to convert raises
+Anything that *is* recognized but fails to convert raises
 `BusyBarConversionError` rather than silently uploading unusable bytes.
 
 ## Referencing uploaded files

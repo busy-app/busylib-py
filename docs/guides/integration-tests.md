@@ -1,4 +1,4 @@
-# Testing against a real bar
+# Testing against a real BUSY Bar
 
 Most of the suite runs against a mock transport and needs no hardware. That
 catches a lot, but not everything: a mock accepts any query string, so it
@@ -6,26 +6,26 @@ cannot tell you that the device rejects `?volume=42.0`, or that it names a
 rename's source `path` and not `old_path`. Both of those shipped broken for
 months.
 
-The integration suite closes that gap. It drives one physical bar over all
+The integration suite closes that gap. It drives one physical BUSY Bar over all
 three transports the library supports, and it is opt-in: nothing here runs
 during a normal `pytest`.
 
-## Connect the bar
+## Connect the BUSY Bar
 
 You can use any subset of these. Each transport is skipped unless it is
 configured *and* answers, so start with USB and add the others when you want
 wider coverage.
 
-**Over USB.** Plug the bar into the machine running the tests. It comes up as
+**Over USB.** Plug the BUSY Bar into the machine running the tests. It comes up as
 a network device at `10.0.4.20` and, on current firmware, needs no access key
 over USB.
 
-**Over the local network.** Put the bar on Wi-Fi — the setup wizard does this
+**Over the local network.** Put the BUSY Bar on Wi-Fi — the setup wizard does this
 — and find its address with `bb.wifi_status().ip_config.address`, on the
-device screen, or via discovery. If the bar has an access key set (`bb.access()`
+device screen, or via discovery. If the BUSY Bar has an access key set (`bb.access()`
 reports `mode="key"`), you need that access key: over Wi-Fi it is enforced.
 
-**Through the cloud.** Link the bar to a BUSY account, then mint a bar-scope
+**Through the cloud.** Link the BUSY Bar to a BUSY account, then mint a BUSY Bar-scope
 token in the [dashboard](https://cloud.busy.app/dashboard). An account-scope
 token will not work — see [Cloud addresses](../api/cloud.md).
 
@@ -37,8 +37,8 @@ Everything comes from the environment:
 | --- | --- |
 | `BUSYBAR_TEST_USB` | address over USB, defaults to `10.0.4.20` |
 | `BUSYBAR_TEST_WIFI` | address on the local network |
-| `BUSYBAR_TEST_WIFI_TOKEN` | access key, if the bar has one |
-| `BUSYBAR_TEST_CLOUD_TOKEN` | bar-scope cloud token |
+| `BUSYBAR_TEST_WIFI_TOKEN` | access key, if the BUSY Bar has one |
+| `BUSYBAR_TEST_CLOUD_TOKEN` | BUSY Bar-scope cloud token |
 | `BUSYBAR_TEST_MANUAL_TIMEOUT` | seconds to wait for a button press, default 30 |
 
 ## Run
@@ -60,7 +60,7 @@ BUSYBAR_TEST_USB= uv run pytest tests/integration -m "integration and not manual
 
 ## Read the result
 
-A full run against a bar reachable three ways looks like this:
+A full run against a BUSY Bar reachable three ways looks like this:
 
 ```
 40 passed, 2 skipped, 3 deselected
@@ -70,14 +70,14 @@ A full run against a bar reachable three ways looks like this:
 
 - `endpoint is local only` — correct behaviour. Status streaming does not work
   through the cloud by design, so those tests stand down on that transport.
-- `a Busy session owns the display (INTERVAL)` — the bar is mid-session.
+- `a Busy session owns the display (INTERVAL)` — the BUSY Bar is mid-session.
   `display_draw` competes for the screen and a running session outranks
   everything, priority 100 included, so drawing is refused with `409`. Stopping
-  the session would take the bar away from whoever is using it, so the drawing
-  tests stand down instead. Stop the session on the bar to run them.
+  the session would take the BUSY Bar away from whoever is using it, so the drawing
+  tests stand down instead. Stop the session on the BUSY Bar to run them.
 - `usb transport unavailable - ...` — the transport was configured but did not
   answer, and the message carries the error. A `403` there means a missing or
-  wrong access key, not a broken bar.
+  wrong access key, not a broken BUSY Bar.
 
 Run with `-rs` to see the reasons:
 
@@ -86,13 +86,13 @@ uv run pytest tests/integration -m integration -rs
 ```
 
 **A failure is about the device, not the mock.** These tests only assert
-things a real bar decides: that a payload is accepted, that a written value
+things a real BUSY Bar decides: that a payload is accepted, that a written value
 reads back, that a frame is the size the panel dictates. So a failure means
 either the firmware changed its contract or this client has it wrong — which
 is exactly what the suite exists to tell you.
 
 The probe deliberately calls `/api/status` rather than `/api/version`, because
-a bar in key mode answers `version` without a key. Probing with `version`
+a BUSY Bar in key mode answers `version` without a key. Probing with `version`
 would let a transport with a bad token look usable and then fail every test
 with `403`.
 
@@ -100,7 +100,7 @@ with `403`.
 
 Forwarded input travels the same stream as real hardware, so the automatic
 tests cannot prove the buttons, wheel and switch are wired to it. One test
-asks you to use the bar:
+asks you to use the BUSY Bar:
 
 ```bash
 BUSYBAR_TEST_MANUAL_TIMEOUT=120 uv run pytest \
@@ -113,7 +113,7 @@ to do. Each input is acknowledged as it arrives, and the test finishes as soon
 as it has seen all three buttons, both wheel directions and one switch move.
 
 ```
-On the bar, within 120s:
+On the BUSY Bar, within 120s:
   press OK, BACK and START
   turn the wheel one way and back
   move the switch to any other position
@@ -152,5 +152,5 @@ when the test fails.
 
 Two things are worth knowing anyway. The device name is what discovery
 advertises, so an interrupted run can leave `busylib itest` visible on the
-network until you re-run. And nothing here reboots the bar, installs firmware,
+network until you re-run. And nothing here reboots the BUSY Bar, installs firmware,
 unlinks the account, or touches Wi-Fi settings.
