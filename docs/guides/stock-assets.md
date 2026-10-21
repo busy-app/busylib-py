@@ -58,8 +58,13 @@ square. Nothing stops you drawing either one anywhere; it will just look wrong.
 
 ## What is there
 
-The counts below come from the firmware sources and show what a BUSY Bar ships with at the moment of writing. Note that a BUSY Bar carries whatever its owner has uploaded or deleted, and a BUSY Bar on an older
-build may have fewer assets than shown here - like the one used in this guide, which had only 19 animations at the time. So [asking a BUSY Bar](#reading-the-map-from-a-busy-bar) is how you find out what one actually has.
+The counts below come from the firmware sources and show what a BUSY Bar ships
+with at the moment of writing. Note that a BUSY Bar carries whatever its owner
+has uploaded or deleted, and a BUSY Bar on an older build may have fewer assets
+than shown here - like the one used in this guide, which had 19 of the 20
+status animations at the time. So
+[asking a BUSY Bar](#reading-the-map-from-a-busy-bar) is how you find out what
+one actually has.
 
 `make stock-assets FIRMWARE=<checkout>` regenerates the table, and `CHECK=1`
 reports drift without writing:
