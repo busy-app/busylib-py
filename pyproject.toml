@@ -64,12 +64,12 @@ dev = [
   "grpcio-tools>=1.74",
   "pillow>=12",
   "pre-commit>=3.8",
-  "pyproject-fmt==2.29.4",
+  "pyproject-fmt==2.30.2",
   "pyright==1.1.414",
   "pytest>=8.4.1",
   "pytest-asyncio>=0.24",
   "pytest-cov>=7",
-  "ruff==0.16.7",
+  "ruff==0.17",
 ]
 
 [tool.setuptools]
