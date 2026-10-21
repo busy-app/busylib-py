@@ -1,9 +1,9 @@
 # Sending notifications
 
 A notification on the front panel is not "some text" — it is a handful of
-elements placed to the pixel on 72×16, and where they go depends on the
-font, whether an icon takes the left edge, and what the firmware you are 
-using can draw.
+elements placed to the pixel on 72 × 16, and where they go depends on the
+font, on whether an icon takes the left edge, and on what the firmware in
+front of you can draw.
 
 The library places them, so you describe the notification and not its
 geometry:
@@ -30,14 +30,16 @@ which returns a `DisplayElements` model.
 | `icon` | A name from `STOCK_ICONS`, drawn at the left edge |
 | `line_1_color`, `line_2_color` | Per-line colour |
 | `background_color` | Fills the panel behind everything |
-| `line_1_font` | The first line's font, and the second's unless it has its own |
-| `line_2_font` | The second line's font |
+| `line_1_font` | The first line's size, and the second's unless it has its own |
+| `line_2_font` | A size for the second line alone |
 | `duration` | Seconds before the elements expire |
-| `priority` | `PRIORITY_DEFAULT`, or `PRIORITY_INTERRUPT` to sit above a BUSY session |
+| `priority` | `PRIORITY_DEFAULT`, or `PRIORITY_INTERRUPT` to sit above a Busy session |
 | `sound` | A name from `STOCK_SOUNDS`, played with the drawing |
 | `application_name` | Owns the drawing, and is how `display_clear` finds it |
 
-Each font has a set size and style, which can be used to establish a visual hierarchy between the lines. A label over a detail -`line_1_font="bold"`, `line_2_font="tiny"` - reads at a glance from across a room, while one font for both reads as two equal things:
+Two sizes say which line matters. A label over a detail -
+`line_1_font="bold"`, `line_2_font="tiny"` - reads at a glance from across a room, where one size for
+both reads as two equal things:
 
 ```python
 await notification.notify(
@@ -67,11 +69,11 @@ There are two, and the one that suits the arguments is chosen for you:
 | `ONE_LINE` | no `line_2` | all seven |
 | `TWO_LINES` | `line_2` given | `tiny`, `small`, `normal`, `condensed`, `bold` |
 
-Two templates cover four layouts: one or two lines, and with or without an icon. 
-An icon only changes where the textstarts, which is worked out from the icon's 
-own width, so "with an icon" is not a separate arrangement. The shipped icons 
-are 5, 8 and 11 pixels wide, which is why that offset is computed rather than 
-fixed.
+Two templates cover four layouts: one or two lines, and with or without an
+icon. An icon only changes where the text starts, which is worked out from the
+icon's own width, so "with an icon" is not a separate arrangement. The shipped
+icons are 5, 8 and 11 pixels wide, which is why that offset is computed rather
+than fixed.
 
 `large` and `extra_large` are missing from the two-line row because two
 lines of them do not fit 16 pixels. Asking anyway is an error rather than a
@@ -167,7 +169,7 @@ except BusyBarFeatureUnavailableError as err:
 
 The check is why `notify()` takes the client rather than a version: it reads
 `bar.device_api_version`, which `version()` fills in. If nothing has asked
-the BUSY Bar yet, the version is unknown and a current device is assumed —
+the bar yet, the version is unknown and a current device is assumed —
 guessing "old" would disable the feature for everyone who never called
 `version()`.
 
@@ -204,9 +206,9 @@ await notify(bar, "Laundry done", icon="check", sound="event")
 Paths in both catalogues carry their sub-folder and extension. The flat
 `shared/<name>` form that the OpenAPI spec suggests is refused.
 
-Those eight are a shorthand, not the limit. Icons are files on the BUSY Bar -
+Those eight are a short-hand, not the limit. Icons are files on the bar -
 the firmware ships a set, the Draw Tool adds its own, and an owner can
-upload or delete them - so `notify()` takes any name the BUSY Bar has:
+upload or delete them - so `notify()` takes any name the bar has:
 
 ```python
 print(

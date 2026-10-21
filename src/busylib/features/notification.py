@@ -76,9 +76,19 @@ ONE_LINE_Y: dict[str, int] = {
 # (top_y, bottom_y). tiny pulls the lines together, the 9px fonts push them
 # apart so they do not touch. Negative values are deliberate - the anchor is
 # the panel edge, and the glyph box overhangs it.
+#
+# small is measured on a bar, in rows from the top anchor: a capital with an
+# accent (Й, Ё) starts on row 0, the body of a capital is rows 2-6, a
+# descender reaches row 7. The bottom line sits `bottom_y - 9` to `bottom_y - 2`
+# the same way. At 16 its accent landed on row 7 - straight under the first
+# line, where it read as part of that line. At 17 the accent is on row 8, a
+# blank row from the first line's body and from its own, and the descender is
+# on row 15, the last row of the panel: 17 is the only value that keeps both.
+# The 9px fonts have no such value: two lines of them fill the panel, so an
+# accent on their second line cannot be told from the first.
 TWO_LINE_Y: dict[str, tuple[int, int]] = {
     "tiny": (1, 15),
-    "small": (0, 16),
+    "small": (0, 17),
     "normal": (-1, 17),
     "condensed": (-1, 17),
     "bold": (-1, 17),
