@@ -192,7 +192,13 @@ this before assuming a bug is in `busylib`:
    from a checkout: the spec on a development bar is ahead of the release,
    and the cloud's copy keyed by firmware version is the released truth.
 
-3. **Check the stock asset map** in `docs/guides/stock-assets.md`:
+3. **Retire experimental markers.** A helper marked
+   `versioning.experimental_endpoint` (the apps calls, for now) is waiting on
+   a release. Once the endpoint is in a released OpenAPI spec, swap the marker
+   for `requires_openapi` with that version; the audit test then holds it to
+   the route it claims.
+
+4. **Check the stock asset map** in `docs/guides/stock-assets.md`:
 
    ```bash
    make stock-assets BAR=<address> PIN=<pin> CHECK=1   # report drift
@@ -203,12 +209,12 @@ this before assuming a bug is in `busylib`:
    counts are generated; the prose around them is not, so read what moved
    and say it in words.
 
-4. **Re-measure the limits the firmware does not document.** Timer phases,
+5. **Re-measure the limits the firmware does not document.** Timer phases,
    cycle counts and the like are checked in `busy_timer_common.h` and refused
    with unhelpful errors - a silent `OK` for a profile, `400 Failed to parse
    snapshot` for a session. If the constants in `features/timer.py` and the
    firmware's disagree, the firmware wins.
 
-5. **Ask what a new feature makes possible for consumers** - the Home
+6. **Ask what a new feature makes possible for consumers** - the Home
    Assistant integration is the first one to check - and whether anything
    this library carries as a local copy should now be read from the bar.

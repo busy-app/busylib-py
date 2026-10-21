@@ -560,6 +560,67 @@ class StorageStatus(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
 
+class AppInfo(BaseModel):
+    """
+    What the bar knows about one JavaScript application.
+
+    The same description comes back from the list and, for a package that
+    has been uploaded but not yet installed, from staging - which is how a
+    caller can show what is about to land before it does.
+    """
+
+    id: str
+    name: str
+    version: str
+    author: str = ""
+    description: str = ""
+    icon_path: str = ""
+    # Debug applications only appear in the bar's menu while it is in debug
+    # mode; the flag is the bar's, and is passed on as it came.
+    is_debug: bool = False
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AppListResult(BaseModel):
+    apps: list[AppInfo] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AppStageResult(BaseModel):
+    """
+    A package the bar has unpacked and is holding until told to install it.
+
+    `install_key` is single use and belongs to this staging: staging
+    another package replaces it. `installed` is present when an
+    application with the same id is already on the bar, so the caller can
+    say "replacing 1.0.0 with 1.1.0" rather than only "installing".
+    """
+
+    result: str
+    install_key: int
+    staged: AppInfo
+    installed: AppInfo | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AppSettingsDocument(BaseModel):
+    """
+    An application's settings, as one document.
+
+    `version` is the version of the application's own settings schema, and
+    the bar refuses a document whose version does not match. `values` is
+    keyed by field id, with groups as nested objects.
+    """
+
+    version: int
+    values: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class DisplayElementBase(BaseModel):
     id: str
     timeout: int | None = Field(default=None, ge=0)
