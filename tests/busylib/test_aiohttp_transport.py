@@ -198,6 +198,36 @@ def test_the_module_does_not_import_aiohttp_eagerly() -> None:
     assert result.stdout.strip() == "False", result.stdout
 
 
+def test_building_a_client_on_a_borrowed_session_does_no_io() -> None:
+    """
+    An event loop owner such as Home Assistant builds the client in the loop.
+
+    With a transport passed in (and aiohttp already imported, as it is there),
+    the client must not import modules, open files or load certificates while
+    it is built: any of that blocks the loop.
+    """
+    import subprocess
+    import sys
+
+    code = """
+import sys
+from busylib import AsyncBusyBar
+from busylib.transports import AiohttpTransport
+transport = AiohttpTransport(object())
+seen = []
+sys.addaudithook(lambda event, args: seen.append(event) if watching else None)
+watching = True
+AsyncBusyBar("10.0.4.20", token="x", timeout=10, transport=transport)
+watching = False
+print(sorted(set(seen) & {"import", "open", "os.listdir", "socket.getaddrinfo"}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code], capture_output=True, text=True, check=True
+    )
+
+    assert result.stdout.strip() == "[]", result.stdout
+
+
 async def test_a_slow_server_times_out(session) -> None:
     """
     The client's timeout is honoured by the borrowed session.
