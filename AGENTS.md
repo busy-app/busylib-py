@@ -45,7 +45,7 @@
 - Use stable element `id` values: one id per logical status line, icon, or timer.
 - Keep text short enough for the target display. Prefer fixed positions over recalculating layout on every tick.
 - Do not animate by redrawing the whole screen unless explicitly requested.
-- Use clear-before-draw behavior only if supported by the installed `busylib` and only for whole-screen replacement.
+- Use `clear_before_draw="application"` to replace your own previous picture without touching other apps; use `"all"` (or `True`) only for whole-screen replacement. Both need an installed `busylib` that supports them.
 - Reuse uploaded assets and cache conversions/generated images/rendered payloads.
 - Audio and visual alerts need maximum duration and a clear stop path.
 
