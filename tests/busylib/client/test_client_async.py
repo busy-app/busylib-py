@@ -445,3 +445,88 @@ async def test_async_log_dump_empty_body_returns_ok():
     assert result.path is None
     assert seen["params"] == {"filename": "dump"}
     await client.aclose()
+
+
+_CLEAR_PAYLOAD = {
+    "application_name": "demo",
+    "elements": [
+        {"id": "1", "type": "text", "x": 0, "y": 0, "text": "A", "font": "small"}
+    ],
+}
+
+
+def _clear_recorder(seen, clear_response):
+    async def responder(request: httpx2.Request) -> httpx2.Response:
+        seen.append((request.method, request.url.path, dict(request.url.params)))
+        if request.method == "DELETE" and clear_response is not None:
+            return clear_response
+        return httpx2.Response(200, json={"result": "OK"})
+
+    return responder
+
+
+@pytest.mark.asyncio
+async def test_display_draw_clear_application_only_clears_own_application_async():
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    await client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="application")
+
+    assert seen[0] == ("DELETE", "/api/display/draw", {"application_name": "demo"})
+    assert seen[1][0] == "POST"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", [True, "all"])
+async def test_display_draw_clear_all_wipes_whole_screen_async(mode):
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    await client.display_draw(
+        _CLEAR_PAYLOAD, clear_before_draw=mode, application_name="demo"
+    )
+
+    assert seen[0] == ("DELETE", "/api/display/draw", {})
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_display_draw_clear_application_ignores_not_owner_reply_async():
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    not_owner = httpx2.Response(
+        400,
+        json={"error": "this application_name is currently not displaying anything"},
+    )
+    client = make_client(_clear_recorder(seen, not_owner))
+
+    resp = await client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="application")
+
+    assert resp.result == "OK"
+    assert [method for method, _, _ in seen] == ["DELETE", "POST"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_display_draw_clear_application_raises_other_clear_errors_async():
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    other = httpx2.Response(400, json={"error": "body contains malformed JSON"})
+    client = make_client(_clear_recorder(seen, other))
+
+    with pytest.raises(exceptions.BusyBarAPIError):
+        await client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="application")
+
+    assert [method for method, _, _ in seen] == ["DELETE"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_display_draw_rejects_unknown_clear_mode_async():
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    with pytest.raises(ValueError, match="clear_before_draw"):
+        await client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="screen")  # type: ignore[arg-type]
+
+    assert seen == []
+    await client.aclose()

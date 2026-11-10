@@ -5,7 +5,7 @@ import binascii
 import logging
 import re
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from typing_extensions import Unpack
 
@@ -116,6 +116,67 @@ def _sanitize_display_payload_text(payload: dict[str, Any]) -> None:
             element["text"] = sanitized
 
 
+ClearBeforeDraw = bool | Literal["application", "all"]
+"""
+How to clear the screen before a draw.
+
+``False`` draws on top of what is on screen. ``"all"`` (and ``True``, kept for
+compatibility) wipes the whole screen whoever owns it. ``"application"`` wipes
+only what the drawing application put there.
+"""
+
+_NOT_OWNER_MARKER = "not displaying anything"
+
+
+def _resolve_clear_mode(value: ClearBeforeDraw) -> Literal["application", "all"] | None:
+    """
+    Normalize ``clear_before_draw`` into ``None``, ``"application"`` or ``"all"``.
+    """
+    if value is False:
+        return None
+    if value is True or value == "all":
+        return "all"
+    if value == "application":
+        return "application"
+    raise ValueError(
+        f"clear_before_draw must be a bool, 'application' or 'all', got {value!r}"
+    )
+
+
+def _is_not_owner_error(error: exceptions.BusyBarAPIError) -> bool:
+    """
+    Tell the firmware's "this application is not displaying anything" reply apart.
+
+    A scoped clear gets it when the screen belongs to another application,
+    so there is nothing of ours to remove.
+    """
+    payload = error.payload
+    message = payload.get("error") if isinstance(payload, dict) else None
+    return (
+        error.status_code == 400
+        and isinstance(message, str)
+        and _NOT_OWNER_MARKER in message
+    )
+
+
+def _clear_request_kwargs(
+    mode: Literal["application", "all"],
+    model: types.DisplayElements,
+    request_kwargs: RequestKwargs,
+) -> RequestKwargs:
+    """
+    Build the kwargs for the clear request of the given mode.
+    """
+    kwargs = cast(RequestKwargs, dict(request_kwargs))
+    if mode == "all":
+        kwargs.pop("application_name", None)
+    else:
+        kwargs["application_name"] = (
+            request_kwargs.get("application_name") or model.application_name
+        )
+    return kwargs
+
+
 class DisplayMixin(SyncClientBase):
     """
     Display drawing, brightness control, and screen capture helpers.
@@ -125,10 +186,17 @@ class DisplayMixin(SyncClientBase):
         self,
         display_data: types.DisplayElements | dict[str, Any],
         *,
-        clear_before_draw: bool = False,
+        clear_before_draw: ClearBeforeDraw = False,
         sanitize_text: bool = False,
         **request_kwargs: Unpack[RequestKwargs],
     ) -> types.SuccessResponse:
+        """
+        Draw elements on the display.
+
+        ``clear_before_draw`` picks what is wiped first: ``False`` nothing,
+        ``"all"`` (or ``True``) the whole screen, ``"application"`` only what
+        this application drew, so other applications' content survives.
+        """
         logger.info(
             "display_draw application_name=%s clear_before_draw=%s",
             display_data.application_name
@@ -148,10 +216,16 @@ class DisplayMixin(SyncClientBase):
                 model.application_name,
                 override_name,
             )
-        if clear_before_draw:
-            clear_request_kwargs = cast(RequestKwargs, dict(request_kwargs))
-            clear_request_kwargs.pop("application_name", None)
-            self.display_clear(**clear_request_kwargs)
+        clear_mode = _resolve_clear_mode(clear_before_draw)
+        if clear_mode is not None:
+            clear_request_kwargs = _clear_request_kwargs(
+                clear_mode, model, request_kwargs
+            )
+            try:
+                self.display_clear(**clear_request_kwargs)
+            except exceptions.BusyBarAPIError as exc:
+                if clear_mode != "application" or not _is_not_owner_error(exc):
+                    raise
         payload = model.model_dump(exclude_none=True)
         if sanitize_text:
             _sanitize_display_payload_text(payload)
@@ -168,7 +242,7 @@ class DisplayMixin(SyncClientBase):
         self,
         display_data: types.DisplayElements | dict[str, Any],
         *,
-        clear_before_draw: bool = False,
+        clear_before_draw: ClearBeforeDraw = False,
         sanitize_text: bool = False,
         audio_payload: types.AudioPlayRequest | dict[str, Any] | None = None,
         **request_kwargs: Unpack[RequestKwargs],
@@ -334,10 +408,17 @@ class AsyncDisplayMixin(AsyncClientBase):
         self,
         display_data: types.DisplayElements | dict[str, Any],
         *,
-        clear_before_draw: bool = False,
+        clear_before_draw: ClearBeforeDraw = False,
         sanitize_text: bool = False,
         **request_kwargs: Unpack[RequestKwargs],
     ) -> types.SuccessResponse:
+        """
+        Draw elements on the display (async).
+
+        ``clear_before_draw`` picks what is wiped first: ``False`` nothing,
+        ``"all"`` (or ``True``) the whole screen, ``"application"`` only what
+        this application drew, so other applications' content survives.
+        """
         logger.info(
             "async display_draw application_name=%s clear_before_draw=%s",
             display_data.application_name
@@ -357,10 +438,16 @@ class AsyncDisplayMixin(AsyncClientBase):
                 model.application_name,
                 override_name,
             )
-        if clear_before_draw:
-            clear_request_kwargs = cast(RequestKwargs, dict(request_kwargs))
-            clear_request_kwargs.pop("application_name", None)
-            await self.display_clear(**clear_request_kwargs)
+        clear_mode = _resolve_clear_mode(clear_before_draw)
+        if clear_mode is not None:
+            clear_request_kwargs = _clear_request_kwargs(
+                clear_mode, model, request_kwargs
+            )
+            try:
+                await self.display_clear(**clear_request_kwargs)
+            except exceptions.BusyBarAPIError as exc:
+                if clear_mode != "application" or not _is_not_owner_error(exc):
+                    raise
         payload = model.model_dump(exclude_none=True)
         if sanitize_text:
             _sanitize_display_payload_text(payload)
@@ -377,7 +464,7 @@ class AsyncDisplayMixin(AsyncClientBase):
         self,
         display_data: types.DisplayElements | dict[str, Any],
         *,
-        clear_before_draw: bool = False,
+        clear_before_draw: ClearBeforeDraw = False,
         sanitize_text: bool = False,
         audio_payload: types.AudioPlayRequest | dict[str, Any] | None = None,
         **request_kwargs: Unpack[RequestKwargs],

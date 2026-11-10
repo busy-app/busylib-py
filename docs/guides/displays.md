@@ -107,22 +107,30 @@ back display at `(0, 0)` using the uploaded file named `icon.png`.
 
 ## Replacing versus adding
 
-By default a draw call adds to what's on screen. To clear the display before
-drawing in one step:
+By default a draw call adds to what's on screen: elements with the same `id`
+are updated and everything else stays, so an older picture can show through a
+newer one. To replace your app's previous content in one step:
 
 ```python
-bb.display_draw(payload, clear_before_draw=True)
+bb.display_draw(payload, clear_before_draw="application")
 ```
 
-To wipe it entirely:
+This clears only what your application drew; other applications' content on
+screen is left alone. If another application owns the screen there is nothing
+of yours to clear, so the draw goes ahead and the usual priority rules decide
+whether it shows.
+
+To wipe the whole screen first, whoever owns it:
 
 ```python
-bb.display_clear(application_name="my-app")
+bb.display_draw(payload, clear_before_draw="all")  # True does the same
 ```
 
-**Expected result:** neither call prints output. The first call clears the
-whole display before drawing `payload`; the second removes only `my-app`'s
-elements and leaves other applications' drawings alone.
+To wipe it entirely without drawing:
+
+```python
+bb.display_clear()
+```
 
 ## Text that came from somewhere else
 

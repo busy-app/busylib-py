@@ -1,5 +1,6 @@
 import json
 from collections.abc import Callable
+from typing import Literal
 
 import httpx2
 import pytest
@@ -984,3 +985,124 @@ def test_removed_endpoints_are_declared_in_compatibility_metadata():
     assert metadata is not None
     assert metadata["status"] == "removed"
     assert metadata["replacement"] == "account_backend()"
+
+
+_CLEAR_PAYLOAD = {
+    "application_name": "demo",
+    "elements": [
+        {"id": "1", "type": "text", "x": 0, "y": 0, "text": "A", "font": "small"}
+    ],
+}
+
+
+def _clear_recorder(
+    seen: list[tuple[str, str, dict[str, str]]], clear_response: httpx2.Response | None
+) -> Responder:
+    def responder(request: httpx2.Request) -> httpx2.Response:
+        seen.append((request.method, request.url.path, dict(request.url.params)))
+        if request.method == "DELETE" and clear_response is not None:
+            return clear_response
+        return httpx2.Response(200, json={"result": "OK"})
+
+    return responder
+
+
+def test_display_draw_clear_application_only_clears_own_application() -> None:
+    """
+    clear_before_draw="application" sends the app name with the clear.
+    """
+
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="application")
+
+    assert seen[0] == ("DELETE", "/api/display/draw", {"application_name": "demo"})
+    assert seen[1][0] == "POST"
+
+
+def test_display_draw_clear_application_prefers_request_application_name() -> None:
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    client.display_draw(
+        _CLEAR_PAYLOAD, clear_before_draw="application", application_name="other"
+    )
+
+    assert seen[0][2] == {"application_name": "other"}
+
+
+@pytest.mark.parametrize("mode", [True, "all"])
+def test_display_draw_clear_all_wipes_whole_screen(mode: Literal[True, "all"]) -> None:
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    client.display_draw(_CLEAR_PAYLOAD, clear_before_draw=mode, application_name="demo")
+
+    assert seen[0] == ("DELETE", "/api/display/draw", {})
+
+
+def test_display_draw_without_clear_sends_only_the_draw() -> None:
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    client.display_draw(_CLEAR_PAYLOAD, clear_before_draw=False)
+
+    assert [(method, path) for method, path, _ in seen] == [
+        ("POST", "/api/display/draw")
+    ]
+
+
+def test_display_draw_rejects_unknown_clear_mode() -> None:
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    client = make_client(_clear_recorder(seen, None))
+
+    with pytest.raises(ValueError, match="clear_before_draw"):
+        client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="screen")  # type: ignore[arg-type]
+
+    assert seen == []
+
+
+def test_display_draw_clear_application_ignores_not_owner_reply() -> None:
+    """
+    Another application owns the screen: nothing of ours to clear, draw anyway.
+    """
+
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    not_owner = httpx2.Response(
+        400,
+        json={"error": "this application_name is currently not displaying anything"},
+    )
+    client = make_client(_clear_recorder(seen, not_owner))
+
+    resp = client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="application")
+
+    assert resp.result == "OK"
+    assert [method for method, _, _ in seen] == ["DELETE", "POST"]
+
+
+def test_display_draw_clear_application_raises_other_clear_errors() -> None:
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    other = httpx2.Response(400, json={"error": "body contains malformed JSON"})
+    client = make_client(_clear_recorder(seen, other))
+
+    with pytest.raises(exceptions.BusyBarAPIError):
+        client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="application")
+
+    assert [method for method, _, _ in seen] == ["DELETE"]
+
+
+def test_display_clear_all_does_not_swallow_not_owner_reply() -> None:
+    """
+    Only the scoped mode tolerates the not-owner reply.
+    """
+
+    seen: list[tuple[str, str, dict[str, str]]] = []
+    not_owner = httpx2.Response(
+        400,
+        json={"error": "this application_name is currently not displaying anything"},
+    )
+    client = make_client(_clear_recorder(seen, not_owner))
+
+    with pytest.raises(exceptions.BusyBarAPIError):
+        client.display_draw(_CLEAR_PAYLOAD, clear_before_draw="all")
